@@ -121,14 +121,16 @@
           <section class="bg-white border border-slate-200/60 rounded-xl p-6 relative overflow-hidden flex items-center justify-center shadow-[0_22px_55px_-28px_rgba(15,23,42,0.35)]">
             <div class="absolute inset-0 blueprint opacity-70"></div>
             <svg class="absolute inset-0 h-full w-full" viewBox="0 0 560 320" fill="none" aria-hidden="true">
-              <path id="ts-trace-safe" class="trace-safe" d="M44 166 C 140 166, 168 160, 230 160" stroke="#10b981" stroke-width="3" stroke-linecap="round"/>
-              <path id="ts-trace-agent" class="trace-agent" d="M286 160 C 360 160, 390 160, 472 160" stroke="#f97316" stroke-width="3" stroke-linecap="round"/>
-              <path id="ts-trace-attack" class="trace-attack" d="M516 66 C 442 72, 340 110, 150 144" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
+              <path id="ts-trace-safe" class="trace-safe" d="M20 170 C 120 170, 154 165, 236 160" stroke="#10b981" stroke-width="3.2" stroke-linecap="round"/>
+              <path id="ts-trace-agent" class="trace-agent" d="M282 160 C 368 160, 410 160, 492 160" stroke="#f97316" stroke-width="3.2" stroke-linecap="round"/>
+              <path id="ts-trace-attack" class="trace-attack" d="M512 58 C 444 76, 350 116, 222 148" stroke="#dc2626" stroke-width="3.2" stroke-linecap="round"/>
             </svg>
+
+            <div class="absolute left-4 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50/90 px-2.5 py-1.5 font-mono text-[10px] text-slate-500">console_ingress</div>
 
             <div id="ts-attacker-box" class="absolute right-7 top-7 rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-mono text-[10px] tracking-wide text-red-600 opacity-0 transition-opacity duration-200">ATTACKER BOX</div>
 
-            <div id="ts-shield" class="absolute left-[68%] top-1/2 -translate-y-1/2 rounded-xl border border-slate-300/80 bg-white/95 px-3 py-1.5 font-mono text-[10px] tracking-[0.16em] text-slate-500 transition-all duration-200">RK SHIELD</div>
+            <div id="ts-shield" class="absolute left-[71%] top-1/2 -translate-y-1/2 rounded-xl border border-slate-300/80 bg-white/95 px-3 py-1.5 font-mono text-[10px] tracking-[0.16em] text-slate-500 transition-all duration-200">RK SHIELD</div>
 
             <div id="ts-agent-node" class="relative z-10 flex flex-col items-center gap-3 transition-all duration-200">
               <div class="h-20 w-20 rounded-full border border-slate-300 bg-slate-100/90 grid place-items-center shadow-sm">
@@ -139,7 +141,7 @@
 
             <div id="ts-host-core" class="absolute right-8 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500">core_host.sys</div>
 
-            <div id="ts-verdict" class="absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-semibold tracking-wide text-slate-500">[ VERDICT: STANDBY ]</div>
+            <div id="ts-verdict" class="absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-slate-500 whitespace-nowrap">[ VERDICT: STANDBY ]</div>
           </section>
         </div>
       </div>

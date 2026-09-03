@@ -206,7 +206,7 @@
   function initAgentCursor() {
     if (!window.matchMedia || window.matchMedia('(pointer: coarse)').matches) return;
     const root = document.body;
-    if (!root) return;
+    if (!root || root.querySelector('.agent-cursor')) return;
 
     const dot = document.createElement('div');
     dot.className = 'agent-cursor';
@@ -214,7 +214,8 @@
     root.classList.add('has-agent-cursor');
 
     let raf = 0;
-    let x = 0, y = 0;
+    let x = window.innerWidth / 2;
+    let y = window.innerHeight / 2;
 
     const paint = () => {
       dot.style.left = x + 'px';
@@ -222,16 +223,21 @@
       raf = 0;
     };
 
-    window.addEventListener('mousemove', (e) => {
+    paint();
+    dot.classList.add('active');
+
+    const onPointerMove = (e) => {
       x = e.clientX;
       y = e.clientY;
       dot.classList.add('active');
       if (!raf) raf = requestAnimationFrame(paint);
-    }, { passive: true });
+    };
 
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
     window.addEventListener('mousedown', () => dot.classList.add('clicking'));
     window.addEventListener('mouseup', () => dot.classList.remove('clicking'));
-    window.addEventListener('mouseleave', () => dot.classList.remove('active'));
+    window.addEventListener('blur', () => dot.classList.remove('active'));
+    window.addEventListener('focus', () => dot.classList.add('active'));
   }
 
   function applyRouteFallbackRedirects() {
@@ -293,7 +299,7 @@
 
     // Elite-Tier Enhancements
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!prefersReducedMotion) initAgentCursor();
+    initAgentCursor();
 
     // 3. Scroll Progress Bar
     const scrollProgress = document.getElementById('scrollProgress');
