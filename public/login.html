@@ -19,19 +19,19 @@
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/favicon.png" />
-  <meta name="theme-color" content="#050507" />
+  <meta name="theme-color" content="#f2f6fc" />
   <meta name="robots" content="noindex" />
   <style>
-    .custom-checkbox-wrapper input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; background: rgba(255,255,255,0.03); position: relative; cursor: pointer; transition: all .2s ease; margin: 0; flex-shrink: 0; }
+    .custom-checkbox-wrapper input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 1px solid rgba(15,23,42,0.2); border-radius: 4px; background: rgba(255,255,255,0.8); position: relative; cursor: pointer; transition: all .2s ease; margin: 0; flex-shrink: 0; }
     .custom-checkbox-wrapper input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
-    .custom-checkbox-wrapper input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #050507; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    .custom-checkbox-wrapper input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #f8fafc; border-width: 0 2px 2px 0; transform: rotate(45deg); }
     .login-right { padding: 112px 24px 48px; }
     .login-card { max-width: 480px; }
     /* Shared fixed header sits above the split layout; push both columns below it. */
     body.login-page .login-hero { padding-top: 112px; }
     @media (max-width: 900px) { .login-right { padding-top: 96px; } }
     select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237B7B83' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; padding-right: 36px; }
-    .btn-loading::after { content: ''; width: 12px; height: 12px; border: 2px solid rgba(5,5,7,0.35); border-top-color: var(--bg); border-radius: 50%; animation: spin .7s linear infinite; }
+    .btn-loading::after { content: ''; width: 12px; height: 12px; border: 2px solid rgba(15,23,42,0.25); border-top-color: #f8fafc; border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>

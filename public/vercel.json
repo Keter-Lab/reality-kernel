@@ -3,12 +3,28 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/security",
-      "destination": "/security.html"
+      "source": "/docs",
+      "destination": "/integration.html"
+    },
+    {
+      "source": "/integrate",
+      "destination": "/integration.html"
     },
     {
       "source": "/integration",
       "destination": "/integration.html"
+    },
+    {
+      "source": "/sdk",
+      "destination": "/sdk.html"
+    },
+    {
+      "source": "/security",
+      "destination": "/security.html"
+    },
+    {
+      "source": "/pricing",
+      "destination": "/pricing.html"
     },
     {
       "source": "/playground",

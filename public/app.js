@@ -176,6 +176,15 @@
   function initHeader() {
     const header = document.querySelector('.rk-header');
     if (!header) return;
+
+    const nav = header.querySelector('nav.rk-nav');
+    if (nav && !nav.querySelector('a[href="/"]')) {
+      const home = document.createElement('a');
+      home.href = '/';
+      home.textContent = 'Home';
+      nav.insertAdjacentElement('afterbegin', home);
+    }
+
     const path = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
     const alias = { '/integration': '/docs', '/integrate': '/docs', '/sdk': '/docs' };
     const cur = alias[path] || path;
@@ -183,13 +192,60 @@
       const href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
       if (href === cur || (href === '/docs' && cur === '/docs')) a.classList.add('active');
     });
+
     const toggle = header.querySelector('.rk-menu-toggle');
-    const nav = header.querySelector('nav.rk-nav');
     if (toggle && nav) toggle.addEventListener('click', () => nav.classList.toggle('open'));
+
     // Signed-in visitors see the console, not the access CTA
     if (getKey()) {
       header.querySelectorAll('[data-auth="signin"]').forEach(a => { a.textContent = 'Operator Console'; a.href = '/dashboard'; });
       header.querySelectorAll('[data-auth="request"]').forEach(a => { a.style.display = 'none'; });
+    }
+  }
+
+  function initAgentCursor() {
+    if (!window.matchMedia || window.matchMedia('(pointer: coarse)').matches) return;
+    const root = document.body;
+    if (!root) return;
+
+    const dot = document.createElement('div');
+    dot.className = 'agent-cursor';
+    root.appendChild(dot);
+    root.classList.add('has-agent-cursor');
+
+    let raf = 0;
+    let x = 0, y = 0;
+
+    const paint = () => {
+      dot.style.left = x + 'px';
+      dot.style.top = y + 'px';
+      raf = 0;
+    };
+
+    window.addEventListener('mousemove', (e) => {
+      x = e.clientX;
+      y = e.clientY;
+      dot.classList.add('active');
+      if (!raf) raf = requestAnimationFrame(paint);
+    }, { passive: true });
+
+    window.addEventListener('mousedown', () => dot.classList.add('clicking'));
+    window.addEventListener('mouseup', () => dot.classList.remove('clicking'));
+    window.addEventListener('mouseleave', () => dot.classList.remove('active'));
+  }
+
+  function applyRouteFallbackRedirects() {
+    const route = location.pathname.replace(/\/$/, '') || '/';
+    const redirects = {
+      '/docs': '/integration',
+      '/integrate': '/integration'
+    };
+    const target = redirects[route];
+    if (!target) return;
+
+    const is404Template = !!document.querySelector('.nf-wrap') || /404/.test(document.title);
+    if (is404Template) {
+      location.replace(target + location.hash);
     }
   }
 
@@ -215,6 +271,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     const isAuth = !!getKey();
 
+    applyRouteFallbackRedirects();
     initHeader();
     enhanceCodeBlocks();
     initTabs();
@@ -236,6 +293,7 @@
 
     // Elite-Tier Enhancements
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReducedMotion) initAgentCursor();
 
     // 3. Scroll Progress Bar
     const scrollProgress = document.getElementById('scrollProgress');

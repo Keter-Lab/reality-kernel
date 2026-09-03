@@ -19,13 +19,13 @@
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/favicon.png" />
-  <meta name="theme-color" content="#050507" />
+  <meta name="theme-color" content="#f2f6fc" />
   <script defer src="/_vercel/speed-insights/script.js"></script>
 </head>
 <body>
   <div id="previewWatermark" class="preview-watermark" hidden style="position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 200;">Preview Mode Active · Displaying Simulated Causal Trajectories</div>
 
-  <div id="loadingOverlay" style="position: fixed; inset: 0; background: #050507; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; transition: opacity .4s ease;">
+  <div id="loadingOverlay" style="position: fixed; inset: 0; background: rgba(242,246,252,0.96); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; transition: opacity .4s ease;">
     <div style="width: 28px; height: 28px; border: 1.5px solid rgba(255, 255, 255, 0.08); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite;"></div>
     <div style="font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .15em; color: var(--text-muted);">Initializing causal reasoning sandbox</div>
   </div>
@@ -122,6 +122,8 @@
           <span class="op-crumb-cur" id="crumbCur">Dashboard</span>
         </div>
         <div class="op-actions">
+          <a href="/" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;">← Home</a>
+          <a href="/integration" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;">Docs</a>
           <span class="pill info" id="engineHealth"><span class="dot ok"></span> engine · operational</span>
         </div>
       </header>
