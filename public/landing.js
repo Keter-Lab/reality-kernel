@@ -29,7 +29,7 @@
     el.attacker.classList.remove('opacity-100');
     el.attacker.classList.add('opacity-0');
     el.injected.classList.add('opacity-0');
-    el.shield.className = 'absolute left-[68%] top-1/2 -translate-y-1/2 rounded-xl border border-slate-300/80 bg-white/95 px-3 py-1.5 font-mono text-[10px] tracking-[0.16em] text-slate-500 transition-all duration-200';
+    el.shield.className = 'absolute left-[71%] top-1/2 -translate-y-1/2 rounded-xl border border-slate-300/80 bg-white/95 px-3 py-1.5 font-mono text-[10px] tracking-[0.16em] text-slate-500 transition-all duration-200';
     el.agent.className = 'relative z-10 flex flex-col items-center gap-3 transition-all duration-200';
   }
 
@@ -46,10 +46,10 @@
 
   function setVerdict(text, mode) {
     const cls = mode === 'allow'
-      ? 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-mono text-[11px] font-semibold tracking-wide text-emerald-700'
+      ? 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-emerald-700 whitespace-nowrap'
       : mode === 'block-red'
-        ? 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 font-mono text-[11px] font-semibold tracking-wide text-red-600'
-        : 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 font-mono text-[11px] font-semibold tracking-wide text-orange-600';
+        ? 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-red-600 whitespace-nowrap'
+        : 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-orange-600 whitespace-nowrap';
     el.verdict.className = cls;
     el.verdict.textContent = text;
   }
@@ -85,6 +85,8 @@
     await wait(430);
     el.shield.classList.add('border-orange-300', 'bg-orange-50', 'text-orange-700', 'scale-105');
     el.traceAgent.classList.add('shattered');
+    await wait(160);
+    el.traceAgent.classList.remove('run');
     setVerdict('[ VERDICT: BLOCK • ORIGIN: AGENT ANOMALY ]', 'block-orange');
   }
 
@@ -110,6 +112,9 @@
     el.shield.classList.add('border-red-300', 'bg-red-50', 'text-red-700', 'scale-105');
     el.traceAttack.classList.add('shattered');
     el.traceAgent.classList.add('shattered');
+    await wait(180);
+    el.traceAttack.classList.remove('run');
+    el.traceAgent.classList.remove('run');
     setVerdict('[ VERDICT: BLOCK • ORIGIN: EXTERNAL EXPLOIT • TIME: 0.31ms ]', 'block-red');
   }
 
