@@ -5,7 +5,7 @@ Public-facing client dashboard + serverless API for the RK-α Reality Kernel.
 **This repo is safe to push to a PUBLIC GitHub repo.** It contains:
 - The client login + dashboard (HTML/CSS/JS)
 - The serverless API that reads/writes Supabase
-- The core reality engine
+- The core reality engine.
 
 It does **NOT** contain:
 - Any secrets (Supabase keys live in Vercel env vars only)
