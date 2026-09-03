@@ -90,22 +90,40 @@
   // must not steal focus from the currently-active tab.
   const tabs   = document.querySelectorAll('.rk-nav-link[data-tab]');
   const panels = document.querySelectorAll('.panel');
+  const crumbCur = document.getElementById('crumbCur');
+
+  function activateTab(tabEl) {
+    if (!tabEl || !tabEl.dataset.tab) return;
+    tabs.forEach(x => x.classList.remove('active'));
+    panels.forEach(x => x.classList.remove('active'));
+    tabEl.classList.add('active');
+    const target = document.querySelector(`[data-panel="${tabEl.dataset.tab}"]`);
+    if (target) target.classList.add('active');
+    if (crumbCur) crumbCur.textContent = (tabEl.textContent || '').trim();
+    history.replaceState(null, '', '#'+tabEl.dataset.tab);
+  }
+
   tabs.forEach(t => t.addEventListener('click', (ev) => {
     if (!t.dataset.tab) return;
     // If this is an <a> being used as a tab, prevent default navigation.
     if (t.tagName === 'A') ev.preventDefault();
-    tabs.forEach(x => x.classList.remove('active'));
-    panels.forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    const target = document.querySelector(`[data-panel="${t.dataset.tab}"]`);
-    if (target) target.classList.add('active');
+    activateTab(t);
   }));
 
+  const hashTab = location.hash ? location.hash.replace('#', '') : '';
+  const initialTab = Array.from(tabs).find(t => t.dataset.tab === hashTab) || tabs[0];
+  if (initialTab) activateTab(initialTab);
+
   // ── Logout / wipe ──────────────────────────────────────────────────────────
-  document.getElementById('logoutBtn').onclick = rk.logout;
-  document.getElementById('wipeBtn').onclick = () => {
-    rk.logout();
-  };
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) logoutBtn.onclick = rk.logout;
+
+  const wipeBtn = document.getElementById('wipeBtn');
+  if (wipeBtn) {
+    wipeBtn.onclick = () => {
+      rk.logout();
+    };
+  }
 
   document.getElementById('saveWebhookBtn').onclick = async () => {
     const url = document.getElementById('discordWebhookUrl').value.trim();

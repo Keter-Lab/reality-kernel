@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,28 +6,28 @@
 @layer base {
   html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; scroll-behavior: smooth; }
   body { @apply bg-slate-50 text-slate-700 font-sans; font-feature-settings: 'cv11', 'ss01', 'ss03'; }
-  ::selection { @apply bg-emerald-100 text-emerald-900; }
-  :focus-visible { @apply outline-none ring-2 ring-emerald-500/60 ring-offset-2 ring-offset-slate-50 rounded-md; }
+  ::selection { @apply bg-slate-900 text-white; }
+  :focus-visible { @apply outline-none ring-2 ring-slate-900/50 ring-offset-2 ring-offset-slate-50 rounded-md; }
 }
 
 @layer components {
-  /* Ultra-subtle developer blueprint grid: 1px slate lines every 40px, faded at the edges. */
   .blueprint {
     background-color: rgb(248 250 252);
     background-image:
-      linear-gradient(to right, rgb(148 163 184 / 0.13) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(148 163 184 / 0.13) 1px, transparent 1px);
+      linear-gradient(to right, rgb(148 163 184 / 0.15) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(148 163 184 / 0.15) 1px, transparent 1px);
     background-size: 40px 40px;
     background-position: center top;
   }
   .blueprint-fade {
-    -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 20%, black 30%, transparent 100%);
-            mask-image: radial-gradient(ellipse 90% 80% at 50% 20%, black 30%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 92% 84% at 50% 10%, black 34%, transparent 100%);
+            mask-image: radial-gradient(ellipse 92% 84% at 50% 10%, black 34%, transparent 100%);
   }
-  .card { @apply bg-white border border-slate-200/80 rounded-2xl shadow-card; }
+
+  .card { @apply bg-white border border-slate-200/70 rounded-2xl shadow-card; }
   .chip { @apply font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 whitespace-nowrap; }
   .eyebrow { @apply inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500; }
-  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 active:scale-[0.98]; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-medium tracking-wide text-white shadow-sm transition-all hover:bg-slate-800 active:scale-[0.98]; }
   .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 border border-slate-200 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98]; }
   .nav-link { @apply rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 hover:bg-slate-100; }
   .nav-link.active { @apply text-slate-900 bg-slate-100; }
@@ -36,26 +36,75 @@
   .verdict-badge.warn  { @apply bg-amber-50 text-amber-700 border-amber-200; }
   .verdict-badge.block { @apply bg-red-50 text-red-600 border-red-200; }
   .verdict-badge.idle  { @apply bg-slate-50 text-slate-500 border-slate-200; }
-  .sim-btn { @apply inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed; }
-  .sim-btn-safe   { @apply bg-white border-slate-200 text-slate-800 hover:border-emerald-300 hover:bg-emerald-50/50; }
-  .sim-btn-danger { @apply bg-white border-slate-200 text-slate-800 hover:border-red-300 hover:bg-red-50/50; }
-  .sim-btn-warn   { @apply bg-white border-slate-200 text-slate-800 hover:border-amber-300 hover:bg-amber-50/50; }
-  .sim-btn.is-active { @apply ring-2 ring-slate-900/10 border-slate-400; }
-  .window-dot { @apply h-2.5 w-2.5 rounded-full; }
-  .log-line { @apply grid grid-cols-[64px_1fr] gap-3 font-mono text-[11.5px] leading-5 text-slate-600; }
-  .log-line time { @apply text-slate-400 tabular-nums; }
-  .step-num { @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 font-mono text-xs font-semibold text-white; }
-  /* Mobile nav (toggled by app.js -> nav.rk-nav.open) */
+
+  .sim-btn { @apply inline-flex items-center justify-center rounded-lg border border-slate-700/80 px-3 py-2 text-xs font-medium text-slate-100 transition-all hover:border-slate-400 hover:bg-slate-800 active:scale-[0.98]; }
+  .sim-btn.is-active { @apply border-slate-300 bg-slate-800 text-white ring-1 ring-slate-300/60; }
+
+  .terminal-line { @apply font-mono text-[11px] leading-5 text-slate-300; }
+  .terminal-line.error { @apply text-orange-300; }
+  .terminal-line.attack { @apply text-red-300; }
+
+  .glass-panel {
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.8), rgb(241 245 249 / 0.55));
+    backdrop-filter: blur(16px);
+    border: 1px solid rgb(148 163 184 / 0.25);
+    box-shadow: 0 14px 40px rgb(15 23 42 / 0.08);
+  }
+
   nav.rk-nav.open { @apply flex; }
 }
 
 @layer utilities {
   .tabular { font-variant-numeric: tabular-nums; }
   .text-balance { text-wrap: balance; }
-  .shield-glow-red   { filter: drop-shadow(0 0 10px rgb(239 68 68 / 0.55)); }
-  .shield-glow-green { filter: drop-shadow(0 0 10px rgb(16 185 129 / 0.55)); }
-  .shield-glow-amber { filter: drop-shadow(0 0 10px rgb(245 158 11 / 0.55)); }
+
+  .agent-cursor {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    pointer-events: none;
+    z-index: 70;
+    transform: translate(-50%, -50%) scale(0.88);
+    opacity: 0;
+    background: radial-gradient(circle at 35% 35%, rgb(255 255 255), rgb(148 163 184));
+    border: 1px solid rgb(15 23 42 / 0.35);
+    box-shadow: 0 0 0 4px rgb(15 23 42 / 0.08);
+    transition: opacity .2s ease, transform .12s ease;
+  }
+  .agent-cursor::after {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 9999px;
+    border: 1px dashed rgb(51 65 85 / 0.35);
+    animation: spin 2.2s linear infinite;
+  }
+  .agent-cursor.active { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .agent-cursor.clicking { transform: translate(-50%, -50%) scale(0.86); }
+
+  .trace-safe,
+  .trace-agent,
+  .trace-attack {
+    stroke-dasharray: 340;
+    stroke-dashoffset: 340;
+    opacity: 0;
+    transition: stroke-dashoffset .55s cubic-bezier(.16,1,.3,1), opacity .2s ease;
+  }
+  .trace-safe.run,
+  .trace-agent.run,
+  .trace-attack.run { opacity: 1; stroke-dashoffset: 0; }
+  .trace-attack.shattered,
+  .trace-agent.shattered { opacity: 0.08; stroke-dashoffset: 220; transition: stroke-dashoffset .2s ease, opacity .15s ease; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   @media (prefers-reduced-motion: reduce) {
-    .animate-pulse-ring, .animate-ping-slow, .animate-float, .animate-dash { animation: none !important; }
+    .agent-cursor::after { animation: none; }
+    .trace-safe,
+    .trace-agent,
+    .trace-attack { transition-duration: .05s; }
   }
 }
