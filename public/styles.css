@@ -324,7 +324,7 @@ button.secondary:hover, .btn.secondary:hover { background: var(--panel-hover); b
 .brand { display: flex; gap: 12px; align-items: center; }
 .brand-mark {
   width: 38px; height: 38px;
-  border-radius: 9px;
+  border-radius: 999px;
   display: grid; place-items: center;
   background: linear-gradient(180deg, var(--bg-elev-2), var(--bg-elev-0));
   border: 1px solid var(--border-strong);
@@ -333,10 +333,10 @@ button.secondary:hover, .btn.secondary:hover { background: var(--panel-hover); b
   box-shadow: 0 0 0 1px rgba(110,231,183,0.06), inset 0 1px 0 rgba(255,255,255,0.04);
   flex-shrink: 0;
 }
-.brand-mark img { width: 68%; height: 68%; object-fit: contain; position: relative; z-index: 1; }
+.brand-mark img { width: 100%; height: 100%; object-fit: cover; border-radius: 999px; position: relative; z-index: 1; }
 .brand strong { margin: 0; font-family: var(--font-sans); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; line-height: 1.1; color: var(--text); text-transform: uppercase; display: block; }
 .brand .brand-sub { color: var(--text-muted); margin: 4px 0 0; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 400; display: block; }
-.brand.small .brand-mark { width: 32px; height: 32px; border-radius: 8px; }
+.brand.small .brand-mark { width: 32px; height: 32px; border-radius: 999px; }
 .brand.small strong { font-size: 11.5px; }
 .brand.small .brand-sub { font-size: 9px; }
 
