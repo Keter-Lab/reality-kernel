@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Audit Chain Verifier · Reality Kernel</title>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta name="description" content="Forensic replay of Reality Kernel's tamper-evident SHA-256 audit chain. Verify online with an API key, or offline against exported JSON." />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</head>
+<body>
+
+  <header class="landing-nav">
+    <a href="/" style="text-decoration:none; border-bottom:none;">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Chain Verifier</span>
+        </div>
+      </div>
+    </a>
+    <nav class="nav-links">
+      <a href="/" class="nav-link">Product</a>
+      <a href="/security" class="nav-link">Security</a>
+      <a href="/integration" class="nav-link">Docs</a>
+      <a href="/pricing" class="nav-link">Pricing</a>
+      <a href="/playground" class="nav-link">Playground</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/login" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;" id="nav-auth-btn">Sign in</a>
+    </div>
+  </header>
+
+  <div style="height: 76px;"></div>
+
+  <section class="verifier-shell">
+    <div class="verifier-headline">
+      <div class="vh-text">
+        <span class="doc-eyebrow">Forensic replay</span>
+        <h1>Audit chain <em>verifier.</em></h1>
+        <p>Replay your ledger. Confirm every SHA-256 chain link. Surface tampered rows the moment they exist. Works online with an API key, or air-gapped against exported JSON.</p>
+      </div>
+      <div class="vh-text" style="align-self:center;">
+        <div class="verifier-mode-help">
+          <strong>How verification works.</strong> Each audit entry stores a proof hash and a reference to the previous block's hash inside its evidence array. We walk the chain from newest to oldest; any broken link fails the whole audit. No trust, just cryptography.
+        </div>
+      </div>
+    </div>
+
+    <div class="verifier-strip">
+      <div class="verifier-strip-cell">
+        <div class="vs-label"><span class="dot ok"></span>Chain health</div>
+        <div class="vs-value">Sequential SHA-256</div>
+        <div class="vs-sub">Every proof links to the previous block.</div>
+      </div>
+      <div class="verifier-strip-cell">
+        <div class="vs-label"><span class="dot info"></span>Verification modes</div>
+        <div class="vs-value">Online + offline</div>
+        <div class="vs-sub">API key fetch or local JSON audit.</div>
+      </div>
+      <div class="verifier-strip-cell">
+        <div class="vs-label"><span class="dot warn"></span>Forensic posture</div>
+        <div class="vs-value">Tamper evident</div>
+        <div class="vs-sub">Broken links surface immediately.</div>
+      </div>
+      <div class="verifier-strip-cell">
+        <div class="vs-label"><span class="dot block"></span>Failure mode</div>
+        <div class="vs-value">Fail-closed</div>
+        <div class="vs-sub">One bad link invalidates the run.</div>
+      </div>
+    </div>
+
+    <div class="verifier-workspace">
+      <div class="vw-tabs">
+        <button class="vw-tab active" id="tabOnline">
+          <span style="width:16px;height:16px;display:inline-flex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M12 4l8 8-8 8"/></svg></span>
+          Online · API key
+        </button>
+        <button class="vw-tab" id="tabOffline">
+          <span style="width:16px;height:16px;display:inline-flex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v6H4z"/><path d="M4 14h16v6H4z"/><path d="M8 7h.01M8 17h.01"/></svg></span>
+          Offline · JSON export
+        </button>
+      </div>
+      <div class="vw-body">
+
+        <div id="onlineSection">
+          <p style="font-size: 14px; color: var(--text-2); margin-bottom: 18px; line-height: 1.6;">
+            Paste your API key. The verifier hits <code>GET /v1/audit</code> under your auth, then walks the chain locally in your browser. Your key never leaves this page.
+          </p>
+          <form id="verifierForm" style="display: flex; gap: 10px; flex-wrap: wrap; align-items:center;">
+            <input type="password" id="verifierKey" placeholder="rk_live_… or rk_session_…" required class="mono" style="flex: 2; min-width: 260px;" />
+            <select id="verifierLimit" style="flex: 0 0 140px; min-width: 120px;">
+              <option value="50">Last 50</option>
+              <option value="100" selected>Last 100</option>
+              <option value="250">Last 250</option>
+              <option value="500">Last 500</option>
+            </select>
+            <button type="submit" id="verifyBtn" class="btn" style="flex: 0 0 200px; margin: 0;">Fetch &amp; verify chain</button>
+          </form>
+        </div>
+
+        <div id="offlineSection" hidden>
+          <p style="font-size: 14px; color: var(--text-2); margin-bottom: 18px; line-height: 1.6;">
+            Paste an exported audit log. Accepts a raw array of entries or an object with an <code>entries</code> field. Everything runs locally — no network calls.
+          </p>
+          <form id="offlineForm" style="display: flex; flex-direction: column; gap: 12px;">
+            <div id="dropZone" style="border: 2px dashed var(--border); border-radius: 8px; padding: 20px; text-align: center; transition: all 0.2s ease; position: relative; background: rgba(255,255,255,0.01);">
+              <div style="font-size: 24px; color: var(--text-faint); margin-bottom: 8px; pointer-events: none;">⇪</div>
+              <span class="muted" style="display: block; margin-bottom: 8px; pointer-events: none; font-size: 13px;">Drag and drop JSON export file here, or click to browse</span>
+              <input type="file" id="offlineFileInput" accept=".json,application/json" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 1;" />
+              <div style="font-size: 11px; color: var(--text-faint); margin: 16px 0 8px 0; pointer-events: none;">Or paste JSON payload manually:</div>
+              <textarea id="offlineJson" class="mono" rows="6" placeholder='{"entries": [{"action_id": "act_…", "verdict": "ALLOW", "proof_hash": "…", "evidence": ["prev_hash:…"], ...}]}' required style="width: 100%; position: relative; z-index: 2; box-sizing: border-box;"></textarea>
+            </div>
+            <button type="submit" id="verifyOfflineBtn" class="btn" style="align-self: flex-start; min-width: 200px;">Verify offline chain</button>
+          </form>
+        </div>
+
+        <div id="verifierOutput" class="verifier-output" hidden>
+          <div class="vo-head">
+            <strong>Verification status</strong>
+            <span id="verifierBadge" class="pill">PENDING</span>
+          </div>
+          <div id="verifierSummary" class="vo-summary"></div>
+
+          <div class="chain-timeline" id="chainTimeline"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div id="toastStack" class="toast-stack"></div>
+  </section>
+
+  <footer class="site-footer">
+    <p>REALITY KERNEL · SOVEREIGN REASONING SYSTEM · TAMPER-EVIDENT LEDGER</p>
+    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 12px; align-items: center;">
+      <a href="mailto:contact@realitykernel.dev" title="Email us" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        contact@realitykernel.dev
+      </a>
+      <span style="color: var(--text-faint);">·</span>
+      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" title="LinkedIn" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+        Keter Labs
+      </a>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+  <script>
+    (function() {
+      const esc = rk.htmlEscape;
+      const stack = document.getElementById('toastStack');
+
+      function toast(kind, title, msg) {
+        const el = document.createElement('div');
+        el.className = 'toast ' + (kind || 'info');
+        el.innerHTML = '<div style="flex:1"><strong>' + esc(title) + '</strong><span>' + esc(msg || '') + '</span></div>';
+        stack.appendChild(el);
+        setTimeout(function () { el.classList.add('fade-out'); }, 4200);
+        setTimeout(function () { el.remove(); }, 4500);
+      }
+
+      // Tabs
+      const tabOnline = document.getElementById('tabOnline');
+      const tabOffline = document.getElementById('tabOffline');
+      const onlineSection = document.getElementById('onlineSection');
+      const offlineSection = document.getElementById('offlineSection');
+      const outBlock = document.getElementById('verifierOutput');
+
+      tabOnline.onclick = function () {
+        tabOnline.classList.add('active');
+        tabOffline.classList.remove('active');
+        onlineSection.hidden = false;
+        offlineSection.hidden = true;
+        outBlock.hidden = true;
+      };
+      tabOffline.onclick = function () {
+        tabOffline.classList.add('active');
+        tabOnline.classList.remove('active');
+        offlineSection.hidden = false;
+        onlineSection.hidden = true;
+        outBlock.hidden = true;
+      };
+
+      // Auto-fill key if logged in
+      const key = rk.getKey();
+      if (key) {
+        document.getElementById('verifierKey').value = key;
+        toast('info', 'Session loaded', 'Auto-loaded your active session key.');
+      }
+
+      function getPrevHash(entry) {
+        if (!entry.evidence || !Array.isArray(entry.evidence)) return '';
+        const item = entry.evidence.find(function (e) { return typeof e === 'string' && e.startsWith('prev_hash:'); });
+        return item ? item.split(':').slice(1).join(':') : '';
+      }
+
+      function verdictKind(v) {
+        if (!v) return 'muted';
+        if (v === 'ALLOW') return 'ok';
+        if (v.indexOf('WARN') === 0) return 'warn';
+        return 'block';
+      }
+
+      function shortHash(h) {
+        if (!h) return '—';
+        if (h.length <= 20) return h;
+        return h.slice(0, 12) + '…' + h.slice(-6);
+      }
+
+      function fmtTime(ts) {
+        if (!ts) return '';
+        try { return rk.fmtTime(ts); } catch (e) { return String(ts); }
+      }
+
+      function renderChain(entries) {
+        const badge = document.getElementById('verifierBadge');
+        const summary = document.getElementById('verifierSummary');
+        const timeline = document.getElementById('chainTimeline');
+
+        if (!entries.length) {
+          timeline.innerHTML = '<div class="empty-state" style="padding: 48px 24px;"><span class="empty-ic">Empty</span><h4>No audit records found</h4><p>This account has not written any ledger entries yet.</p></div>';
+          badge.className = 'pill warn';
+          badge.textContent = 'EMPTY';
+          summary.innerHTML = 'The account you queried has no audit rows. Run a <code>/v1/check</code> first, then re-verify.';
+          return;
+        }
+
+        // Newest-first: entry[i].prev_hash === entry[i+1].proof_hash
+        let chainOk = true;
+        let firstTamperIdx = -1;
+        const rows = [];
+
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
+          const prevHash = getPrevHash(e);
+          const next = entries[i + 1];
+          const nextHash = next ? next.proof_hash : '';
+
+          let linked = true;
+          if (next) {
+            if (prevHash !== nextHash) {
+              linked = false;
+              chainOk = false;
+              if (firstTamperIdx === -1) firstTamperIdx = i;
+            }
+          }
+          rows.push({ entry: e, prevHash: prevHash, linked: linked });
+        }
+
+        // Render timeline
+        timeline.innerHTML = '';
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i];
+          const e = r.entry;
+          const kind = r.linked ? verdictKind(e.verdict) : 'tampered';
+          const rowClass = 'chain-link ' + kind;
+
+          const div = document.createElement('div');
+          div.className = rowClass;
+          const dotContent = !r.linked ? '×' : '';
+          const dotStyle = !r.linked ? 'background: var(--block); border-color: var(--block); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold;' : '';
+          const spineStyle = !r.linked ? 'border-color: var(--block);' : '';
+          
+          let prevLinkHtml = '';
+          if (!r.linked) {
+            prevLinkHtml = '<span style="color: var(--block); padding: 4px; background: rgba(255,40,70,0.1); border-radius: 4px; border: 1px solid rgba(255,40,70,0.2);"><b>Prev link</b><code>' + esc(r.prevHash ? shortHash(r.prevHash) : (i === rows.length - 1 ? 'Genesis' : '(missing)')) + '</code> <span style="background: var(--block); color: white; padding: 2px 4px; border-radius: 2px; font-size: 9px; margin-left: 6px; font-weight: bold;">CHAIN BREAK</span></span>';
+          } else {
+            prevLinkHtml = '<span><b>Prev link</b><code>' + esc(r.prevHash ? shortHash(r.prevHash) : (i === rows.length - 1 ? 'Genesis' : '(missing)')) + '</code></span>';
+          }
+
+          let expectedHtml = '';
+          if (i < rows.length - 1) {
+            expectedHtml = '<span' + (!r.linked ? ' style="color: var(--ok); padding: 4px;"' : '') + '><b>Expected</b><code>' + esc(shortHash(rows[i + 1].entry.proof_hash || '')) + '</code></span>';
+          }
+
+          div.innerHTML =
+            '<div class="cl-spine" style="' + spineStyle + '"><div class="cl-dot" style="' + dotStyle + '">' + dotContent + '</div></div>' +
+            '<div class="cl-meta">' +
+              '<div class="cl-id">' +
+                '<code>' + esc(e.action_id || 'act_?') + '</code>' +
+                '<span class="pill ' + verdictKind(e.verdict) + '">' + esc(e.verdict || '?') + '</span>' +
+                (e.ts ? '<span style="color:var(--text-faint); font-size:10.5px;">' + esc(fmtTime(e.ts)) + '</span>' : '') +
+              '</div>' +
+              '<div class="cl-hashes">' +
+                '<span><b>Proof</b><code>' + esc(shortHash(e.proof_hash || '')) + '</code></span>' +
+                prevLinkHtml +
+                expectedHtml +
+              '</div>' +
+            '</div>' +
+            '<div class="cl-status">' +
+              '<span class="pill ' + (r.linked ? 'ok' : 'block') + '">' + (r.linked ? 'VERIFIED' : 'TAMPERED') + '</span>' +
+              (e.cost !== undefined && e.cost !== null ? '<span style="font-family:var(--font-mono); font-size:10px; color:var(--text-faint); letter-spacing:0.1em;">' + esc(String(e.cost)) + ' cr</span>' : '') +
+            '</div>';
+          timeline.appendChild(div);
+        }
+
+        if (chainOk) {
+          badge.className = 'pill ok';
+          badge.textContent = 'INTEGRITY VERIFIED';
+          summary.innerHTML = 'Chain replay complete. All <strong>' + entries.length + '</strong> ledger entries are sequentially linked via SHA-256. No tamper evidence detected — the ledger is sound.';
+        } else {
+          badge.className = 'pill block';
+          badge.textContent = 'TAMPER DETECTED';
+          const affectedFromGenesis = entries.length - firstTamperIdx - 1;
+          summary.innerHTML = '<strong>Chain integrity failed.</strong> Link break detected at position <strong>' + (affectedFromGenesis + 1) + '</strong> (counting from genesis). One or more entries have been altered, reordered, or removed since they were sealed. Downstream verifications after this point are invalid.';
+        }
+      }
+
+      // Online verify
+      document.getElementById('verifierForm').onsubmit = async function (e) {
+        e.preventDefault();
+        const keyVal = document.getElementById('verifierKey').value.trim();
+        const limitVal = parseInt(document.getElementById('verifierLimit').value || '100', 10);
+
+        if (keyVal.length === 64 && !keyVal.startsWith('rk_')) {
+          toast('warn', 'Invalid format', 'That looks like a block hash, not an API key. Use offline mode.');
+          return;
+        }
+
+        const btn = document.getElementById('verifyBtn');
+        const badge = document.getElementById('verifierBadge');
+        const summary = document.getElementById('verifierSummary');
+        const timeline = document.getElementById('chainTimeline');
+
+        btn.disabled = true;
+        btn.textContent = 'Fetching…';
+        outBlock.hidden = false;
+        badge.className = 'pill muted';
+        badge.textContent = 'WORKING';
+        summary.textContent = 'Fetching audit chain and replaying links…';
+        timeline.innerHTML = '<div class="empty-state" style="padding: 40px 24px;"><span class="empty-ic">Loading</span><h4>Fetching ledger…</h4></div>';
+
+        const apiBase = rk.API_BASE;
+        try {
+          const res = await fetch(apiBase + '/v1/audit?limit=' + limitVal, {
+            headers: { 'Authorization': 'Bearer ' + keyVal }
+          });
+          if (!res.ok) {
+            timeline.innerHTML = '<div class="empty-state" style="padding: 40px 24px;"><span class="empty-ic">Error</span><h4>Fetch failed (HTTP ' + res.status + ')</h4><p>Check your API key and try again.</p></div>';
+            badge.className = 'pill block';
+            badge.textContent = 'ERROR';
+            summary.innerHTML = '';
+            toast('warn', 'Fetch failed', 'HTTP ' + res.status);
+            return;
+          }
+          const data = await res.json();
+          renderChain(data.entries || []);
+        } catch (err) {
+          console.error(err);
+          timeline.innerHTML = '<div class="empty-state" style="padding: 40px 24px;"><span class="empty-ic">Network</span><h4>Network error</h4><p>Verifier could not reach the API.</p></div>';
+          badge.className = 'pill block';
+          badge.textContent = 'ERROR';
+          summary.innerHTML = '';
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Fetch & verify chain';
+        }
+      };
+
+      // Offline verify
+      document.getElementById('offlineForm').onsubmit = function (e) {
+        e.preventDefault();
+        const val = document.getElementById('offlineJson').value.trim();
+        const btn = document.getElementById('verifyOfflineBtn');
+        btn.disabled = true;
+        outBlock.hidden = false;
+        try {
+          const parsed = JSON.parse(val);
+          const entries = Array.isArray(parsed.entries) ? parsed.entries : Array.isArray(parsed) ? parsed : [];
+          if (!entries.length) {
+            toast('warn', 'Invalid format', 'JSON must be an array or {entries: [...]}.');
+            btn.disabled = false;
+            return;
+          }
+          renderChain(entries);
+        } catch (err) {
+          toast('warn', 'Parse error', 'Invalid JSON syntax.');
+          document.getElementById('verifierBadge').className = 'pill block';
+          document.getElementById('verifierBadge').textContent = 'PARSE ERROR';
+          document.getElementById('verifierSummary').innerHTML = 'Could not parse the JSON blob. Check for missing braces or trailing commas.';
+          document.getElementById('chainTimeline').innerHTML = '';
+        }
+        btn.disabled = false;
+      };
+
+      const dropZone = document.getElementById('dropZone');
+      const fileInput = document.getElementById('offlineFileInput');
+      const offlineJson = document.getElementById('offlineJson');
+
+      function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+      });
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.style.borderColor = 'var(--brand)', false);
+      });
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.style.borderColor = 'var(--border)', false);
+      });
+
+      dropZone.addEventListener('drop', function(e) {
+        if (e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]);
+      }, false);
+      fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length) readFile(e.target.files[0]);
+      }, false);
+
+      function readFile(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          offlineJson.value = e.target.result;
+          offlineJson.dispatchEvent(new Event('change'));
+        };
+        reader.readAsText(file);
+      }
+    })();
+  </script>
+</body>
+</html>

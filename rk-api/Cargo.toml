@@ -1,0 +1,34 @@
+[package]
+name = "rk-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+chrono.workspace = true
+hex.workspace = true
+http.workspace = true
+hmac = "0.12"
+regex.workspace = true
+rk-engine-core = { path = "../rk-engine-core" }
+rk-policy = { path = "../rk-policy" }
+rk-session = { path = "../rk-session" }
+rk-signing = { path = "../rk-signing" }
+rk-supabase = { path = "../rk-supabase" }
+rk-types = { path = "../rk-types" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "compression-gzip", "set-header"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true

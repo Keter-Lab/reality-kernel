@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · Reality Kernel</title>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="description" content="Reality Kernel · Cryptographic Causal Verification for Agentic Systems." />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <style>
+    .mobile-brand-strip { display: none; padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.1); background: var(--bg-1, #050507); }
+    @media (max-width: 900px) {
+      .mobile-brand-strip { display: flex; align-items: center; justify-content: space-between; }
+    }
+    /* Elite custom checkbox styling */
+    .custom-checkbox-wrapper input[type="checkbox"] {
+      appearance: none; -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.03);
+      position: relative; cursor: pointer;
+      transition: all 0.2s ease; margin: 0;
+    }
+    .custom-checkbox-wrapper input[type="checkbox"]:checked {
+      background: var(--ok, #6EE7B7); border-color: var(--ok, #6EE7B7);
+    }
+    .custom-checkbox-wrapper input[type="checkbox"]:checked::after {
+      content: ''; position: absolute;
+      left: 4px; top: 1px; width: 4px; height: 8px;
+      border: solid #050507; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .custom-checkbox-wrapper:hover input[type="checkbox"]:not(:checked) {
+      border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body class="login-page">
+  <div class="mobile-brand-strip">
+    <a href="/" style="text-decoration:none; display:flex; gap:8px; align-items:center;">
+      <img src="/logo.png" alt="Reality Kernel" width="24" height="24" />
+      <strong style="color:white; font-size: 14px; letter-spacing: 0.05em;">REALITY KERNEL</strong>
+    </a>
+  </div>
+
+  <aside class="login-hero">
+    <canvas id="rk-login-canvas"></canvas>
+
+    <div class="login-hero-top brand">
+      <a href="/" style="text-decoration:none; border-bottom:none; display:flex; gap:12px; align-items:center;">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="36" height="36" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <p class="brand-sub">Sovereign Reasoning Engine</p>
+        </div>
+      </a>
+    </div>
+
+    <div class="login-hero-mid">
+      <h1>Causal verification<br>for the <em>agentic era.</em></h1>
+      <p>
+        Reality Kernel simulates the downstream consequences of every agent action across
+        parallel shadow worlds — stopping attacks that probabilistic models cannot see.
+      </p>
+
+      <ul class="feature-list">
+        <li>
+          <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg></span>
+          <div>
+            <strong>Deterministic basin mapping</strong>
+            <span>Causal analysis of filesystem diffs and system-state transitions.</span>
+          </div>
+        </li>
+        <li>
+          <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <div>
+            <strong>Cryptographic audit logs</strong>
+            <span>Every verdict sealed with SHA-256 and chain-linked.</span>
+          </div>
+        </li>
+        <li>
+          <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div>
+            <strong>Sub-millisecond fast path</strong>
+            <span>95% of traffic clears in under 1 ms. Negligible overhead.</span>
+          </div>
+        </li>
+      </ul>
+
+      <div class="data-ribbon">
+        <span><b>&lt;1ms</b> LATENCY</span>
+        <span><b>5</b> SHADOW WORLDS</span>
+        <span><b>SHA-256</b> SEALED</span>
+      </div>
+    </div>
+
+    <div class="login-hero-bottom">
+      <div class="subtle" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <span>SOC-Ready</span>
+        <span style="color: var(--text-faint);">·</span>
+        <span>Court-Grade Evidence</span>
+      </div>
+      <span class="subtle" style="display: block; margin-top: 10px;">© Reality Kernel · Cryptographic Security Division</span>
+    </div>
+  </aside>
+
+  <section class="login-right" style="position: relative;">
+    <div style="position: absolute; top: 24px; right: 32px; display: flex; gap: 6px;">
+      <a href="/" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">Home</a>
+      <a href="/playground" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">Playground</a>
+      <a href="/integration" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">Docs</a>
+      <a href="/faq" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">FAQ</a>
+    </div>
+
+    <main class="login-card glass-card" style="margin-top: 24px;">
+      <h2>Operator access</h2>
+      <p class="login-sub">Enter your cryptographically issued API key to access the terminal.</p>
+
+      <form id="loginForm" autocomplete="off">
+        <label for="apikey">Terminal API key</label>
+        <input id="apikey" type="password" autocomplete="off" spellcheck="false" class="mono" placeholder="rk_client_…" required minlength="20" />
+
+        <label class="custom-checkbox-wrapper row" style="margin-top: 16px; text-transform: none; letter-spacing: 0; color: var(--text-2); font-size: 13px; font-weight: 400; font-family: var(--font-sans); display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" id="remember" />
+          <span>Keep this key on this device</span>
+        </label>
+        <p class="subtle" style="margin: 8px 0 0;">Persistent sessions store your API key in this browser. Leave unchecked on shared machines.</p>
+
+        <div style="display: flex; gap: 10px; margin-top: 22px;">
+          <button type="submit" id="loginBtn" style="flex: 1.3; margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative;">
+            <span>Sign in</span>
+            <span style="font-family: var(--font-mono); font-weight: 500;">→</span>
+            <kbd style="font-size: 10px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); font-family: var(--font-mono); color: var(--text-2); display: none;">Press Enter ↵</kbd>
+          </button>
+          <a href="/playground" class="btn ghost" style="flex: 1; margin-top: 0; text-decoration: none; border-bottom: none;">
+            <span>Playground</span>
+          </a>
+        </div>
+        <p id="loginError" class="error" hidden></p>
+      </form>
+
+      <div class="trial-note">
+        <span class="ic">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>
+        </span>
+        <div>
+          <strong>Need an API key?</strong>
+          <span>Contact <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a> on LinkedIn to request access.</span>
+        </div>
+      </div>
+
+      <div class="login-footer">REALITY KERNEL · SOVEREIGN REASONING SYSTEM</div>
+    </main>
+  </section>
+
+  <div class="modal-backdrop" id="helpModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h3>Authentication support</h3>
+      <p>Your API key is a unique cryptographic identifier. If lost or compromised, it must be rotated immediately through the SOC dashboard.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-block" id="closeHelp">Acknowledge</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script src="/causal-graph.js"></script>
+  <script>
+    window.RKCausal.init(document.getElementById('rk-login-canvas'));
+    (async () => {
+      const saved = sessionStorage.getItem('rk_api_key') || localStorage.getItem('rk_api_key');
+      if (saved) {
+        const ok = await rk.verifyKey(saved);
+        if (ok) { location.href = '/dashboard'; return; }
+      }
+      document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const key      = document.getElementById('apikey').value.trim();
+        const remember = document.getElementById('remember').checked;
+        const btn      = document.getElementById('loginBtn');
+        const err      = document.getElementById('loginError');
+        err.hidden = true; btn.disabled = true;
+        btn.innerHTML = '<span>Authenticating…</span>';
+        const ok = await rk.verifyKey(key);
+        if (!ok) {
+          err.textContent = 'Invalid or suspended key. Please verify your credentials or contact support.';
+          err.hidden = false;
+          btn.disabled = false;
+          btn.innerHTML = '<span>Sign in</span><span style="font-family: var(--font-mono); font-weight: 500;">→</span><kbd style="font-size: 10px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); font-family: var(--font-mono); color: var(--text-2); display: none;">Press Enter ↵</kbd>';
+          return;
+        }
+        (remember ? localStorage : sessionStorage).setItem('rk_api_key', key);
+        location.href = '/dashboard';
+      });
+      window.showHelp = () => document.getElementById('helpModal').classList.add('show');
+      document.getElementById('closeHelp').onclick = () => document.getElementById('helpModal').classList.remove('show');
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pricing | Reality Kernel</title>
+  <meta name="description" content="Starter, Professional, and Enterprise pricing for Reality Kernel." />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <style>
+    :root { --bg:#050507; --panel:#0c120f; --text:#e7f8ef; --muted:#9ab0a4; --green:#6EE7B7; --border:#213028; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+    .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+    .nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--border)}
+    .brand{font-weight:700;letter-spacing:.06em;color:var(--green)}
+    .links a{margin-left:16px;color:var(--muted);text-decoration:none}
+    h1{font-size:clamp(2rem,4vw,3rem);margin:44px 0 12px}
+    .sub{color:var(--muted);max-width:74ch}
+    .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:28px 0 24px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px}
+    .price{font-size:2rem;font-weight:700;color:var(--green);margin:6px 0 10px}
+    ul{padding-left:18px;color:#c2d7cc} li{margin:8px 0}
+    .for{color:var(--muted);font-size:.95rem;margin-top:8px}
+    .featured{border-color:var(--green);box-shadow:0 0 0 1px rgba(110,231,183,.15)}
+    .note{margin:18px 0 40px;padding:14px;border:1px dashed #315245;border-radius:12px;background:#09120d;color:#bdd7cb}
+    .cta a{display:inline-block;padding:10px 14px;border:1px solid var(--border);border-radius:10px;color:var(--text);text-decoration:none;margin-right:8px}
+    .cta .primary{background:var(--green);color:#052415;border-color:transparent}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="nav">
+      <div class="brand">REALITY KERNEL</div>
+      <nav class="links">
+        <a href="/">Home</a>
+        <a href="/integration">Integration</a>
+        <a href="/sdk">SDK</a>
+        <a href="/login">Dashboard</a>
+      </nav>
+    </header>
+
+    <h1>Pricing built for every stage of agent deployment</h1>
+    <p class="sub">Start quickly, scale confidently, and move into regulated production with kernel-level enforcement and cryptographic proof.</p>
+
+    <section class="tiers">
+      <article class="card">
+        <h2>Starter</h2>
+        <div class="price">$99<span style="font-size:1rem;color:#a9c0b5">/month</span></div>
+        <ul>
+          <li>10,000 checks/month</li>
+          <li>ALLOW / WARN / BLOCK verdicts</li>
+          <li>Ed25519 signed audit log</li>
+          <li>Discord alerts</li>
+        </ul>
+        <p class="for"><strong>For:</strong> developers testing agent security</p>
+      </article>
+
+      <article class="card featured">
+        <h2>Professional</h2>
+        <div class="price">$499<span style="font-size:1rem;color:#a9c0b5">/month</span></div>
+        <ul>
+          <li>100,000 checks/month</li>
+          <li>Everything in Starter</li>
+          <li>Session tracking (slow-drip detection)</li>
+          <li>Least-agency policy enforcement</li>
+          <li>API scan for CI/CD pipelines</li>
+        </ul>
+        <p class="for"><strong>For:</strong> teams deploying agents in production</p>
+      </article>
+
+      <article class="card">
+        <h2>Enterprise</h2>
+        <div class="price">Custom</div>
+        <ul>
+          <li>Unlimited checks</li>
+          <li>eBPF kernel-level sensor (on-premises)</li>
+          <li>OWASP AIMM compliance report</li>
+          <li>SOC 2 / HIPAA audit trail</li>
+          <li>Dedicated support + SLA</li>
+          <li>Design partnership available</li>
+        </ul>
+        <p class="for"><strong>For:</strong> enterprises in regulated industries</p>
+      </article>
+    </section>
+
+    <div class="note">Deploying Reality Kernel inside your platform? Ask about our <strong>Design Partnership</strong> program.</div>
+
+    <div class="cta" style="margin-bottom:40px">
+      <a class="primary" href="/login">Start Free</a>
+      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Book a Demo</a>
+    </div>
+  </div>
+</body>
+</html>

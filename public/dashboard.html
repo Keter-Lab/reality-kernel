@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Operator console · Reality Kernel</title>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</head>
+<body>
+  <div id="previewWatermark" class="preview-watermark" hidden style="position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 200;">Preview Mode Active · Displaying Simulated Causal Trajectories</div>
+
+  <div id="loadingOverlay" style="position: fixed; inset: 0; background: #050507; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; transition: opacity .4s ease;">
+    <div style="width: 28px; height: 28px; border: 1.5px solid rgba(255, 255, 255, 0.08); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite;"></div>
+    <div style="font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .15em; color: var(--text-muted);">Initializing causal reasoning sandbox</div>
+  </div>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes revealUp {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .operator-main .panel { opacity: 0; }
+    .operator-main .panel.active { animation: revealUp 0.5s ease forwards !important; }
+  </style>
+
+  <div class="operator-shell">
+
+    <!-- ── SIDEBAR ────────────────────────────────────────────────────── -->
+    <aside class="operator-sidebar" aria-label="Operator navigation">
+      <a href="/" class="op-brand" style="text-decoration:none; border-bottom:none;">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Operator Console</span>
+        </div>
+      </a>
+
+      <div class="op-section-label">Console</div>
+      <div class="operator-nav">
+        <button class="rk-nav-link active" data-tab="overview">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg></span>
+          Dashboard
+        </button>
+        <button class="rk-nav-link" data-tab="usage">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></span>
+          Usage
+        </button>
+        <button class="rk-nav-link" data-tab="audit">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span>
+          Audit log
+        </button>
+        <button class="rk-nav-link" data-tab="agents">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/></svg></span>
+          Agents
+        </button>
+        <button class="rk-nav-link" data-tab="compliance">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          Compliance
+        </button>
+        <button class="rk-nav-link" data-tab="playground">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg></span>
+          Playground
+        </button>
+        <button class="rk-nav-link" data-tab="faq">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c-.7.7-2 1-2 2.5"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg></span>
+          FAQ
+        </button>
+        <button class="rk-nav-link" data-tab="profile">
+          <span class="nav-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.5 1z"/></svg></span>
+          Settings
+        </button>
+
+        <div class="op-section-label">Resources</div>
+        <a class="rk-nav-link external" href="/integration">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg></span>
+          Docs
+        </a>
+        <a class="rk-nav-link external" href="/verifier">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          Chain verifier
+        </a>
+        <a class="rk-nav-link external" href="/security">
+          <span class="nav-ic"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          Security
+        </a>
+      </div>
+
+      <div class="operator-user-area">
+        <div class="op-user-row">
+          <div class="op-user-avatar" id="userAvatar">RK</div>
+          <div class="op-user-meta">
+            <strong id="userBadge">loading…</strong>
+            <span id="userStatusTiny">— · —</span>
+          </div>
+        </div>
+        <button class="op-signout" id="logoutBtn" type="button">Sign out</button>
+      </div>
+    </aside>
+
+    <!-- ── MAIN ───────────────────────────────────────────────────────── -->
+    <div class="operator-main">
+      <header class="operator-header">
+        <div class="op-crumb">
+          <span>Operator Console</span>
+          <span class="op-crumb-sep">/</span>
+          <span class="op-crumb-cur" id="crumbCur">Dashboard</span>
+        </div>
+        <div class="op-actions">
+          <span class="pill info" id="engineHealth"><span class="dot ok"></span> engine · operational</span>
+        </div>
+      </header>
+
+      <div id="warningBar" class="warning-bar" hidden></div>
+      <div class="toast-stack" id="toastStack"></div>
+
+      <main class="operator-content">
+
+        <!-- ─────────────────── DASHBOARD ─────────────────── -->
+        <section data-panel="overview" class="panel active">
+          <div class="page-head">
+            <div>
+              <h2>Dashboard</h2>
+              <p>Real-time view of your engine, credits, and last verdicts.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot ok"></span>Plan</div>
+              <div class="value" id="ov-plan">—</div>
+              <div class="sub" id="ov-status">—</div>
+            </div>
+
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot warn"></span>Credits used</div>
+              <div class="value">
+                <span id="ov-used">—</span><span class="of" id="ov-limit"></span>
+              </div>
+              <div class="bar"><div class="fill" id="ov-bar"></div></div>
+              <div class="sub" id="ov-pct">—</div>
+            </div>
+
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot ok"></span>Credits remaining</div>
+              <div class="value" id="ov-rem">—</div>
+              <div class="sub" id="ov-rem-warn">—</div>
+            </div>
+
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot block"></span>Calls (last 50)</div>
+              <div class="value" id="ov-calls">—</div>
+              <div class="sub">
+                <span class="dot ok"></span> <span id="ov-allow">0 allow</span> ·
+                <span class="dot warn"></span> <span id="ov-warn">0 warn</span> ·
+                <span class="dot block"></span> <span id="ov-block">0 block</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" id="pendingAlertsCard" style="display: none; border-color: var(--warn-line);">
+            <h3>
+              <span><span class="dot warn" style="margin-right: 8px;"></span>Pending review (active WARNs)</span>
+              <span class="h-side">requires operator action</span>
+            </h3>
+            <div id="ov-pending-list" style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;"></div>
+          </div>
+
+          <div class="card">
+            <h3>
+              <span>Recent activity</span>
+              <span class="h-side">last 8 calls · auto-refresh 30s</span>
+            </h3>
+            <table class="audit-table compact">
+              <thead><tr><th>Time</th><th>Verdict</th><th>Command</th><th>Cost</th></tr></thead>
+              <tbody id="ov-recent">
+                <tr><td colspan="4">
+                  <div class="empty-state">
+                    <span class="empty-ic">Loading</span>
+                    <h4>Fetching activity</h4>
+                    <p>Pulling the latest verdicts from the engine.</p>
+                  </div>
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="grid two">
+            <div class="card hover-lift">
+              <h4>Verdict legend</h4>
+              <p style="font-size: 13.5px; line-height: 2; margin: 12px 0 0;">
+                <span class="pill allow">ALLOW</span> &nbsp; safe to execute · fast path or sandbox-cleared.<br>
+                <span class="pill warn">WARN</span> &nbsp; ambiguous outcome — recommend human review.<br>
+                <span class="pill block">BLOCK</span> &nbsp; simulation crossed the separatrix into Basin B.
+              </p>
+            </div>
+            <div class="card featured hover-lift">
+              <h4>Need more credits or a higher plan?</h4>
+              <p style="font-size: 13.5px; line-height: 1.65; margin: 12px 0 14px;">
+                Top-ups and plan changes are handled manually. Message Keter Labs on LinkedIn — we respond inside 24 hours and can rotate, extend, or upgrade your key in minutes.
+              </p>
+              <a class="btn btn-sm" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" style="border-bottom: none; text-decoration: none;">
+                Contact Keter Labs <span style="font-family: var(--font-mono);">→</span>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─────────────────── USAGE ─────────────────── -->
+        <section data-panel="usage" class="panel">
+          <div class="page-head">
+            <div>
+              <h2>Usage</h2>
+              <p>Credit consumption, top-up history, and verdict distribution.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card stat featured">
+              <div class="label"><span class="dot warn"></span>Credits used</div>
+              <div class="value"><span id="us-used">—</span><span class="of" id="us-limit"></span></div>
+              <div class="bar"><div class="fill" id="us-bar"></div></div>
+              <div class="sub"><span id="us-pct">—</span> of total allocation</div>
+            </div>
+            <div class="card stat featured">
+              <div class="label"><span class="dot ok"></span>Plan details</div>
+              <div class="value" style="font-size: 20px;" id="us-plan">—</div>
+              <div class="sub" id="us-status">—</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3><span>Top-up history</span></h3>
+            <div style="overflow-x: auto;">
+              <table class="audit-table compact">
+                <thead><tr><th>When</th><th>Amount</th><th>Note</th></tr></thead>
+                <tbody id="us-topups"><tr><td colspan="3"><div class="empty-state" style="padding: 24px;"><span class="empty-ic">Empty</span><h4>No top-ups recorded</h4></div></td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card featured">
+            <h3>
+              <span>Verdict distribution</span>
+              <span class="h-side">last 50 calls</span>
+            </h3>
+            <div class="bar stacked" style="height: 12px; margin: 20px 0; display: flex; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden;">
+              <div class="seg ok"    id="us-seg-ok"    style="background: var(--ok); box-shadow: inset 0 1px 0 rgba(255,255,255,.1); transition: width .4s ease;"></div>
+              <div class="seg warn"  id="us-seg-warn"  style="background: var(--warn); box-shadow: inset 0 1px 0 rgba(255,255,255,.1); transition: width .4s ease;"></div>
+              <div class="seg block" id="us-seg-block" style="background: var(--block); box-shadow: inset 0 1px 0 rgba(255,255,255,.1); transition: width .4s ease;"></div>
+            </div>
+            <p class="legend" style="display: flex; gap: 20px; margin: 0; padding-top: 12px; border-top: 1px solid var(--border); flex-wrap: wrap;">
+              <span style="display: flex; align-items: center; gap: 8px;"><span class="dot ok"></span> <strong>ALLOW</strong></span>
+              <span style="display: flex; align-items: center; gap: 8px;"><span class="dot warn"></span> <strong>WARN</strong></span>
+              <span style="display: flex; align-items: center; gap: 8px;"><span class="dot block"></span> <strong>BLOCK</strong></span>
+            </p>
+          </div>
+
+          <div class="grid two">
+            <div class="card hover-lift">
+              <h4>Fast path vs full engine</h4>
+              <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
+                Read-only commands (<code>ls</code>, <code>cat</code>, <code>grep</code>…) execute at <strong>1 credit</strong>. Risky or ambiguous commands run the full engine at <strong>5 credits</strong>.
+              </p>
+            </div>
+            <div class="card hover-lift">
+              <h4>Hard cap behavior</h4>
+              <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
+                When credits hit zero the API returns <code>HTTP 402</code> until your account is topped up. Agents pause gracefully — no silent bypasses.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─────────────────── AUDIT ─────────────────── -->
+        <section data-panel="audit" class="panel">
+          <div class="page-head" style="margin-bottom: 24px;">
+            <div>
+              <h2>Audit log</h2>
+              <p>Every <code>/v1/check</code> your key has issued, cryptographically sealed.</p>
+            </div>
+            <div class="actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <button id="exportCsvBtn" class="btn btn-sm ghost" style="margin-top:0;" title="Download all visible audit entries as CSV">⬇ CSV</button>
+              <button id="exportJsonBtn" class="btn btn-sm ghost" style="margin-top:0;" title="Download all visible audit entries as JSON">⬇ JSON</button>
+              <a class="btn btn-sm ghost" href="/verifier" style="border-bottom:none; text-decoration:none; margin-top:0;">Chain verifier →</a>
+            </div>
+          </div>
+
+          <div class="card" style="border: 1px dashed var(--border-strong);">
+            <h3 style="margin-top: 0; font-size: 18px; margin-bottom: 16px;"><span>Quick verify</span></h3>
+            <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 220px;">
+                <label class="muted" style="font-size: 11px; margin-bottom: 4px; display: block;">Command</label>
+                <input type="text" id="quickVerifyCmd" placeholder="e.g. ls /var/log" class="mono" />
+              </div>
+              <div style="flex: 1; min-width: 220px;">
+                <label class="muted" style="font-size: 11px; margin-bottom: 4px; display: block;">Prime intent</label>
+                <input type="text" id="quickVerifyIntent" placeholder="e.g. read logs" />
+              </div>
+              <button id="quickVerifyBtn" class="primary btn-sm" style="margin-top:0;">Verify</button>
+            </div>
+            <div id="quickVerifyResult" style="margin-top: 16px; font-size: 13px; font-family: var(--font-mono); display: none;"></div>
+          </div>
+
+          <div class="card">
+            <div class="row spread mb-2" style="flex-wrap: wrap; gap: 12px;">
+              <h3 style="margin: 0;"><span>Decisions</span></h3>
+              <div class="row" style="flex-wrap: wrap;">
+                <select id="auditVerdict" style="width: auto; min-width: 140px;">
+                  <option value="">All verdicts</option>
+                  <option>ALLOW</option><option>WARN</option><option>BLOCK</option>
+                </select>
+                <input id="auditSearch" placeholder="search command…" style="min-width: 180px;" />
+                <button id="auditRefresh" class="ghost btn-sm" style="margin-top:0;">↻ Refresh</button>
+              </div>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Time</th><th>Verdict</th><th>Conf.</th>
+                    <th>Command</th><th>Intent</th><th>Cost</th><th>Proof</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-rows">
+                  <tr><td colspan="7">
+                    <div class="empty-state">
+                      <span class="empty-ic">Loading</span>
+                      <h4>Fetching audit log</h4>
+                    </div>
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─────────────────── PLAYGROUND ─────────────────── -->
+        <section data-panel="playground" class="panel">
+          <div class="page-head">
+            <div>
+              <h2>Playground</h2>
+              <p>Live-fire a check against your key. Consumes real credits.</p>
+            </div>
+            <div class="actions">
+              <span class="pill muted">POST /v1/check</span>
+            </div>
+          </div>
+
+          <div class="card featured">
+            <h3 style="margin-top: 0;"><span>Compose a check</span></h3>
+
+            <div class="scenario-chips" style="margin-bottom: 24px;">
+              <button class="chip" type="button" data-scn="0">Benign query</button>
+              <button class="chip" type="button" data-scn="1">Scope creep</button>
+              <button class="chip" type="button" data-scn="2">Database wipe</button>
+              <button class="chip" type="button" data-scn="3">Reverse shell</button>
+              <button class="chip" type="button" data-scn="4">SQL injection</button>
+            </div>
+
+            <label class="muted" style="font-size: 11px; display: block; margin-bottom: 6px;">System command</label>
+            <input id="dashPg-cmd" class="mono" placeholder="rm -rf /var/log" style="width: 100%; margin-bottom: 14px;" />
+
+            <label class="muted" style="font-size: 11px; display: block; margin-bottom: 6px;">Prime intent</label>
+            <input id="dashPg-intent" placeholder="clean up old logs" style="width: 100%; margin-bottom: 20px;" />
+
+            <button id="dashPg-run" class="btn-block">
+              <span>Run simulation</span>
+              <span style="font-family: var(--font-mono);">→</span>
+            </button>
+
+            <div id="dashPg-verdictBanner" class="verdict-banner" style="margin-top: 24px;"></div>
+
+            <div id="dashPg-reviewActions" class="review-actions">
+              <div class="label" style="margin-bottom: 16px;">
+                <span style="color: var(--warn); font-weight: 500; display: block; margin-bottom: 4px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;">Causal divergence detected</span>
+                <span style="font-size: 13px; color: var(--text-2);">The engine recommends manual verification. Select the appropriate response protocol.</span>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn btn-sm success" id="dashPg-approveBtn" type="button">Authorize execution</button>
+                <button class="btn btn-sm danger" id="dashPg-rejectBtn"  type="button">Terminate action</button>
+              </div>
+            </div>
+            <div id="dashPg-reviewDecision" class="review-decision" style="margin-top: 20px;"></div>
+
+            <div id="dashPg-structured" class="pg-structured-response" hidden></div>
+
+            <div id="dashPg-raw-container" hidden style="margin-top: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h5 style="margin: 0; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); font-size: 10.5px; font-weight: 500;">Raw simulation response</h5>
+                <button class="btn btn-sm ghost" id="dashPg-raw-toggle" style="margin: 0; padding: 4px 10px; font-size: 10.5px; border-bottom: none;" type="button">Show raw JSON</button>
+              </div>
+              <pre id="dashPg-out" class="output" style="font-size: 12px; max-height: 500px; overflow-y: auto; margin: 0;" hidden></pre>
+            </div>
+          </div>
+
+          <div class="grid two">
+            <div class="card hover-lift">
+              <h4>Tip — prime intent matters</h4>
+              <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
+                The engine compares the <strong>command</strong> against the <strong>operator's stated goal</strong>. A plausible intent that doesn't match the action raises divergence and trips Layer II simulation.
+              </p>
+            </div>
+            <div class="card hover-lift">
+              <h4>What happens on approve / block?</h4>
+              <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
+                These buttons override on WARN verdicts. The override is logged as a fresh chain link — the original cryptographic verdict stays in your audit log untouched.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─────────────────── AGENTS ─────────────────── -->
+        <section data-panel="agents" class="panel">
+          <div class="page-head">
+            <div>
+              <h2>Agent Fleet</h2>
+              <p>Live registry of all tracked agents. Aggregated from your audit log — no extra API calls.</p>
+            </div>
+          </div>
+
+          <div class="grid" style="margin-bottom: 20px;">
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot ok"></span>Active agents</div>
+              <div class="value" id="ag-active">—</div>
+              <div class="sub">seen in last 24h</div>
+            </div>
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot block"></span>Anomalous agents</div>
+              <div class="value" id="ag-anomalous">—</div>
+              <div class="sub">block rate &gt; 2× fleet avg</div>
+            </div>
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot warn"></span>Total tracked</div>
+              <div class="value" id="ag-total">—</div>
+              <div class="sub">distinct agent IDs</div>
+            </div>
+          </div>
+
+          <div class="card" id="agentAnomalyCard" style="display:none; border-color: var(--warn-line); margin-bottom: 16px;">
+            <h3><span class="dot warn" style="margin-right:8px;"></span>Behavioral anomalies <span class="h-side">block rate &gt; 2× fleet average</span></h3>
+            <div id="ag-anomaly-list" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;"></div>
+          </div>
+
+          <div class="card">
+            <h3><span>Agent registry</span><span class="h-side">aggregated from last 200 audit entries · auto-refreshes with audit</span></h3>
+            <table class="audit-table" style="margin-top:16px;">
+              <thead><tr>
+                <th>Agent ID</th>
+                <th>Last Seen</th>
+                <th>Total Calls</th>
+                <th>Block Rate</th>
+                <th>Status</th>
+              </tr></thead>
+              <tbody id="ag-table-body">
+                <tr><td colspan="5"><div class="empty-state"><span class="empty-ic">⊙</span><h4>Loading agents</h4><p>Navigate to Audit Log first to load data, then return here.</p></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ─────────────────── COMPLIANCE ─────────────────── -->
+        <section data-panel="compliance" class="panel">
+          <div class="page-head">
+            <div>
+              <h2>Compliance</h2>
+              <p>Maps your Reality Kernel audit chain to enterprise security frameworks. Generated from real audit data.</p>
+            </div>
+            <div class="actions">
+              <button id="exportComplianceBtn" class="btn btn-sm ghost" style="margin-top:0;">Export JSON report →</button>
+            </div>
+          </div>
+
+          <div class="grid" style="margin-bottom:20px;">
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot ok"></span>Controls satisfied</div>
+              <div class="value" id="comp-satisfied">—</div>
+              <div class="sub">across 3 frameworks</div>
+            </div>
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot block"></span>Total BLOCK events</div>
+              <div class="value" id="comp-blocks">—</div>
+              <div class="sub">enforcement evidence</div>
+            </div>
+            <div class="card stat hover-lift">
+              <div class="label"><span class="dot warn"></span>Human reviews</div>
+              <div class="value" id="comp-reviews">—</div>
+              <div class="sub">HITL override records</div>
+            </div>
+          </div>
+
+          <!-- OWASP -->
+          <div class="card" style="margin-bottom:16px;">
+            <h3 style="margin-top:0;">OWASP Top 10 for LLM Applications <span class="h-side">owasp.org/www-project-top-10-for-large-language-model-applications</span></h3>
+            <table class="audit-table" id="comp-owasp-table" style="margin-top:12px;">
+              <thead><tr><th>Control</th><th>What RK Enforces</th><th>Evidence Events</th><th>Status</th></tr></thead>
+              <tbody id="comp-owasp-body"></tbody>
+            </table>
+          </div>
+
+          <!-- NIST AI 600-1 -->
+          <div class="card" style="margin-bottom:16px;">
+            <h3 style="margin-top:0;">NIST AI 600-1 — Trustworthy AI <span class="h-side">nist.gov/artificial-intelligence</span></h3>
+            <table class="audit-table" id="comp-nist-table" style="margin-top:12px;">
+              <thead><tr><th>Control</th><th>What RK Enforces</th><th>Evidence Events</th><th>Status</th></tr></thead>
+              <tbody id="comp-nist-body"></tbody>
+            </table>
+          </div>
+
+          <!-- EU AI Act -->
+          <div class="card">
+            <h3 style="margin-top:0;">EU AI Act — Key Articles <span class="h-side">artificialintelligenceact.eu</span></h3>
+            <table class="audit-table" id="comp-euai-table" style="margin-top:12px;">
+              <thead><tr><th>Article</th><th>What RK Enforces</th><th>Evidence Events</th><th>Status</th></tr></thead>
+              <tbody id="comp-euai-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ─────────────────── FAQ ─────────────────── -->
+        <section data-panel="faq" class="panel">
+          <div class="page-head">
+            <div>
+              <h2>FAQ</h2>
+              <p>Common questions about credits, verdicts, integration, and security.</p>
+            </div>
+            <div class="actions">
+              <a class="btn btn-sm ghost" href="/faq" style="border-bottom:none; text-decoration:none; margin-top:0;">Full FAQ →</a>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="faq-list" id="faqList">
+              <div class="faq-item open">
+                <button class="faq-q" type="button">
+                  How are credits consumed?
+                  <span class="caret">+</span>
+                </button>
+                <div class="faq-a">
+                  <p>The fast path (read-only commands like <code>ls</code>, <code>cat</code>, <code>grep</code>) costs <strong>1 credit</strong>. Anything that hits the full engine — risky writes, ambiguous intent, pipelines — costs <strong>5 credits</strong>. Every <code>/v1/check</code> response returns the exact cost in <code>credits_consumed</code>.</p>
+                </div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">What's the difference between WARN and BLOCK? <span class="caret">+</span></button>
+                <div class="faq-a"><p><strong>WARN</strong> means a suspicious trajectory the engine is not certain about — human review is recommended. <strong>BLOCK</strong> means the simulation crossed into Basin B (irreversible damage, exfiltration, compromise) and cannot run.</p></div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">Can I override a WARN or BLOCK verdict? <span class="caret">+</span></button>
+                <div class="faq-a"><p>Only WARN can be overridden — from the Playground or the Pending Review widget. Overrides are logged as fresh chain links so the audit trail stays clean. BLOCK is terminal.</p></div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">How do I integrate Reality Kernel? <span class="caret">+</span></button>
+                <div class="faq-a"><p>Wrap every system-level action in a call to <code>POST /v1/check</code>. If ALLOW, run it. If WARN, escalate. If BLOCK, abort. See the <a href="/integration">integration docs</a> for full details.</p></div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">Is there a latency penalty? <span class="caret">+</span></button>
+                <div class="faq-a"><p>Fast path returns in under 1 ms. Full engine runs in 50–500 ms. Read-heavy agents typically see ~95% fast-path hit rate, so the average overhead is negligible.</p></div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">What does the proof hash prove? <span class="caret">+</span></button>
+                <div class="faq-a"><p>Each verdict is hashed with SHA-256 over the decision payload (command, intent, verdict, timestamp, evidence). The hash chain-links into a tamper-evident audit log — if any entry is altered, the chain breaks.</p></div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">Credits ran out — what happens? <span class="caret">+</span></button>
+                <div class="faq-a"><p>The API returns <code>HTTP 402</code> on every subsequent <code>/v1/check</code>. Agents pause, surface the error, and wait for a top-up. No silent bypasses.</p></div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">Where does my command data go? <span class="caret">+</span></button>
+                <div class="faq-a"><p>Commands and intents are evaluated in-memory and hashed. Only cryptographic proof hashes and basic audit metadata (credits, timestamps, verdicts) are persisted. Self-hosted deployments are available for regulated buyers.</p></div>
+              </div>
+              <div class="faq-item">
+                <button class="faq-q" type="button">Can I rotate my API key? <span class="caret">+</span></button>
+                <div class="faq-a"><p>Yes — contact Reality Kernel support. The old key is invalidated immediately, and the new key inherits your existing credit balance and history.</p></div>
+              </div>
+            </div>
+
+            <div class="cta-banner mt-2">
+              <div class="cta-text">
+                <strong>Still stuck?</strong>
+                <span>Reach out to our support team — ready to assist with any technical or billing inquiries.</span>
+              </div>
+              <a class="btn" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" style="text-decoration: none; border-bottom: none;">Contact support <span style="font-family: var(--font-mono);">→</span></a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─────────────────── SETTINGS ─────────────────── -->
+        <section data-panel="profile" class="panel">
+          <div class="page-head">
+            <div>
+              <h2>Console Settings</h2>
+              <p>Configure threat response thresholds, alert routing webhooks, and SIEM logging.</p>
+            </div>
+          </div>
+
+          <!-- Account card (unchanged — reads from /v1/me response) -->
+          <div class="card">
+            <h3 style="margin-top:0;"><span>Account</span></h3>
+            <table class="kv-table">
+              <tr><td>Name</td><td id="pr-name">—</td></tr>
+              <tr><td>Email</td><td id="pr-email">—</td></tr>
+              <tr><td>Company</td><td id="pr-company">—</td></tr>
+              <tr><td>Plan</td><td id="pr-plan">—</td></tr>
+              <tr><td>Status</td><td id="pr-status">—</td></tr>
+              <tr><td>Created</td><td id="pr-created">—</td></tr>
+              <tr><td>Expires</td><td id="pr-expires">—</td></tr>
+              <tr><td>API key</td><td><code id="pr-key">—</code></td></tr>
+            </table>
+            <p class="muted mt-2" style="font-size: 12.5px;">
+              Profile fields are managed by Reality Kernel. To request modifications, contact your account administrator or reach out through our official support channel.
+            </p>
+          </div>
+
+          <!-- ── ENTERPRISE SECURITY SETTINGS (new) ── -->
+          <div class="card">
+            <h3 style="margin-top:0;"><span>Execution policy</span></h3>
+
+            <!-- Kill Switch Toggle -->
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--border);">
+              <div style="max-width: 480px;">
+                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Strict Execution Mode (Kill Switch)</div>
+                <div style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5;">When enabled, any agent action with a Risk Score above 85% is automatically Hard Denied — no HITL escalation, no override possible.</div>
+              </div>
+              <label class="rk-toggle" title="Toggle Strict Execution Mode">
+                <input type="checkbox" id="strictModeToggle" />
+                <span class="rk-toggle-track"><span class="rk-toggle-thumb"></span></span>
+              </label>
+            </div>
+
+            <!-- Audit Log Retention -->
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 0;">
+              <div style="max-width: 480px;">
+                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Audit Log Retention</div>
+                <div style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5;">How long cryptographic receipts are stored and verifiable. Immutable 7-year retention satisfies ISO 42001 and EU AI Act audit requirements.</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <select id="retentionSelect" style="width: auto; min-width: 200px;">
+                  <option value="30">30 Days (Standard)</option>
+                  <option value="90">90 Days (Pro)</option>
+                  <option value="2555">Immutable 7-Year (Enterprise)</option>
+                </select>
+                <button id="saveRetentionBtn" class="btn btn-sm" style="margin-top:0; white-space: nowrap;">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── ALERT ROUTING (new SIEM + existing Discord) ── -->
+          <div class="card">
+            <h3 style="margin-top:0;"><span>Alert routing</span></h3>
+
+            <!-- Discord (existing — IDs unchanged, backend call untouched) -->
+            <div style="padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;">
+              <div style="font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Discord webhook</div>
+              <p class="muted" style="margin: 0 0 12px; font-size: 12.5px;">
+                Receive real-time <code>WARN</code> alerts in your Discord server whenever a suspicious trajectory requires human review.
+              </p>
+              <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
+                <input type="text" id="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/..." class="mono" style="flex: 1; min-width: 260px;" />
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button id="saveWebhookBtn" class="primary btn-sm" style="margin-top:0;">Save webhook</button>
+                <button id="testWebhookBtn" class="secondary btn-sm" style="margin-top:0;">Send test alert</button>
+              </div>
+            </div>
+
+            <!-- SIEM Export Webhook (new — frontend only, no backend call yet) -->
+            <div>
+              <div style="font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px;">SIEM export webhook <span style="font-size: 11px; font-weight: 400; color: var(--text-muted); font-family: var(--font-mono); margin-left: 8px;">Datadog · Splunk · custom</span></div>
+              <p class="muted" style="margin: 0 0 12px; font-size: 12.5px;">
+                Every audit event will be forwarded as a JSON POST to this endpoint, enabling native integration with your existing SIEM pipeline.
+              </p>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <input type="text" id="siemWebhookUrl" placeholder="https://http-intake.logs.datadoghq.com/..." class="mono" style="flex: 1; min-width: 260px;" />
+                <button id="saveSiemBtn" class="btn btn-sm" style="margin-top:0; white-space: nowrap;">Save SIEM endpoint</button>
+              </div>
+              <p class="muted" style="margin: 10px 0 0; font-size: 11.5px;">SIEM forwarding will be active on your next session after saving.</p>
+            </div>
+          </div>
+
+          <!-- ── MULTI-AGENT TRACKING INFO (new) ── -->
+          <div class="card hover-lift">
+            <h3 style="margin-top:0;"><span>Multi-agent session tracking</span></h3>
+            <p style="font-size: 13.5px; color: var(--text-2); line-height: 1.65; margin: 0 0 14px;">
+              Every audit receipt issued by your key automatically captures the full delegation chain — Orchestrator ID, Subagent ID, and session lineage. Click any Audit Log row to inspect the complete causal graph for that action.
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <span class="pill allow" style="font-family: var(--font-mono); font-size: 11px;">orchestrator_id</span>
+              <span class="pill muted" style="font-family: var(--font-mono); font-size: 11px;">subagent_id</span>
+              <span class="pill muted" style="font-family: var(--font-mono); font-size: 11px;">session_lineage</span>
+              <span class="pill muted" style="font-family: var(--font-mono); font-size: 11px;">tool_sensitivity_tier</span>
+            </div>
+          </div>
+
+          <!-- Danger zone (unchanged) -->
+          <div class="card danger">
+            <h3 style="margin-top:0;"><span>Sign out everywhere on this device</span></h3>
+            <p class="muted" style="margin-bottom: 14px;">
+              Wipes the cached key from both <code>localStorage</code> and <code>sessionStorage</code>. You'll need your key to sign back in.
+            </p>
+            <button id="wipeBtn" class="danger">Sign out &amp; forget key</button>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ─────────────────── AUDIT DETAIL MODAL ─────────────────── -->
+  <div class="audit-detail-modal" id="auditDetailModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Decision details</h2>
+        <button class="close-btn" onclick="document.getElementById('auditDetailModal').classList.remove('show')" type="button">×</button>
+      </div>
+      <div id="auditDetailContent"></div>
+      <div style="padding: 16px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px;">
+        <button id="downloadReceiptBtn" class="btn btn-sm ghost" style="margin-top:0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em;" type="button">⬇ Download Cryptographic Receipt</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script src="/dashboard.js"></script>
+  <script>
+    // Breadcrumb sync with active tab
+    (function () {
+      const crumb = document.getElementById('crumbCur');
+      const labels = { overview: 'Dashboard', usage: 'Usage', audit: 'Audit log', agents: 'Agent Fleet', compliance: 'Compliance', playground: 'Playground', faq: 'FAQ', profile: 'Settings' };
+      document.querySelectorAll('.rk-nav-link[data-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const k = btn.dataset.tab;
+          if (crumb && labels[k]) crumb.textContent = labels[k];
+        });
+      });
+
+      // Populate avatar initials from user badge as it fills in
+      const badge = document.getElementById('userBadge');
+      const avatar = document.getElementById('userAvatar');
+      const statusTiny = document.getElementById('userStatusTiny');
+      const obs = new MutationObserver(function () {
+        const t = (badge.textContent || '').trim();
+        if (!t || t === 'loading…') return;
+        // Extract name part before separator
+        const namePart = t.split('·')[0].trim();
+        const keyPart  = (t.split('·')[1] || '').trim();
+        const initials = namePart.split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase() || 'RK';
+        avatar.textContent = initials.slice(0, 2);
+        if (statusTiny && keyPart) statusTiny.textContent = keyPart;
+      });
+      obs.observe(badge, { childList: true, characterData: true, subtree: true });
+    })();
+  </script>
+</body>
+</html>

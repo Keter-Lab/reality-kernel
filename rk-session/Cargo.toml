@@ -1,0 +1,16 @@
+[package]
+name = "rk-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+regex.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+rk-supabase = { path = "../rk-supabase" }

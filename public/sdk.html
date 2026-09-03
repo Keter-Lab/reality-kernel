@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SDK | Reality Kernel</title>
+  <meta name="description" content="Reality Kernel SDK for Python and REST integration." />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <style>
+    :root { --bg:#050507; --panel:#0c120f; --text:#eaf8f0; --muted:#9ab1a6; --green:#6EE7B7; --border:#1f2f26; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+    .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+    .nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--border)}
+    .brand{font-weight:700;letter-spacing:.06em;color:var(--green)}
+    .links a{margin-left:16px;color:var(--muted);text-decoration:none}
+    h1{font-size:clamp(2rem,4vw,2.8rem);margin:40px 0 8px}
+    .lead{color:var(--muted);max-width:70ch}
+    .block{margin:22px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+    pre{margin:10px 0 0;background:#08100c;border:1px solid #274032;border-radius:10px;padding:12px;overflow:auto;color:#cde6da}
+    code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .cta{margin:28px 0 44px}
+    .btn{display:inline-block;padding:10px 14px;border-radius:10px;border:1px solid var(--border);text-decoration:none;color:var(--text);margin-right:8px}
+    .btn.primary{background:var(--green);color:#042314;border-color:transparent}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="nav">
+      <div class="brand">REALITY KERNEL</div>
+      <nav class="links">
+        <a href="/">Home</a>
+        <a href="/integration">Integration</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/login">Dashboard</a>
+      </nav>
+    </header>
+
+    <h1>SDK options for every team</h1>
+    <p class="lead">Start with Python today, or use REST from any language. For regulated enterprise deployments, use our kernel sensor package for on-prem control.</p>
+
+    <section class="block">
+      <h2>Python SDK</h2>
+      <p><code>pip install realitykernel</code></p>
+      <pre><code>from realitykernel import RealityKernel
+rk = RealityKernel(api_key=os.environ["RK_API_KEY"])
+verdict = rk.check(command="curl https://example.com", prime_intent="fetch docs")
+if verdict["verdict"] == "BLOCK":
+    raise RuntimeError("blocked")</code></pre>
+    </section>
+
+    <section class="block">
+      <h2>REST API (any language)</h2>
+      <pre><code>curl -sS https://your-domain.com/v1/check \
+  -H "Authorization: Bearer $RK_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"ls -la","prime_intent":"inspect project files"}'</code></pre>
+      <p>Need full endpoint reference? See <a href="/verifier">API docs</a> and <a href="/integration">integration guide</a>.</p>
+    </section>
+
+    <section class="block">
+      <h2>Enterprise SDK</h2>
+      <p>For on-prem deployments, Reality Kernel includes an eBPF kernel sensor plane that captures what agents actually execute and links that evidence to your control-plane policies and audit chain.</p>
+    </section>
+
+    <div class="cta">
+      <a class="btn primary" href="/login">Start Free</a>
+      <a class="btn" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Book a Demo</a>
+    </div>
+  </div>
+</body>
+</html>

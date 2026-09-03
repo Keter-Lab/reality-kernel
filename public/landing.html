@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reality Kernel · Sovereign Reasoning Engine</title>
+  <meta name="description" content="Cryptographic causal verification for the agentic era. Reality Kernel simulates the downstream consequences of agent actions across parallel shadow worlds — stopping attacks that probabilistic models cannot see." />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+</head>
+<body>
+
+  <header class="landing-nav">
+    <a href="/" style="text-decoration:none; border-bottom:none;">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Sovereign Reasoning Engine</span>
+        </div>
+      </div>
+    </a>
+    <nav>
+      <a href="/playground" class="nav-link">Playground</a>
+      <a href="/verifier" class="nav-link">Verifier</a>
+      <a href="/integration" class="nav-link">Docs</a>
+      <a href="/security" class="nav-link">Security</a>
+      <a href="/faq" class="nav-link">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/login" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;">Sign in</a>
+      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" class="btn btn-sm" style="margin-top:0; text-decoration:none; border-bottom:none;">Request access</a>
+    </div>
+  </header>
+
+  <!-- ── HERO ──────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-text">
+      <span class="hero-eyebrow"><span class="pulse"></span>RK-α · Live across shadow worlds</span>
+      <h1>
+        Causal verification<br>
+        for the <em>agentic era.</em>
+      </h1>
+      <p class="hero-sub">
+        Reality Kernel simulates the downstream consequences of every agent action across
+        parallel shadow worlds — stopping the attacks that probabilistic models, prompt filters, and
+        statistical guardrails cannot see.
+      </p>
+      <div class="hero-cta-row">
+        <a href="/playground" class="btn" style="text-decoration:none; border-bottom:none;">
+          <span>Try the playground</span>
+          <span style="font-family:var(--font-mono);">→</span>
+        </a>
+        <a href="/integration" class="btn ghost" style="text-decoration:none; border-bottom:none;">
+          <span>Read the docs</span>
+        </a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="val"><em>&lt;</em>1<span style="font-family:var(--font-mono); font-size:18px; color:var(--text-muted); margin-left:4px;">ms</span></div>
+          <span class="lbl">Fast-path latency</span>
+        </div>
+        <div class="hero-stat">
+          <div class="val">5</div>
+          <span class="lbl">Shadow worlds</span>
+        </div>
+        <div class="hero-stat">
+          <div class="val">SHA<em>-</em>256</div>
+          <span class="lbl">Sealed verdicts</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-viz">
+      <canvas id="rk-hero-canvas"></canvas>
+    </div>
+
+    <div class="hero-ticker">
+      <span><span class="ok">●</span> ALLOW · 0x9af3c1a7</span>
+      <span class="sep">/</span>
+      <span><span class="warn">●</span> WARN · 0xee20b48f</span>
+      <span class="sep">/</span>
+      <span><span class="block">●</span> BLOCK · 0x4c11d8aa</span>
+      <span class="sep">/</span>
+      <span>BASIN_A · 4 · BASIN_B · 1 · DIVERGENCE 0.62</span>
+      <span class="sep">/</span>
+      <span>COURT-GRADE EVIDENCE</span>
+    </div>
+  </section>
+
+  <!-- ── THREAT MODEL ─────────────────────────────────────────────────── -->
+  <section class="section" style="border-top: 1px solid var(--border);">
+    <div class="section-inner">
+      <span class="section-eyebrow">The Problem</span>
+      <h2>probabilistic models read text. <em>We simulate consequences.</em></h2>
+      <p class="section-lead">
+        Today's agentic guardrails classify prompts. Reality Kernel intercepts the compiled
+        system command, executes it inside parallel shadow worlds, and refuses anything that
+        crosses the separatrix — independent of language, paraphrase, or jailbreak.
+      </p>
+
+      <div class="threat-grid">
+        <div class="threat-cell">
+          <span class="idx">01 / SSRF &amp; INTERNAL PROBING</span>
+          <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10z"/><path d="M2 12h20M12 2c2.5 3 4 6.5 4 10s-1.5 7-4 10c-2.5-3-4-6.5-4-10s1.5-7 4-10z"/></svg></div>
+          <h3>Filtered before it ever runs.</h3>
+          <p>Localhost ranges, cloud metadata endpoints, and private subnets are intercepted at the perimeter — no probabilistic classifier can be tricked into letting them through.</p>
+        </div>
+        <div class="threat-cell">
+          <span class="idx">02 / PROMPT INJECTION &amp; MULTILINGUAL EXPLOITS</span>
+          <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 5h18M3 12h18M3 19h12"/></svg></div>
+          <h3>Language-agnostic by construction.</h3>
+          <p>We do not read the prompt. CVE-2025-32711-class obfuscations and Swahili jailbreaks compile to the same shell call — and the same blocked verdict.</p>
+        </div>
+        <div class="threat-cell">
+          <span class="idx">03 / EXFILTRATION &amp; ROGUE EGRESS</span>
+          <div class="ic"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+          <h3>Every outbound packet is justified.</h3>
+          <p>Declarative least-agency rules compare each destination against your allow-list. Anything off-script triggers a reflexive collapse before bytes leave the host.</p>
+        </div>
+        <div class="threat-cell">
+          <span class="idx">04 / PRIVILEGE ESCALATION</span>
+          <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/></svg></div>
+          <h3>Root paths stay root paths.</h3>
+          <p>Causal simulation rejects any trajectory that bends the host's privilege graph. Approved system-config writes are signed, logged, and chain-linked into the audit ledger.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── HOW IT WORKS ─────────────────────────────────────────────────── -->
+  <section class="section" style="background: var(--bg-elev-0);">
+    <div class="section-inner">
+      <span class="section-eyebrow">How it works</span>
+      <h2>Four steps between an <em>intent</em> and an <em>execution.</em></h2>
+      <p class="section-lead">Drop a single call in front of every dangerous action. The kernel does the rest — deterministically.</p>
+
+      <div class="flow-rail">
+        <ol class="flow-steps">
+          <li>
+            <h4>Intent &amp; command arrive.</h4>
+            <p>Your agent submits the compiled system command alongside the operator's stated goal.</p>
+          </li>
+          <li>
+            <h4>Fast-path policy gate.</h4>
+            <p>Read-only verbs and allow-listed binaries clear in sub-millisecond — 95% of traffic, near-zero overhead.</p>
+          </li>
+          <li>
+            <h4>Shadow-world simulation.</h4>
+            <p>The remaining 5% spawn five parallel state-space trajectories. We track filesystem diffs, egress, privileges, and reflexive feedback.</p>
+          </li>
+          <li>
+            <h4>Verdict &amp; cryptographic seal.</h4>
+            <p>ALLOW · WARN · BLOCK — appended to a SHA-256 chained ledger. Tamper a single entry and the next verification fails the whole chain.</p>
+          </li>
+        </ol>
+
+        <div class="code-card">
+          <div class="code-head">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="file">POST /v1/check</div>
+          </div>
+<pre><span class="json-key">"command"</span>: <span class="json-string">"rm -rf /var/lib/db"</span>,
+<span class="json-key">"prime_intent"</span>: <span class="json-string">"rotate old logs"</span>
+
+<span style="color: var(--text-faint);">→ engine response</span>
+
+<span class="json-key">"verdict"</span>:        <span class="json-string">"BLOCK"</span>,
+<span class="json-key">"confidence"</span>:     <span class="json-number">0.97</span>,
+<span class="json-key">"worlds_in_basin_b"</span>: <span class="json-number">6</span> / <span class="json-number">7</span>,
+<span class="json-key">"max_divergence"</span>:  <span class="json-number">0.81</span>,
+<span class="json-key">"evidence"</span>: [
+  <span class="json-string">"destructive_fs_write"</span>,
+  <span class="json-string">"intent_divergence"</span>,
+  <span class="json-string">"reflexive_collapse"</span>
+],
+<span class="json-key">"latency_ms"</span>:     <span class="json-number">142</span>,
+<span class="json-key">"proof_hash"</span>:     <span class="json-string">"0x4c11d8aa…"</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── MANIFESTO ────────────────────────────────────────────────────── -->
+  <section class="manifesto">
+    <div class="manifesto-inner">
+      <span class="section-eyebrow">Why deterministic</span>
+      <blockquote>
+        Statistical guardrails are <em>negotiated</em><br> with every prompt.<br>
+        Causal physics is <em>not.</em>
+      </blockquote>
+      <cite>RK · Founding Thesis · 2025</cite>
+    </div>
+  </section>
+
+  <!-- ── CTA ──────────────────────────────────────────────────────────── -->
+  <section class="cta-final">
+    <h2>Wrap your fleet in <em>court-grade</em> evidence.</h2>
+    <p>RK-α is in private beta with select security and compliance teams. Request an API key and a guided walkthrough — we respond inside 24 hours.</p>
+    <div class="row">
+      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" class="btn btn-lg" style="text-decoration:none; border-bottom:none;">
+        <span>Request beta access</span>
+        <span style="font-family:var(--font-mono);">→</span>
+      </a>
+      <a href="/playground" class="btn btn-lg ghost" style="text-decoration:none; border-bottom:none;">Try playground first</a>
+    </div>
+  </section>
+
+  <footer class="site-footer-rich">
+    <div class="row">
+      <div class="brand small">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div>
+          <strong>REALITY KERNEL</strong>
+          <span class="brand-sub">Keter Labs · Cryptographic Security Division</span>
+        </div>
+      </div>
+      <div class="links">
+        <a href="/integration">Docs</a>
+        <a href="/security">Security</a>
+        <a href="/verifier">Verifier</a>
+        <a href="/faq">FAQ</a>
+        <a href="/login">Sign in</a>
+      </div>
+      <span class="copy">© 2025 Reality Kernel · All rights reserved</span>
+    </div>
+  </footer>
+
+  <script src="/causal-graph.js"></script>
+  <script>
+    window.RKCausal.init(document.getElementById('rk-hero-canvas'));
+  </script>
+</body>
+</html>

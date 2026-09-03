@@ -1,0 +1,21 @@
+[package]
+name = "rk-engine-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+shell-words.workspace = true
+unicode-normalization.workspace = true
+lru.workspace = true
+uuid.workspace = true
+sha2.workspace = true
+chrono.workspace = true
+hex.workspace = true

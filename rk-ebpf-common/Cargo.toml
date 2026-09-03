@@ -1,0 +1,12 @@
+[package]
+name = "rk-ebpf-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+user = ["aya"]
+
+[dependencies]
+aya = { version = "0.13", optional = true }

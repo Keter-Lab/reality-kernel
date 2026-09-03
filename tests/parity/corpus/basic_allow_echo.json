@@ -1,0 +1,7 @@
+{
+  "name": "basic_allow_echo",
+  "command": "echo hello",
+  "prime_intent": "print greeting",
+  "expected_decision": "ALLOW",
+  "expected_confidence_floor": 0.5
+}

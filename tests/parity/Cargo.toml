@@ -1,0 +1,13 @@
+[package]
+name = "rk-parity"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+rk-engine-core = { path = "../../rk-engine-core" }
+serde.workspace = true
+serde_json.workspace = true

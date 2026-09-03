@@ -1,0 +1,21 @@
+[package]
+name = "rk-sensor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rk-sensor"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+aya.workspace = true
+aya-log.workspace = true
+bytemuck = { version = "1", features = ["derive"] }
+rk-ebpf-common = { path = "../rk-ebpf-common", features = ["user"] }
+rk-engine-core = { path = "../rk-engine-core" }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Security &amp; Threat Model · Reality Kernel</title>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta name="description" content="Reality Kernel security architecture, threat model, cryptographic audit chain, and Zero Trust alignment. Sovereign isolation boundaries for agentic AI systems." />
+  <!-- Open Graph / LinkedIn / Slack -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.realitykernel.dev/security" />
+  <meta property="og:title" content="Security & Threat Model · Reality Kernel" />
+  <meta property="og:description" content="Sovereign isolation boundaries, cryptographic SHA-256 audit chains, and Zero Trust alignment. How Reality Kernel deterministically blocks SSRF, exfiltration, and privilege escalation." />
+  <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="Reality Kernel" />
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Security & Threat Model · Reality Kernel" />
+  <meta name="twitter:description" content="Sovereign isolation boundaries, cryptographic SHA-256 audit chains, Zero Trust alignment. Deterministic security for autonomous agents." />
+  <meta name="twitter:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</head>
+<body>
+  <div class="scroll-progress-bar" id="scrollProgress"></div>
+  <header class="landing-nav">
+    <a href="/" style="text-decoration:none; border-bottom:none;">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Sovereign Reasoning Engine</span>
+        </div>
+      </div>
+    </a>
+    <nav class="nav-links">
+      <a href="/" class="nav-link">Product</a>
+      <a href="/security" class="nav-link active">Security</a>
+      <a href="/integration" class="nav-link">Docs</a>
+      <a href="/pricing" class="nav-link">Pricing</a>
+      <a href="/playground" class="nav-link">Playground</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/login" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;" id="nav-auth-btn">Sign in</a>
+    </div>
+  </header>
+
+  <div class="public-hero">
+    <h1>Security &amp; <em>threat model</em></h1>
+    <p>Sovereign isolation boundaries, cryptographic chains, and Zero Trust alignment.</p>
+  </div>
+
+  <main class="public-container">
+
+    <div class="card">
+      <h3>1. Proprietary dual-engine defense line</h3>
+      <p>Reality Kernel secures agentic systems using a two-layer defense architecture, combining static policy-driven limits with deep causal execution modeling:</p>
+
+      <div style="background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin: 20px 0;">
+        <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: stretch;">
+          <div style="padding: 18px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-elev-1);">
+            <div style="display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-2); margin-bottom: 12px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/></svg>
+            </div>
+            <h4 style="margin: 0 0 8px; color: var(--text); text-transform: none; letter-spacing: -0.01em; font-family: var(--font-display); font-size: 14px;">Engine 1 — Policy-driven least agency</h4>
+            <p style="font-size: 12.5px; margin: 0; color: var(--text-muted); line-height: 1.55;"><strong style="color: var(--text-2); font-weight: 500;">Outer perimeter guard.</strong> Verifies workload identity via short-lived scoped tokens and performs static validation against tool, directory, and egress allow-lists before simulation.</p>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: center; color: var(--text-faint); font-family: var(--font-mono);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div style="padding: 18px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-elev-1);">
+            <div style="display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-2); margin-bottom: 12px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+            </div>
+            <h4 style="margin: 0 0 8px; color: var(--text); text-transform: none; letter-spacing: -0.01em; font-family: var(--font-display); font-size: 14px;">Engine 2 — Effect-class analysis</h4>
+            <p style="font-size: 12.5px; margin: 0; color: var(--text-muted); line-height: 1.55;"><strong style="color: var(--text-2); font-weight: 500;">Intent-divergence scorer.</strong> Scores commands that clear the policy gate against five effect dimensions — computing the gap between stated intent and actual effect-class to catch prompt injection and hallucination-driven attacks.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>2. Threat modeling &amp; defenses</h3>
+      <p>We assume agentic hosts are highly vulnerable to prompt injection and supply-chain compromise. Our defenses address four primary threat vectors:</p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 20px;">
+        <div class="card stat" style="border: 1px solid var(--border); margin: 0; padding: 18px;">
+          <div class="label" style="color: var(--block); margin-bottom: 8px;">SSRF &amp; internal probing</div>
+          <p style="font-size: 13px; margin: 4px 0 0; color: var(--text-2); line-height: 1.55;">Filters commands containing localhost IP space, cloud metadata endpoints (<code>169.254.169.254</code>), or private subnet ranges before execution.</p>
+        </div>
+        <div class="card stat" style="border: 1px solid var(--border); margin: 0; padding: 18px;">
+          <div class="label" style="color: var(--block); margin-bottom: 8px;">Prompt injection / jailbreaks</div>
+          <p style="font-size: 13px; margin: 4px 0 0; color: var(--text-2); line-height: 1.55;">Sanitizes intent parameters and blocks adversarial instructions before they reach downstream shell interpreters.</p>
+        </div>
+        <div class="card stat" style="border: 1px solid var(--border); margin: 0; padding: 18px;">
+          <div class="label" style="color: var(--block); margin-bottom: 8px;">Exfiltration &amp; outbound egress</div>
+          <p style="font-size: 13px; margin: 4px 0 0; color: var(--text-2); line-height: 1.55;">Checks all outbound network requests against declarative wildcard allow-lists. Unauthorized targets trigger immediate blocks.</p>
+        </div>
+        <div class="card stat" style="border: 1px solid var(--border); margin: 0; padding: 18px;">
+          <div class="label" style="color: var(--block); margin-bottom: 8px;">Privilege escalation</div>
+          <p style="font-size: 13px; margin: 4px 0 0; color: var(--text-2); line-height: 1.55;">Restricts execution privileges using least-agency YAML/JSON scopes. Root or system-config alterations are filtered.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>3. Zero Trust alignment matrix</h3>
+      <p>A comparison of Reality Kernel controls to the baselines outlined in Legacy Systems's <em>Zero Trust Architecture for AI Agents</em> whitepaper.</p>
+
+      <div style="overflow-x: auto; margin-top: 20px;">
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Zero Trust parameter</th>
+              <th>Whitepaper baseline</th>
+              <th>Reality Kernel implementation</th>
+              <th>Verification baseline</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Identity &amp; auth</strong></td>
+              <td>Static keys deprecated. Workloads must use ephemeral, short-lived scoped tokens.</td>
+              <td><span class="pill warn-approved">Session Token Exchange</span> HMAC-signed 1-hour session tokens.</td>
+              <td><code>POST /v1/token</code> exchanges master key for scoped session key.</td>
+            </tr>
+            <tr>
+              <td><strong>Least agency</strong></td>
+              <td>Restrict tool scopes, paths, and target environments dynamically per action.</td>
+              <td><span class="pill warn-approved">Declarative Policies</span> Wildcard binary and egress checking.</td>
+              <td><code>policy</code> block processed inside <code>/v1/check</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Data retention</strong></td>
+              <td>Zero retention of prompt text and execution secrets on intermediary nodes.</td>
+              <td><span class="pill ok">Zero Retention</span> Logs store hashes and redacted fingerprints.</td>
+              <td>Database contains only metadata, verdicts, and hashes.</td>
+            </tr>
+            <tr>
+              <td><strong>Auditability</strong></td>
+              <td>Verifiable, append-only, tamper-evident audit logs of actions and decisions.</td>
+              <td><span class="pill ok">Linked Hash Chains</span> Audit logs linked sequentially via SHA-256.</td>
+              <td>Interactive cryptographic <a href="/verifier">chain verifier</a>.</td>
+            </tr>
+            <tr>
+              <td><strong>Isolation boundary</strong></td>
+              <td>Hardware-backed containment of untrusted execution output.</td>
+              <td><span class="pill warn-approved">Effect-class modeling</span> Intent-divergence scoring against 5 effect dimensions. VPC deploys add eBPF syscall interception.</td>
+              <td>SaaS uses synthetic deltas; VPC deploys MicroVM/gVisor.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>4. Trust posture at a glance</h3>
+      <p>Reality Kernel's operational trust surface, one row per commitment:</p>
+      <div class="compliance-row" style="margin-top: 18px;">
+        <div class="comp-chip">
+          <span class="comp-ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <div class="comp-text"><strong>SOC-ready audit</strong><span>chain-linked SHA-256 ledger</span></div>
+        </div>
+        <div class="comp-chip">
+          <span class="comp-ic"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <div class="comp-text"><strong>Zero retention</strong><span>commands hashed, never stored</span></div>
+        </div>
+        <div class="comp-chip">
+          <span class="comp-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg></span>
+          <div class="comp-text"><strong>Region-locked</strong><span>EU / US / sovereign deploys</span></div>
+        </div>
+        <div class="comp-chip">
+          <span class="comp-ic"><svg viewBox="0 0 24 24"><path d="M4 4h16v6H4zM4 14h16v6H4z"/><path d="M8 7h.01M8 17h.01"/></svg></span>
+          <div class="comp-text"><strong>Zero Trust map</strong><span>posture doc on request</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cta-banner mt-2">
+      <div class="cta-text">
+        <strong>Need a deeper security review?</strong>
+        <span>Request deployment guidance, retention posture clarification, or a private architecture walkthrough with Keter Labs.</span>
+      </div>
+      <a class="btn" href="mailto:contact@realitykernel.dev" style="text-decoration: none; border-bottom: none;">Request security walkthrough <span style="font-family: var(--font-mono);">→</span></a>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>REALITY KERNEL · SECURITY POSTURE · ZERO TRUST ALIGNMENT</p>
+    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 12px; align-items: center;">
+      <a href="mailto:contact@realitykernel.dev" title="Email us" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        contact@realitykernel.dev
+      </a>
+      <span style="color: var(--text-faint);">·</span>
+      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" title="LinkedIn" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+        Keter Labs
+      </a>
+    </div>
+  </footer>
+
+  <div class="cmd-palette-overlay" id="cmdOverlay">
+    <div class="cmd-palette" id="cmdPalette">
+      <input type="text" class="cmd-palette-input" id="cmdInput" placeholder="Search Docs, Commands, or Settings..." autocomplete="off">
+      <div class="cmd-palette-results">
+        <div class="cmd-result selected" data-href="/playground">Go to Playground <kbd>P</kbd></div>
+        <div class="cmd-result" data-href="/integration">Read Integration Docs <kbd>D</kbd></div>
+        <div class="cmd-result" data-href="/security">Review Security Posture <kbd>S</kbd></div>
+        <div class="cmd-result" data-href="/login">Sign In <kbd>L</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

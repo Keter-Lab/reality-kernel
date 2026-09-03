@@ -1,0 +1,15 @@
+[package]
+name = "rk-ebpf-probes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rk-ebpf-probes"
+path = "src/main.rs"
+
+[dependencies]
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
+rk-ebpf-common = { path = "../rk-ebpf-common" }

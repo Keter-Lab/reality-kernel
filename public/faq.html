@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FAQ · Reality Kernel</title>
+  <meta name="description" content="Frequently Asked Questions about Reality Kernel's sovereign causal reasoning engine, pricing, credit ledger, and integrations." />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <!-- Open Graph / LinkedIn / Slack -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.realitykernel.dev/faq" />
+  <meta property="og:title" content="FAQ · Reality Kernel" />
+  <meta property="og:description" content="Everything you need to know about Reality Kernel — how causal simulation works, how to integrate in 3 lines of code, pricing, and our zero-retention security posture." />
+  <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="Reality Kernel" />
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="FAQ · Reality Kernel" />
+  <meta name="twitter:description" content="How does causal simulation work? How to integrate in 3 lines of code? Pricing, credits, and zero-retention security posture explained." />
+  <meta name="twitter:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</head>
+<body>
+
+  <header class="landing-nav">
+    <a href="/" style="text-decoration:none; border-bottom:none;">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Sovereign Reasoning Engine</span>
+        </div>
+      </div>
+    </a>
+    <nav class="nav-links">
+      <a href="/" class="nav-link">Product</a>
+      <a href="/security" class="nav-link">Security</a>
+      <a href="/integration" class="nav-link">Docs</a>
+      <a href="/pricing" class="nav-link">Pricing</a>
+      <a href="/playground" class="nav-link">Playground</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/login" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;" id="nav-auth-btn">Sign in</a>
+    </div>
+  </header>
+
+  <div class="public-hero">
+    <h1>Frequently asked <em>questions</em></h1>
+    <p>Everything you need to know about deterministic basin mapping, integration, pricing, and our zero-retention security posture.</p>
+  </div>
+
+  <main class="public-container">
+    <div class="card">
+
+      <div class="faq-controls">
+        <div class="faq-search">
+          <input type="search" id="faqSearch" placeholder="Search FAQs…" autocomplete="off" />
+        </div>
+        <div class="faq-cats" id="faqCats">
+          <button class="faq-cat active" data-cat="all">All</button>
+          <button class="faq-cat" data-cat="access">Access</button>
+          <button class="faq-cat" data-cat="engine">Engine</button>
+          <button class="faq-cat" data-cat="verdicts">Verdicts</button>
+          <button class="faq-cat" data-cat="security">Security</button>
+          <button class="faq-cat" data-cat="pricing">Pricing</button>
+        </div>
+      </div>
+
+      <div class="faq-list" id="faqList">
+
+        <div class="faq-item open" data-cat="access">
+          <button class="faq-q" type="button">
+            How do I request a trial key?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>Trial keys are issued by Reality Kernel. Email us at <a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a> with your use case to request a pilot key. Once issued, you can sign in directly from the home page and start hitting the API within minutes.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="engine">
+          <button class="faq-q" type="button">
+            How does deterministic basin mapping work without LLMs?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>Reality Kernel maps all system states (files, processes, active connections) into a high-dimensional phase space. Deterministic transition rules decide whether the command's trajectory is attracted to a secure "Basin A" or a dangerous "Basin B" (reflexive collapse). It is mathematically deterministic, eliminating the hallucinations and latency overhead of probabilistic models.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="engine">
+          <button class="faq-q" type="button">
+            What is a "reflexive collapse"?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>A reflexive collapse is a state where an agent's self-generated actions cause the sandbox or parent host to terminate, lock, or compromise itself — for example, deleting critical dependency trees or opening a reverse shell. Our governor detects this boundary <em>before</em> execution and freezes the action.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="pricing">
+          <button class="faq-q" type="button">
+            How are credits consumed?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>The fast path (read-only commands like <code>ls</code>, <code>cat</code>, <code>grep</code>) costs <strong>1 credit</strong>. Anything that hits the full engine — risky writes, ambiguous intent, pipelines — costs <strong>5 credits</strong>. Every <code>/v1/check</code> response returns the exact cost in <code>credits_consumed</code>.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="verdicts">
+          <button class="faq-q" type="button">
+            What's the difference between ALLOW, WARN, and BLOCK?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p><strong>ALLOW</strong> means the action's trajectory is fully secure. <strong>WARN</strong> means the engine detected suspicious trajectory signals but is not certain — it queues the action, alerts operators via Discord, and recommends human override. <strong>BLOCK</strong> means the action's simulation crossed the separatrix into Basin B (e.g. catastrophic write, irreversible damage, exfiltration) and will be frozen immediately.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="verdicts">
+          <button class="faq-q" type="button">
+            Can I override a WARN or BLOCK verdict?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>You can only override a <strong>WARN</strong> verdict. Suspicious actions trigger a Discord alert with a secure link to your dashboard. The Pending Review widget exposes <em>Approve</em> and <em>Block</em> buttons; the decision is logged as a fresh chain link in the audit trail. A <strong>BLOCK</strong> verdict is terminal and cannot be bypassed.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="access">
+          <button class="faq-q" type="button">
+            How do I integrate Reality Kernel into my agent?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>Wrap every system-level action in a call to <code>POST /v1/check</code> with the command and the operator's prime intent. If the verdict is ALLOW, run it. If WARN, escalate to a human. If BLOCK, abort. See the <a href="/integration">integration docs</a> for full implementation details.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="engine">
+          <button class="faq-q" type="button">
+            Is there a per-request latency penalty?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>The fast path returns in under 1 ms. The full engine runs in 50–500 ms — fast enough to wrap any write operation. Read-heavy agents typically see a ~95% fast-path hit rate, so the average latency overhead is negligible.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="security">
+          <button class="faq-q" type="button">
+            How does Reality Kernel defend against prompt injection or multilingual jailbreaks (e.g. CVE-2025-32711)?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>Traditional safety guardrails classify prompts linguistically. Obfuscations or translating attacks into rare languages easily bypass text-based content filters. Reality Kernel is immune because it does not read the prompt — it intercepts and simulates the resulting compiled system command. Attackers can translate their prompts, but they cannot paraphrase the physical outcome of a file deletion or shell execution.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="security">
+          <button class="faq-q" type="button">
+            How does Reality Kernel mitigate data-source injections like CVE-2025-46059 (LangChain Gmail Toolkit RCE)?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>In CVE-2025-46059, a malicious payload hidden in an unread email triggered arbitrary code execution the moment the agent attempted to summarize it. Under Reality Kernel protection, even if the agent is fully hijacked linguistically, any subsequent rogue system action (curl/bash download, subshell spawn, etc.) is intercepted, simulated, and blocked at the sandbox execution boundary before it affects production.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="pricing">
+          <button class="faq-q" type="button">
+            What are your commercial subscription tiers?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>We offer subscription tiers tailored to different operational scales:</p>
+            <ul>
+              <li><strong>Developer (Free)</strong>: Rate-limited access to the public playground and basic API checks for testing.</li>
+              <li><strong>Builder ($99/mo)</strong>: Dedicated API keys, expanded rate limits, and standard developer operations support.</li>
+              <li><strong>Team ($799/mo)</strong>: Multi-agent pipeline integration, collaborative team dashboards, historical log visibility.</li>
+              <li><strong>Enterprise (Custom)</strong>: Dedicated VPC or self-hosted deployment, strict control mapping, exportable tamper-evident ledgers, priority SLA.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="security">
+          <button class="faq-q" type="button">
+            Is our command data stored or shared?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>No. Reality Kernel operates on a zero-retention model. Command bodies are evaluated in-memory and hashed. Only cryptographic proof hashes and basic audit properties (credits, timestamps, verdicts) are persisted. We never train models on your data.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="access">
+          <button class="faq-q" type="button">
+            Can I rotate my API key?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>Yes. Old keys are invalidated instantly, and the new key inherits your existing credit balance, plan, and history. Rotation is one message to your account manager.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="pricing">
+          <button class="faq-q" type="button">
+            What happens when credits hit zero?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p>The API returns <code>HTTP 402</code> on every subsequent <code>/v1/check</code>. Agents pause gracefully — no silent bypasses. Contact your account manager to top up; balances are applied inside minutes.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="faqEmpty" class="empty-state" hidden>
+        <span class="empty-ic">No matches</span>
+        <h4>Nothing matched that search</h4>
+        <p>Try a different keyword or clear the filter.</p>
+      </div>
+
+      <div class="cta-banner mt-2">
+        <div class="cta-text">
+          <strong>Still have questions?</strong>
+          <span>Reach out to Keter Labs — we are ready to assist with any technical or deployment inquiries.</span>
+        </div>
+        <a class="btn" href="mailto:contact@realitykernel.dev" style="text-decoration: none; border-bottom: none;">Email Keter Labs <span style="font-family: var(--font-mono);">→</span></a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>REALITY KERNEL · SOVEREIGN REASONING SYSTEM · SECURING THE AGENTIC FRONTIER</p>
+    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 12px; align-items: center;">
+      <a href="mailto:contact@realitykernel.dev" title="Email us" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        contact@realitykernel.dev
+      </a>
+      <span style="color: var(--text-faint);">·</span>
+      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" title="LinkedIn" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+        Keter Labs
+      </a>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+  <script>
+    (function () {
+      const items = document.querySelectorAll('.faq-item');
+      const cats  = document.querySelectorAll('.faq-cat');
+      const search = document.getElementById('faqSearch');
+      const empty  = document.getElementById('faqEmpty');
+      let activeCat = 'all';
+
+      // Accordion
+      document.querySelectorAll('.faq-q').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const parent = btn.parentElement;
+          const isOpen = parent.classList.contains('open');
+          document.querySelectorAll('.faq-item').forEach(function (i) { i.classList.remove('open'); });
+          if (!isOpen) parent.classList.add('open');
+        });
+      });
+
+      function applyFilter() {
+        const q = (search.value || '').trim().toLowerCase();
+        let visible = 0;
+        items.forEach(function (item) {
+          const cat = item.getAttribute('data-cat') || '';
+          
+          // Use item.textContent for matching
+          const text = item.textContent.toLowerCase();
+          const matchCat = (activeCat === 'all') || (cat === activeCat);
+          const matchText = !q || text.indexOf(q) !== -1;
+          const show = matchCat && matchText;
+          item.hidden = !show;
+          if (show) visible++;
+          
+          highlightTerm(item, (search.value || '').trim());
+        });
+        empty.hidden = visible > 0;
+      }
+
+      function highlightTerm(root, term) {
+        clearHighlights(root);
+        if (!term) return;
+        const regex = new RegExp("(" + term.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + ")", "gi");
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+        const nodes = [];
+        let node;
+        while (node = walker.nextNode()) nodes.push(node);
+        nodes.forEach(n => {
+          if (n.parentNode && n.parentNode.className === 'highlight-match') return;
+          const text = n.nodeValue;
+          if (regex.test(text)) {
+            const frag = document.createDocumentFragment();
+            let lastIdx = 0;
+            text.replace(regex, (match, p1, offset) => {
+              frag.appendChild(document.createTextNode(text.slice(lastIdx, offset)));
+              const span = document.createElement('span');
+              span.className = 'highlight-match';
+              span.style.background = 'rgba(0,255,204,0.2)';
+              span.style.color = 'var(--brand)';
+              span.style.fontWeight = 'bold';
+              span.textContent = match;
+              frag.appendChild(span);
+              lastIdx = offset + match.length;
+            });
+            frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+            n.parentNode.replaceChild(frag, n);
+          }
+        });
+      }
+
+      function clearHighlights(root) {
+        const marks = Array.from(root.querySelectorAll('.highlight-match'));
+        marks.forEach(m => {
+          const parent = m.parentNode;
+          parent.replaceChild(document.createTextNode(m.textContent), m);
+          parent.normalize();
+        });
+      }
+
+      cats.forEach(function (c) {
+        c.addEventListener('click', function () {
+          cats.forEach(function (x) { x.classList.remove('active'); });
+          c.classList.add('active');
+          activeCat = c.getAttribute('data-cat') || 'all';
+          applyFilter();
+        });
+      });
+
+      search.addEventListener('input', applyFilter);
+      applyFilter();
+
+      // Keyboard navigation (up/down between items)
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          const isFaqElement = document.activeElement.closest('.faq-item') || document.activeElement === search;
+          if (!isFaqElement) return;
+
+          const visibleQuestions = Array.from(document.querySelectorAll('.faq-item:not([hidden]) .faq-q'));
+          if (!visibleQuestions.length) return;
+
+          e.preventDefault();
+          const idx = visibleQuestions.indexOf(document.activeElement);
+          let nextIdx = 0;
+          
+          if (idx !== -1) {
+            if (e.key === 'ArrowDown') nextIdx = (idx + 1) % visibleQuestions.length;
+            if (e.key === 'ArrowUp') nextIdx = (idx - 1 + visibleQuestions.length) % visibleQuestions.length;
+          } else {
+             // If focus is in search input or elsewhere, focus the first item
+             if (e.key === 'ArrowUp') nextIdx = visibleQuestions.length - 1;
+          }
+          
+          visibleQuestions[nextIdx].focus();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
