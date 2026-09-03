@@ -1,0 +1,14 @@
+{
+  "name": "reality-kernel-web",
+  "private": true,
+  "version": "0.5.0",
+  "description": "Reality Kernel public portal — Tailwind build for the landing interface",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i src/tailwind.css -o public/tw.css --minify",
+    "watch:css": "tailwindcss -c tailwind.config.js -i src/tailwind.css -o public/tw.css --watch",
+    "partials": "python3 scripts/partials.py"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

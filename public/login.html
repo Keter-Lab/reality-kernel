@@ -3,176 +3,238 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sign in · Reality Kernel</title>
+  <title>Sign in · Request Developer Access · Reality Kernel</title>
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self' 'unsafe-inline';
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data:;
-    connect-src 'self' https://vitals.vercel-insights.com;
-    frame-ancestors 'none';
+    connect-src 'self' https://vitals.vercel-insights.com http://localhost:8000 http://127.0.0.1:8000;
+   
     base-uri 'self';
     form-action 'self'
   " />
-  <meta name="description" content="Reality Kernel · Cryptographic Causal Verification for Agentic Systems." />
+  <meta name="description" content="Sign in to the Reality Kernel Operator Console with your API key, or request a Developer sandbox with 500 credits and a cryptographic tenant key." />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <meta name="theme-color" content="#050507" />
+  <meta name="robots" content="noindex" />
   <style>
-    .mobile-brand-strip { display: none; padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.1); background: var(--bg-1, #050507); }
-    @media (max-width: 900px) {
-      .mobile-brand-strip { display: flex; align-items: center; justify-content: space-between; }
-    }
-    /* Elite custom checkbox styling */
-    .custom-checkbox-wrapper input[type="checkbox"] {
-      appearance: none; -webkit-appearance: none;
-      width: 16px; height: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.03);
-      position: relative; cursor: pointer;
-      transition: all 0.2s ease; margin: 0;
-    }
-    .custom-checkbox-wrapper input[type="checkbox"]:checked {
-      background: var(--ok, #6EE7B7); border-color: var(--ok, #6EE7B7);
-    }
-    .custom-checkbox-wrapper input[type="checkbox"]:checked::after {
-      content: ''; position: absolute;
-      left: 4px; top: 1px; width: 4px; height: 8px;
-      border: solid #050507; border-width: 0 2px 2px 0;
-      transform: rotate(45deg);
-    }
-    .custom-checkbox-wrapper:hover input[type="checkbox"]:not(:checked) {
-      border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.08);
-    }
+    .custom-checkbox-wrapper input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; background: rgba(255,255,255,0.03); position: relative; cursor: pointer; transition: all .2s ease; margin: 0; flex-shrink: 0; }
+    .custom-checkbox-wrapper input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+    .custom-checkbox-wrapper input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #050507; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    .login-right { padding: 112px 24px 48px; }
+    .login-card { max-width: 480px; }
+    /* Shared fixed header sits above the split layout; push both columns below it. */
+    body.login-page .login-hero { padding-top: 112px; }
+    @media (max-width: 900px) { .login-right { padding-top: 96px; } }
+    select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237B7B83' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; padding-right: 36px; }
+    .btn-loading::after { content: ''; width: 12px; height: 12px; border: 2px solid rgba(5,5,7,0.35); border-top-color: var(--bg); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="login-page">
-  <div class="mobile-brand-strip">
-    <a href="/" style="text-decoration:none; display:flex; gap:8px; align-items:center;">
-      <img src="/logo.png" alt="Reality Kernel" width="24" height="24" />
-      <strong style="color:white; font-size: 14px; letter-spacing: 0.05em;">REALITY KERNEL</strong>
+<!-- @rk:header -->
+  <header class="rk-header">
+    <a href="/" class="rk-brand">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="38" height="38" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Execution-layer security</span>
+        </div>
+      </div>
     </a>
-  </div>
+    <nav class="rk-nav">
+      <a href="/playground">Playground</a>
+      <a href="/verifier">Verifier</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
+    </nav>
+    <div class="rk-header-cta">
+      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
+      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </header>
+  <!-- @rk:/header -->
 
+  <!-- ── LEFT: NARRATIVE ─────────────────────────────────────────────── -->
   <aside class="login-hero">
     <canvas id="rk-login-canvas"></canvas>
 
-    <div class="login-hero-top brand">
-      <a href="/" style="text-decoration:none; border-bottom:none; display:flex; gap:12px; align-items:center;">
-        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="36" height="36" /></div>
-        <div>
-          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
-          <p class="brand-sub">Sovereign Reasoning Engine</p>
-        </div>
-      </a>
-    </div>
 
     <div class="login-hero-mid">
-      <h1>Causal verification<br>for the <em>agentic era.</em></h1>
+      <h1>Causal verification<br>for the <em>autonomous era.</em></h1>
       <p>
-        Reality Kernel simulates the downstream consequences of every agent action across
-        parallel shadow worlds — stopping attacks that probabilistic models cannot see.
+        Every agent action is checked against deterministic execution boundaries before it runs.
+        Every verdict is sealed with an Ed25519 signature anyone can verify — without trusting us.
       </p>
 
       <ul class="feature-list">
         <li>
           <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg></span>
           <div>
-            <strong>Deterministic basin mapping</strong>
-            <span>Causal analysis of filesystem diffs and system-state transitions.</span>
+            <strong>Deterministic execution boundaries</strong>
+            <span>The compiled command is evaluated — not the prompt. Paraphrase changes nothing.</span>
           </div>
         </li>
         <li>
           <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></span>
           <div>
-            <strong>Cryptographic audit logs</strong>
-            <span>Every verdict sealed with SHA-256 and chain-linked.</span>
+            <strong>Ed25519-signed, SHA-256-chained ledger</strong>
+            <span>Each row carries the previous proof hash. Tamper once, fail every subsequent check.</span>
           </div>
         </li>
         <li>
           <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
           <div>
             <strong>Sub-millisecond fast path</strong>
-            <span>95% of traffic clears in under 1 ms. Negligible overhead.</span>
+            <span>Read-only traffic clears in under 1 ms at 1 credit. Simulation only when side effects exist.</span>
           </div>
         </li>
       </ul>
 
       <div class="data-ribbon">
-        <span><b>&lt;1ms</b> LATENCY</span>
+        <span><b>&lt;1ms</b> FAST PATH</span>
         <span><b>5</b> SHADOW WORLDS</span>
-        <span><b>SHA-256</b> SEALED</span>
+        <span><b>Ed25519</b> SEALED</span>
       </div>
     </div>
 
     <div class="login-hero-bottom">
-      <div class="subtle" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-        <span>SOC-Ready</span>
-        <span style="color: var(--text-faint);">·</span>
-        <span>Court-Grade Evidence</span>
+      <div class="subtle" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span>Identity</span><span style="color:var(--text-faint);">·</span>
+        <span>Attestation</span><span style="color:var(--text-faint);">·</span>
+        <span>Scoped delegation</span><span style="color:var(--text-faint);">·</span>
+        <span>Traceability</span>
       </div>
-      <span class="subtle" style="display: block; margin-top: 10px;">© Reality Kernel · Cryptographic Security Division</span>
+      <span class="subtle" style="display:block; margin-top:10px;">© Reality Kernel · Keter Labs · Cryptographic Security Division</span>
     </div>
   </aside>
 
-  <section class="login-right" style="position: relative;">
-    <div style="position: absolute; top: 24px; right: 32px; display: flex; gap: 6px;">
-      <a href="/" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">Home</a>
-      <a href="/playground" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">Playground</a>
-      <a href="/integration" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">Docs</a>
-      <a href="/faq" class="nav-link" style="font-size:13px; padding:8px 14px; color:var(--text-muted); border-bottom:none;">FAQ</a>
-    </div>
+  <!-- ── RIGHT: AUTH ─────────────────────────────────────────────────── -->
+  <section class="login-right" style="position:relative;">
+    <main class="login-card glass-card">
+      <div class="auth-tabs" role="tablist">
+        <button type="button" class="active" id="tabSignin" role="tab" aria-selected="true">Sign In</button>
+        <button type="button" id="tabRequest" role="tab" aria-selected="false">Request Developer Sandbox</button>
+      </div>
 
-    <main class="login-card glass-card" style="margin-top: 24px;">
-      <h2>Operator access</h2>
-      <p class="login-sub">Enter your cryptographically issued API key to access the terminal.</p>
+      <!-- SIGN IN -->
+      <div class="auth-panel active" id="panelSignin" role="tabpanel">
+        <h2>Operator access</h2>
+        <p class="login-sub">Enter your cryptographically issued tenant key to open the Operator Console.</p>
 
-      <form id="loginForm" autocomplete="off">
-        <label for="apikey">Terminal API key</label>
-        <input id="apikey" type="password" autocomplete="off" spellcheck="false" class="mono" placeholder="rk_client_…" required minlength="20" />
+        <form id="loginForm" autocomplete="off">
+          <label for="apikey">Tenant API key</label>
+          <input id="apikey" type="password" autocomplete="off" spellcheck="false" class="mono" placeholder="rk_live_…" required minlength="20" />
 
-        <label class="custom-checkbox-wrapper row" style="margin-top: 16px; text-transform: none; letter-spacing: 0; color: var(--text-2); font-size: 13px; font-weight: 400; font-family: var(--font-sans); display: flex; align-items: center; gap: 8px; cursor: pointer;">
-          <input type="checkbox" id="remember" />
-          <span>Keep this key on this device</span>
-        </label>
-        <p class="subtle" style="margin: 8px 0 0;">Persistent sessions store your API key in this browser. Leave unchecked on shared machines.</p>
+          <label class="custom-checkbox-wrapper check" style="margin-top:16px;">
+            <input type="checkbox" id="remember" />
+            <span>Keep this key on this device</span>
+          </label>
+          <p class="subtle" style="margin:8px 0 0;">Persistent sessions store your key in this browser only. Leave unchecked on shared machines.</p>
 
-        <div style="display: flex; gap: 10px; margin-top: 22px;">
-          <button type="submit" id="loginBtn" style="flex: 1.3; margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative;">
-            <span>Sign in</span>
-            <span style="font-family: var(--font-mono); font-weight: 500;">→</span>
-            <kbd style="font-size: 10px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); font-family: var(--font-mono); color: var(--text-2); display: none;">Press Enter ↵</kbd>
-          </button>
-          <a href="/playground" class="btn ghost" style="flex: 1; margin-top: 0; text-decoration: none; border-bottom: none;">
-            <span>Playground</span>
-          </a>
-        </div>
-        <p id="loginError" class="error" hidden></p>
-      </form>
+          <div style="display:flex; gap:10px; margin-top:22px;">
+            <button type="submit" id="loginBtn" style="flex:1.3; margin-top:0;">
+              <span>Sign in</span><span style="font-family:var(--font-mono); font-weight:500;">→</span>
+            </button>
+            <a href="/playground" class="btn ghost" style="flex:1; margin-top:0; text-decoration:none; border-bottom:none;">Playground</a>
+          </div>
+          <p id="loginError" class="error" hidden></p>
+        </form>
 
-      <div class="trial-note">
-        <span class="ic">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>
-        </span>
-        <div>
-          <strong>Need an API key?</strong>
-          <span>Contact <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a> on LinkedIn to request access.</span>
+        <div class="trial-note">
+          <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></span>
+          <div>
+            <strong>No key yet?</strong>
+            <span>Switch to <a href="#request" id="linkToRequest">Request Developer Sandbox</a> — 500 credits and a tenant key are provisioned after domain verification.</span>
+          </div>
         </div>
       </div>
 
-      <div class="login-footer">REALITY KERNEL · SOVEREIGN REASONING SYSTEM</div>
+      <!-- REQUEST ACCESS -->
+      <div class="auth-panel" id="panelRequest" role="tabpanel">
+        <h2>Developer sandbox</h2>
+        <p class="login-sub">500 credits · cryptographic tenant key · full Ed25519 signing. Provisioned after automated domain verification.</p>
+
+        <form id="requestForm" autocomplete="on" novalidate>
+          <div class="form-grid">
+            <div>
+              <label for="rqName">Full name</label>
+              <input id="rqName" name="full_name" type="text" autocomplete="name" placeholder="Ada Lovelace" required minlength="2" maxlength="120" />
+            </div>
+            <div>
+              <label for="rqEmail">Work email</label>
+              <input id="rqEmail" name="work_email" type="email" autocomplete="email" placeholder="ada@company.com" required maxlength="254" />
+            </div>
+            <div>
+              <label for="rqCompany">Company</label>
+              <input id="rqCompany" name="company" type="text" autocomplete="organization" placeholder="Acme Systems" required maxlength="160" />
+            </div>
+            <div>
+              <label for="rqFramework">Primary agent framework</label>
+              <select id="rqFramework" name="framework" required>
+                <option value="langgraph">LangGraph</option>
+                <option value="langchain">LangChain</option>
+                <option value="crewai">CrewAI</option>
+                <option value="openai-agents">OpenAI Agents SDK</option>
+                <option value="autogen">AutoGen</option>
+                <option value="custom" selected>Custom / other</option>
+              </select>
+            </div>
+            <div class="full">
+              <label for="rqUse">What will the agent be allowed to touch? <span style="color:var(--text-faint); letter-spacing:0; text-transform:none; font-weight:400;">(optional)</span></label>
+              <textarea id="rqUse" name="use_case" rows="2" maxlength="600" placeholder="Shell in a sandboxed CI runner; read-only access to a Postgres replica; outbound to *.github.com only."></textarea>
+            </div>
+          </div>
+          <!-- honeypot -->
+          <input class="hp" type="text" name="website" id="rqWebsite" tabindex="-1" autocomplete="off" aria-hidden="true" />
+
+          <button type="submit" id="requestBtn" class="btn-block" style="margin-top:22px;">
+            <span>Request Developer Access</span><span style="font-family:var(--font-mono); font-weight:500;">→</span>
+          </button>
+          <p id="requestError" class="error" hidden></p>
+          <p class="subtle" style="margin:12px 0 0; text-align:center;">No credit card. Requests from free-mail domains are reviewed manually.</p>
+        </form>
+
+        <ul class="provision-list" style="margin-top:22px;">
+          <li><span class="st">01</span><div><strong>Domain verification</strong><span>Automated check against your organisation's mail domain.</span></div></li>
+          <li><span class="st">02</span><div><strong>Tenant key provisioning</strong><span>A unique key is minted offline; only its SHA-256 hash is stored.</span></div></li>
+          <li><span class="st">03</span><div><strong>Secure delivery</strong><span>Credentials and 500 credits reach your registered work email within 6–12 hours.</span></div></li>
+        </ul>
+      </div>
+
+      <div class="login-footer">REALITY KERNEL · OPERATOR CONSOLE</div>
     </main>
   </section>
 
-  <div class="modal-backdrop" id="helpModal" role="dialog" aria-modal="true">
+  <!-- ── CONFIRMATION MODAL ──────────────────────────────────────────── -->
+  <div class="modal-backdrop" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <div class="modal">
-      <h3>Authentication support</h3>
-      <p>Your API key is a unique cryptographic identifier. If lost or compromised, it must be rotated immediately through the SOC dashboard.</p>
+      <div class="modal-seal"><span class="pulse"></span>Access request received</div>
+      <h3 id="confirmTitle">Your sandbox is being provisioned.</h3>
+      <p>
+        Your cryptographic tenant key and <strong id="confirmCredits">500</strong> sandbox credits are currently being
+        provisioned. Your credentials will be securely delivered to your registered work email within
+        <strong>6–12 hours</strong> following automated domain verification.
+      </p>
+      <div class="modal-meta">
+        <div><b>Request ID</b><span id="confirmReqId">—</span></div>
+        <div><b>Verification</b><span id="confirmVerif">Automated domain</span></div>
+        <div><b>Tier</b><span>Developer · Sandbox</span></div>
+        <div><b>Delivery</b><span id="confirmEmail">—</span></div>
+      </div>
+      <p class="subtle" style="margin-top:10px;">While you wait: the <a href="/playground">Playground</a> runs the live engine without a key, and the <a href="/docs">integration guide</a> includes a local mock mode so your tests pass before credentials arrive.</p>
       <div class="modal-actions">
-        <button type="button" class="btn btn-block" id="closeHelp">Acknowledge</button>
+        <a href="/docs" class="btn ghost" style="flex:1; margin-top:0; text-decoration:none; border-bottom:none;">Read the docs</a>
+        <button type="button" class="btn" id="closeConfirm" style="flex:1;">Acknowledge</button>
       </div>
     </div>
   </div>
@@ -181,33 +243,94 @@
   <script src="/causal-graph.js"></script>
   <script>
     window.RKCausal.init(document.getElementById('rk-login-canvas'));
+
     (async () => {
+      const $ = (id) => document.getElementById(id);
+
+      // ── Tabs ───────────────────────────────────────────────────────
+      const tabs = { signin: [$('tabSignin'), $('panelSignin')], request: [$('tabRequest'), $('panelRequest')] };
+      function showTab(name) {
+        Object.entries(tabs).forEach(([k, [t, p]]) => {
+          const on = k === name;
+          t.classList.toggle('active', on); t.setAttribute('aria-selected', String(on));
+          p.classList.toggle('active', on);
+        });
+        if (name === 'request') history.replaceState(null, '', '#request'); else history.replaceState(null, '', location.pathname);
+      }
+      $('tabSignin').onclick = () => showTab('signin');
+      $('tabRequest').onclick = () => showTab('request');
+      $('linkToRequest').onclick = (e) => { e.preventDefault(); showTab('request'); $('rqName').focus(); };
+      if (location.hash === '#request') showTab('request');
+      window.addEventListener('hashchange', () => { if (location.hash === '#request') showTab('request'); });
+
+      // ── Sign in ────────────────────────────────────────────────────
       const saved = sessionStorage.getItem('rk_api_key') || localStorage.getItem('rk_api_key');
-      if (saved) {
+      if (saved && location.hash !== '#request') {
         const ok = await rk.verifyKey(saved);
         if (ok) { location.href = '/dashboard'; return; }
       }
-      document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      const loginBtnHtml = $('loginBtn').innerHTML;
+      $('loginForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const key      = document.getElementById('apikey').value.trim();
-        const remember = document.getElementById('remember').checked;
-        const btn      = document.getElementById('loginBtn');
-        const err      = document.getElementById('loginError');
-        err.hidden = true; btn.disabled = true;
-        btn.innerHTML = '<span>Authenticating…</span>';
+        const key = $('apikey').value.trim();
+        const remember = $('remember').checked;
+        const btn = $('loginBtn'), err = $('loginError');
+        err.hidden = true; btn.disabled = true; btn.innerHTML = '<span>Authenticating…</span>';
         const ok = await rk.verifyKey(key);
         if (!ok) {
-          err.textContent = 'Invalid or suspended key. Please verify your credentials or contact support.';
-          err.hidden = false;
-          btn.disabled = false;
-          btn.innerHTML = '<span>Sign in</span><span style="font-family: var(--font-mono); font-weight: 500;">→</span><kbd style="font-size: 10px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); font-family: var(--font-mono); color: var(--text-2); display: none;">Press Enter ↵</kbd>';
-          return;
+          err.textContent = 'Invalid, suspended, or exhausted key. Verify your credentials or contact support.';
+          err.hidden = false; btn.disabled = false; btn.innerHTML = loginBtnHtml; return;
         }
         (remember ? localStorage : sessionStorage).setItem('rk_api_key', key);
         location.href = '/dashboard';
       });
-      window.showHelp = () => document.getElementById('helpModal').classList.add('show');
-      document.getElementById('closeHelp').onclick = () => document.getElementById('helpModal').classList.remove('show');
+
+      // ── Request access ─────────────────────────────────────────────
+      const reqBtnHtml = $('requestBtn').innerHTML;
+      $('requestForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const err = $('requestError'); err.hidden = true;
+        const payload = {
+          full_name:  $('rqName').value.trim(),
+          work_email: $('rqEmail').value.trim(),
+          company:    $('rqCompany').value.trim(),
+          framework:  $('rqFramework').value,
+          use_case:   $('rqUse').value.trim(),
+          website:    $('rqWebsite').value,
+        };
+        if (payload.full_name.length < 2) return fail('Please enter your full name.');
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payload.work_email)) return fail('Please enter a valid work email address.');
+        if (!payload.company) return fail('Please enter your company or organisation.');
+
+        const btn = $('requestBtn'); btn.disabled = true; btn.classList.add('btn-loading'); btn.innerHTML = '<span>Submitting request…</span>';
+        try {
+          const r = await fetch(rk.API_BASE + '/v1/access-request', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+          });
+          let body = null; try { body = await r.json(); } catch {}
+          if (!r.ok) {
+            const detail = body && body.detail;
+            const msg = typeof detail === 'string' ? detail
+              : Array.isArray(detail) && detail[0] && detail[0].msg ? detail[0].msg
+              : r.status === 429 ? 'Too many requests from this network. Please retry later.'
+              : 'The access desk is temporarily unavailable. Please retry shortly or email contact@realitykernel.dev.';
+            return fail(msg);
+          }
+          $('confirmReqId').textContent = (body && body.request_id) || '—';
+          $('confirmCredits').textContent = (body && body.credits) || 500;
+          $('confirmVerif').textContent = body && body.verification === 'manual_review' ? 'Manual review' : 'Automated domain';
+          $('confirmEmail').textContent = payload.work_email;
+          $('confirmModal').classList.add('show');
+          $('requestForm').reset(); $('rqFramework').value = 'custom';
+        } catch {
+          fail('Network error reaching the access desk. Please retry.');
+        } finally {
+          btn.disabled = false; btn.classList.remove('btn-loading'); btn.innerHTML = reqBtnHtml;
+        }
+        function fail(msg) { err.textContent = msg; err.hidden = false; btn.disabled = false; btn.classList.remove('btn-loading'); btn.innerHTML = reqBtnHtml; }
+      });
+      $('closeConfirm').onclick = () => $('confirmModal').classList.remove('show');
+      $('confirmModal').addEventListener('click', (e) => { if (e.target === $('confirmModal')) $('confirmModal').classList.remove('show'); });
     })();
   </script>
 </body>

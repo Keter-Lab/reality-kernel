@@ -11,8 +11,8 @@
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data:;
-    connect-src 'self' https://vitals.vercel-insights.com;
-    frame-ancestors 'none';
+    connect-src 'self' https://vitals.vercel-insights.com http://localhost:8000 http://127.0.0.1:8000;
+   
     base-uri 'self';
     form-action 'self'
   " />
@@ -39,27 +39,33 @@
 </head>
 <body>
 
-  <header class="landing-nav">
-    <a href="/" style="text-decoration:none; border-bottom:none;">
+  <!-- @rk:header -->
+  <header class="rk-header">
+    <a href="/" class="rk-brand">
       <div class="brand">
-        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="38" height="38" /></div>
         <div>
           <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
-          <span class="brand-sub">Sovereign Reasoning Engine</span>
+          <span class="brand-sub">Execution-layer security</span>
         </div>
       </div>
     </a>
-    <nav class="nav-links">
-      <a href="/" class="nav-link">Product</a>
-      <a href="/security" class="nav-link">Security</a>
-      <a href="/integration" class="nav-link">Docs</a>
-      <a href="/pricing" class="nav-link">Pricing</a>
-      <a href="/playground" class="nav-link">Playground</a>
+    <nav class="rk-nav">
+      <a href="/playground">Playground</a>
+      <a href="/verifier">Verifier</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
     </nav>
-    <div class="nav-cta">
-      <a href="/login" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;" id="nav-auth-btn">Sign in</a>
+    <div class="rk-header-cta">
+      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
+      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
     </div>
   </header>
+  <!-- @rk:/header -->
 
   <div class="public-hero">
     <h1>Frequently asked <em>questions</em></h1>
@@ -249,20 +255,53 @@
     </div>
   </main>
 
-  <footer class="site-footer">
-    <p>REALITY KERNEL · SOVEREIGN REASONING SYSTEM · SECURING THE AGENTIC FRONTIER</p>
-    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 12px; align-items: center;">
-      <a href="mailto:contact@realitykernel.dev" title="Email us" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-        contact@realitykernel.dev
-      </a>
-      <span style="color: var(--text-faint);">·</span>
-      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" title="LinkedIn" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
-        Keter Labs
-      </a>
+  <!-- @rk:footer -->
+  <footer class="rk-footer">
+    <div class="rk-footer-inner">
+      <div class="rk-footer-brand">
+        <div class="brand small">
+          <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+          <div>
+            <strong>REALITY KERNEL</strong>
+            <span class="brand-sub">Keter Labs · Cryptographic Security Division</span>
+          </div>
+        </div>
+        <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+      </div>
+      <div>
+        <h5>Product</h5>
+        <ul>
+          <li><a href="/playground">Playground</a></li>
+          <li><a href="/verifier">Verifier</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/benchmark">Benchmark</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Developers</h5>
+        <ul>
+          <li><a href="/docs">Integration guide</a></li>
+          <li><a href="/sdk">SDK reference</a></li>
+          <li><a href="/docs#api">API reference</a></li>
+          <li><a href="/login#request">Request sandbox</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Trust</h5>
+        <ul>
+          <li><a href="/security">Security &amp; threat model</a></li>
+          <li><a href="/faq">FAQ</a></li>
+          <li><a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></li>
+          <li><a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="rk-footer-bottom">
+      <span>© 2025 Reality Kernel · All rights reserved</span>
+      <span class="rk-status"><span class="pulse"></span>API v0.4.2 · Ed25519 signing active</span>
     </div>
   </footer>
+  <!-- @rk:/footer -->
 
   <script src="/app.js"></script>
   <script>
