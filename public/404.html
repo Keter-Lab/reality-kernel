@@ -3,15 +3,108 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>404 Not Found · Reality Kernel</title>
+  <title>404 · Route not found · Reality Kernel</title>
+  <meta name="robots" content="noindex" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <meta name="theme-color" content="#050507" />
+  <style>
+    .nf-wrap { min-height: calc(100vh - 68px); display: flex; align-items: center; justify-content: center; text-align: center; padding: 96px 24px 64px; }
+    .nf-code { font-family: var(--font-mono); font-size: clamp(72px, 12vw, 128px); line-height: 1; color: var(--block); text-shadow: 0 0 32px rgba(255,40,70,.35); margin: 18px 0 10px; letter-spacing: -.04em; }
+    .nf-wrap h1 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 14px; }
+    .nf-wrap p { color: var(--text-2); max-width: 460px; margin: 0 auto 30px; line-height: 1.65; }
+    .nf-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  </style>
 </head>
-<body style="display: flex; flex-direction: column; min-height: 100vh; align-items: center; justify-content: center; text-align: center;">
-  <div style="font-family: var(--font-mono); color: var(--block); font-size: 80px; margin-bottom: 20px; text-shadow: 0 0 20px rgba(255,40,70,0.5);">404</div>
-  <h1 style="margin-bottom: 16px;">Trajectory Not Found</h1>
-  <p style="color: var(--text-2); max-width: 400px; margin-bottom: 32px; line-height: 1.6;">The requested block does not exist in the causal chain. The route may have been collapsed, or you have strayed into an unmapped basin.</p>
-  <a href="/" class="btn" style="text-decoration: none;">Return to Origin <span style="font-family: var(--font-mono);">→</span></a>
+<body>
+<!-- @rk:header -->
+  <header class="rk-header">
+    <a href="/" class="rk-brand">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="38" height="38" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Execution-layer security</span>
+        </div>
+      </div>
+    </a>
+    <nav class="rk-nav">
+      <a href="/playground">Playground</a>
+      <a href="/verifier">Verifier</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
+    </nav>
+    <div class="rk-header-cta">
+      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
+      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </header>
+  <!-- @rk:/header -->
+
+<main class="nf-wrap">
+  <div>
+    <span class="pill block">HTTP 404 · BLOCK</span>
+    <div class="nf-code">404</div>
+    <h1>Trajectory <em>not found.</em></h1>
+    <p>The requested block does not exist in the causal chain. The route may have been collapsed, renamed, or you have strayed into an unmapped basin.</p>
+    <div class="nf-actions">
+      <a href="/" class="btn">Return to origin <span style="font-family: var(--font-mono);">→</span></a>
+      <a href="/docs" class="btn ghost">Read the docs</a>
+    </div>
+  </div>
+</main>
+
+<!-- @rk:footer -->
+  <footer class="rk-footer">
+    <div class="rk-footer-inner">
+      <div class="rk-footer-brand">
+        <div class="brand small">
+          <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+          <div>
+            <strong>REALITY KERNEL</strong>
+            <span class="brand-sub">Keter Labs · Cryptographic Security Division</span>
+          </div>
+        </div>
+        <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+      </div>
+      <div>
+        <h5>Product</h5>
+        <ul>
+          <li><a href="/playground">Playground</a></li>
+          <li><a href="/verifier">Verifier</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/benchmark">Benchmark</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Developers</h5>
+        <ul>
+          <li><a href="/docs">Integration guide</a></li>
+          <li><a href="/sdk">SDK reference</a></li>
+          <li><a href="/docs#api">API reference</a></li>
+          <li><a href="/login#request">Request sandbox</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Trust</h5>
+        <ul>
+          <li><a href="/security">Security &amp; threat model</a></li>
+          <li><a href="/faq">FAQ</a></li>
+          <li><a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></li>
+          <li><a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="rk-footer-bottom">
+      <span>© 2025 Reality Kernel · All rights reserved</span>
+      <span class="rk-status"><span class="pulse"></span>API v0.4.2 · Ed25519 signing active</span>
+    </div>
+  </footer>
+  <!-- @rk:/footer -->
+<script src="/app.js"></script>
 </body>
 </html>

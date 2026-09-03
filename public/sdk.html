@@ -3,69 +3,540 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SDK | Reality Kernel</title>
-  <meta name="description" content="Reality Kernel SDK for Python and REST integration." />
+  <title>SDK Reference · Reality Kernel Docs</title>
+  <meta name="description" content="Reference clients for Reality Kernel: Python (httpx + cryptography), TypeScript (native fetch + node:crypto), and shell. Local mock mode, scoped session tokens, CI scan pipeline, and offline Ed25519 proof verification." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.realitykernel.dev/sdk" />
+  <meta property="og:title" content="SDK Reference · Reality Kernel" />
+  <meta property="og:description" content="Dependency-light reference clients with mock mode, session tokens, CI scanning, and offline verification." />
+  <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+   
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <style>
-    :root { --bg:#050507; --panel:#0c120f; --text:#eaf8f0; --muted:#9ab1a6; --green:#6EE7B7; --border:#1f2f26; }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
-    .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
-    .nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--border)}
-    .brand{font-weight:700;letter-spacing:.06em;color:var(--green)}
-    .links a{margin-left:16px;color:var(--muted);text-decoration:none}
-    h1{font-size:clamp(2rem,4vw,2.8rem);margin:40px 0 8px}
-    .lead{color:var(--muted);max-width:70ch}
-    .block{margin:22px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
-    pre{margin:10px 0 0;background:#08100c;border:1px solid #274032;border-radius:10px;padding:12px;overflow:auto;color:#cde6da}
-    code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-    .cta{margin:28px 0 44px}
-    .btn{display:inline-block;padding:10px 14px;border-radius:10px;border:1px solid var(--border);text-decoration:none;color:var(--text);margin-right:8px}
-    .btn.primary{background:var(--green);color:#042314;border-color:transparent}
-  </style>
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <header class="nav">
-      <div class="brand">REALITY KERNEL</div>
-      <nav class="links">
-        <a href="/">Home</a>
-        <a href="/integration">Integration</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/login">Dashboard</a>
-      </nav>
-    </header>
+  <div class="scroll-progress-bar" id="scrollProgress"></div>
 
-    <h1>SDK options for every team</h1>
-    <p class="lead">Start with Python today, or use REST from any language. For regulated enterprise deployments, use our kernel sensor package for on-prem control.</p>
-
-    <section class="block">
-      <h2>Python SDK</h2>
-      <p><code>pip install realitykernel</code></p>
-      <pre><code>from realitykernel import RealityKernel
-rk = RealityKernel(api_key=os.environ["RK_API_KEY"])
-verdict = rk.check(command="curl https://example.com", prime_intent="fetch docs")
-if verdict["verdict"] == "BLOCK":
-    raise RuntimeError("blocked")</code></pre>
-    </section>
-
-    <section class="block">
-      <h2>REST API (any language)</h2>
-      <pre><code>curl -sS https://your-domain.com/v1/check \
-  -H "Authorization: Bearer $RK_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"command":"ls -la","prime_intent":"inspect project files"}'</code></pre>
-      <p>Need full endpoint reference? See <a href="/verifier">API docs</a> and <a href="/integration">integration guide</a>.</p>
-    </section>
-
-    <section class="block">
-      <h2>Enterprise SDK</h2>
-      <p>For on-prem deployments, Reality Kernel includes an eBPF kernel sensor plane that captures what agents actually execute and links that evidence to your control-plane policies and audit chain.</p>
-    </section>
-
-    <div class="cta">
-      <a class="btn primary" href="/login">Start Free</a>
-      <a class="btn" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Book a Demo</a>
+  <!-- @rk:header -->
+  <header class="rk-header">
+    <a href="/" class="rk-brand">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="38" height="38" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Execution-layer security</span>
+        </div>
+      </div>
+    </a>
+    <nav class="rk-nav">
+      <a href="/playground">Playground</a>
+      <a href="/verifier">Verifier</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
+    </nav>
+    <div class="rk-header-cta">
+      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
+      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
     </div>
+  </header>
+  <!-- @rk:/header -->
+
+  <section class="rk-page-hero">
+    <div class="rk-inner">
+      <div>
+        <span class="rk-eyebrow">SDK reference</span>
+        <h1>Thin clients. <em>Thick guarantees.</em></h1>
+        <p>The wire contract is small enough that we ship reference clients as source, not packages. Copy them into your repo, pin the public key, and you own the entire trust path — no transitive dependency sits between your agent and its verdict.</p>
+      </div>
+      <div class="data-ribbon" style="margin-top:0;">
+        <span><b>Python</b> httpx · cryptography</span>
+        <span><b>TypeScript</b> zero deps</span>
+        <span><b>Shell</b> curl · jq · openssl</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="docs-shell" style="margin-top: 8px;">
+    <aside class="docs-side">
+      <h5>Clients</h5>
+      <a href="#python">Python</a>
+      <a href="#typescript">TypeScript</a>
+      <a href="#shell">Shell</a>
+      <h5>Patterns</h5>
+      <a href="#mock">Local mock mode</a>
+      <a href="#tokens">Scoped session tokens</a>
+      <a href="#ci">CI / CD scan gate</a>
+      <a href="#verify">Offline verification</a>
+      <a href="#pin">Key pinning</a>
+      <h5>See also</h5>
+      <a href="/docs">Integration guide →</a>
+      <a href="/docs#api">API reference →</a>
+      <a href="/verifier">Chain verifier →</a>
+    </aside>
+
+    <main class="docs-main">
+
+      <section class="docs-block">
+        <span class="rk-eyebrow">Overview</span>
+        <h2>Pick a client.</h2>
+        <p>Each client exposes the same four operations: <code>check()</code>, <code>guard()</code>, <code>override()</code>, and <code>verify()</code>. All of them fail closed — a transport error, <code>402</code>, or <code>429</code> raises rather than returning a permissive default.</p>
+        <div class="sdk-grid">
+          <a class="sdk-card" href="#python">
+            <div class="sk-lang">Python 3.10+</div>
+            <strong>rk_client.py</strong>
+            <span>httpx client, frozen <code>Verdict</code> dataclass, Ed25519 verification, LangChain / CrewAI ready.</span>
+          </a>
+          <a class="sdk-card" href="#typescript">
+            <div class="sk-lang">Node 18+ · TypeScript</div>
+            <strong>realityKernel.ts</strong>
+            <span>Native <code>fetch</code>, <code>node:crypto</code> verification, typed errors, AbortSignal timeouts.</span>
+          </a>
+          <a class="sdk-card" href="#shell">
+            <div class="sk-lang">POSIX shell</div>
+            <strong>rk.sh</strong>
+            <span>Single-file <code>curl</code> wrapper with <code>jq</code> extraction and OpenSSL seal verification.</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- ── PYTHON ────────────────────────────────────────────────────── -->
+      <section class="docs-block" id="python">
+        <span class="rk-eyebrow">Python</span>
+        <h2>Install &amp; first check.</h2>
+        <p>The client file lives in the <a href="/docs#langgraph">integration guide</a>; below is the install line and the shortest possible usage. The <code>Verdict</code> object is immutable and carries its own <code>verify()</code>.</p>
+        <div class="rk-code" data-lang="bash">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">terminal</div><span class="lang">shell</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>pip install "httpx&gt;=0.27" "cryptography&gt;=42"
+curl -sSO https://www.realitykernel.dev/docs   # or copy rk_client.py from the integration guide</code></pre>
+        </div>
+        <div class="rk-code" data-lang="python">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">quickstart.py</div><span class="lang">python</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>from rk_client import RealityKernel, ActionBlocked, ActionNeedsReview
+
+rk = RealityKernel()   # RK_API_KEY, RK_BASE_URL, RK_AGENT_ID from the environment
+
+v = rk.check("ls -la /srv", "inspect deploy directory")
+print(v.verdict, v.confidence, v.latency_ms, "ms", v.credits_consumed, "credit")
+# ALLOW 0.98 0.4 ms 1 credit
+assert v.verify(rk.pubkey())                  # Ed25519 seal checks out
+
+try:
+    rk.guard("curl -s http://169.254.169.254/latest/meta-data/", "fetch docs")
+except ActionBlocked as e:
+    print(e)   # BLOCK 3246d2aeb6dd: Flag modifier '-d' upgrades 'curl' to NETWORK_WRITE; SSRF …
+except ActionNeedsReview as e:
+    rk.override(e.verdict.action_id, approved=False)</code></pre>
+        </div>
+      </section>
+
+      <!-- ── TYPESCRIPT ────────────────────────────────────────────────── -->
+      <section class="docs-block" id="typescript">
+        <span class="rk-eyebrow">TypeScript</span>
+        <h2>Zero-dependency client.</h2>
+        <p>Full source is in the <a href="/docs#typescript">integration guide</a>. It runs unchanged in Node 18+, Bun, and Deno (with <code>node:crypto</code> compat). Below: the shortest usage plus a Jest-style test that exercises the fail-closed paths without network access.</p>
+        <div class="rk-code" data-lang="typescript">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">quickstart.ts</div><span class="lang">typescript</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>import { RealityKernel, ActionBlocked, ActionNeedsReview, verifyVerdict } from "./realityKernel";
+
+const rk = new RealityKernel();
+
+const v = await rk.check({ command: "git status", prime_intent: "inspect working tree" });
+console.log(v.verdict, v.confidence, `${v.latency_ms}ms`, `${v.credits_consumed} credit`);
+console.log("sealed:", verifyVerdict(v, await rk.getPubkey()));
+
+try {
+  await rk.guard({
+    command: "rm -rf /var/lib/postgresql",
+    prime_intent: "rotate old logs",
+    policy: { allowed_tools: ["ls", "cat", "logrotate"] },
+  });
+} catch (e) {
+  if (e instanceof ActionBlocked) console.error("blocked:", e.verdict.evidence);
+  else if (e instanceof ActionNeedsReview) await rk.override(e.verdict.action_id, false);
+  else throw e;
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- ── SHELL ─────────────────────────────────────────────────────── -->
+      <section class="docs-block" id="shell">
+        <span class="rk-eyebrow">Shell</span>
+        <h2><code>rk.sh</code> — a single-file wrapper.</h2>
+        <p>For cron jobs, deploy scripts, and anywhere a runtime is overkill. Requires <code>curl</code>, <code>jq</code>, and <code>openssl ≥ 1.1.1</code>. Exit code 0 on <code>ALLOW</code>, 2 on <code>WARN</code>, 3 on <code>BLOCK</code>, 4 on verification failure, 1 on transport/auth error — so it composes with <code>&amp;&amp;</code>.</p>
+        <div class="rk-code" data-lang="bash">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">rk.sh</div><span class="lang">shell</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>#!/usr/bin/env bash
+# rk.sh — check a command with Reality Kernel and verify the Ed25519 seal.
+# usage: rk.sh "&lt;command&gt;" "&lt;prime_intent&gt;" [session_id]
+# exit:  0 ALLOW · 2 WARN · 3 BLOCK · 4 bad signature · 1 transport/auth
+set -euo pipefail
+: "${RK_API_KEY:?RK_API_KEY not set}"
+BASE="${RK_BASE_URL:-https://www.realitykernel.dev}"
+CMD="$1"; INTENT="$2"; SESSION="${3:-$(hostname)-$$}"
+
+BODY=$(jq -cn --arg c "$CMD" --arg i "$INTENT" --arg s "$SESSION" --arg a "${RK_AGENT_ID:-rk.sh}" \
+  '{command:$c, prime_intent:$i, session_id:$s, agent_id:$a}')
+
+RESP=$(curl -sS --fail-with-body "$BASE/v1/check" \
+  -H "Authorization: Bearer $RK_API_KEY" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid 2&gt;/dev/null || uuidgen)" \
+  -d "$BODY") || { echo "rk: transport/auth error: $RESP" &gt;&amp;2; exit 1; }
+
+# ── verify seal against pinned key (RK_PUBKEY) or fetched key ──────────
+PUB="${RK_PUBKEY:-$(curl -sS "$BASE/v1/pubkey" | jq -r .public_key)}"
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+{ printf '\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00'; printf '%s' "$PUB" | base64 -d; } \
+  | openssl pkey -pubin -inform DER -outform PEM &gt; "$TMP/pub.pem"
+printf '%s' "$(jq -r '"\(.action_id):\(.proof_hash):\(.verdict):\(.confidence)"' &lt;&lt;&lt;"$RESP")" &gt; "$TMP/msg"
+jq -r .ed25519_signature &lt;&lt;&lt;"$RESP" | base64 -d &gt; "$TMP/sig"
+openssl pkeyutl -verify -pubin -inkey "$TMP/pub.pem" -rawin -in "$TMP/msg" -sigfile "$TMP/sig" &gt;/dev/null 2&gt;&amp;1 \
+  || { echo "rk: SIGNATURE VERIFICATION FAILED" &gt;&amp;2; exit 4; }
+
+VERDICT=$(jq -r .verdict &lt;&lt;&lt;"$RESP")
+jq -c '{action_id, verdict, confidence, evidence, credits_remaining}' &lt;&lt;&lt;"$RESP" &gt;&amp;2
+case "$VERDICT" in
+  ALLOW) exit 0 ;;
+  WARN)  exit 2 ;;
+  BLOCK) exit 3 ;;
+  *)     exit 1 ;;
+esac</code></pre>
+        </div>
+        <div class="rk-code" data-lang="bash">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">deploy.sh · composition</div><span class="lang">shell</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>CMD='rsync -az --delete ./dist/ web-01:/srv/app/'
+if ./rk.sh "$CMD" "publish the built frontend to web-01"; then
+  eval "$CMD"
+else
+  rc=$?; [ $rc -eq 2 ] &amp;&amp; echo "held for operator review" || echo "refused (rc=$rc)"; exit $rc
+fi</code></pre>
+        </div>
+      </section>
+
+      <!-- ── MOCK ──────────────────────────────────────────────────────── -->
+      <section class="docs-block" id="mock">
+        <span class="rk-eyebrow">Pattern · Local mock mode</span>
+        <h2>Test without credits or network.</h2>
+        <p>Developer sandboxes include mock mode so your suite passes before credentials arrive. The mock produces structurally identical <code>Verdict</code> objects — including a valid Ed25519 signature from an ephemeral local key — so <code>verify()</code> still exercises the real code path. Only the decision heuristic is stubbed.</p>
+        <div class="rk-code" data-lang="python">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">rk_mock.py</div><span class="lang">python</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>"""Drop-in mock for RealityKernel. Same Verdict shape, real Ed25519 signatures, no network."""
+import base64
+import hashlib
+import re
+import time
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+from rk_client import Verdict, ActionBlocked, ActionNeedsReview
+
+_DESTRUCTIVE = re.compile(r"\brm\s+-rf\b|\bmkfs\b|\bdd\s+if=|&gt;\s*/dev/sd|\bshred\b|169\.254\.169\.254")
+_EGRESS      = re.compile(r"\bcurl\b.*(-F|-d|--data|-T)|\bwget\b.*--post|\bnc\b|\bscp\b|\brsync\b.*:")
+_FAST        = re.compile(r"^\s*(ls|cat|head|tail|git\s+(status|log|diff)|pwd|whoami|df|du|echo)\b")
+
+
+class MockRealityKernel:
+    """Deterministic stand-in. Rule-based verdicts; signatures from an ephemeral process key."""
+
+    def __init__(self, agent_id: str = "mock", credits: int = 500):
+        self.agent_id = agent_id
+        self.credits = credits
+        self._key = Ed25519PrivateKey.generate()
+        self._pub_b64 = base64.b64encode(self._key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
+        self._prev_hash = ""
+        self.ledger: list[Verdict] = []
+
+    def pubkey(self) -&gt; str:
+        return self._pub_b64
+
+    def check(self, command: str, prime_intent: str, *, session_id: str = "", policy: dict | None = None, **_) -&gt; Verdict:
+        if _DESTRUCTIVE.search(command):
+            verdict, conf, evidence = "BLOCK", 1.0, ["mock:destructive_or_ssrf"]
+        elif policy and policy.get("allowed_tools") is not None and command.split()[0] not in policy["allowed_tools"]:
+            verdict, conf, evidence = "BLOCK", 1.0, [f"PolicyViolation: Binary '{command.split()[0]}' is not in allowed_tools list."]
+        elif _EGRESS.search(command):
+            verdict, conf, evidence = "WARN", 0.6, ["mock:outbound_egress"]
+        else:
+            verdict, conf, evidence = "ALLOW", 0.98, []
+
+        fast = bool(_FAST.match(command))
+        cost = 1 if (fast or verdict == "BLOCK" and conf == 1.0 and evidence and evidence[0].startswith("PolicyViolation")) else 5
+        self.credits -= cost
+
+        action_id  = hashlib.sha256(f"{command}:{time.time_ns()}".encode()).hexdigest()[:12]
+        proof_hash = hashlib.sha256(f"{action_id}:{command[:500]}:{prime_intent[:500]}:{verdict}:{conf}::{self._prev_hash}".encode()).hexdigest()
+        if self._prev_hash:
+            evidence = evidence + [f"prev_hash:{self._prev_hash}"]
+        sign_data = f"{action_id}:{proof_hash}:{verdict}:{conf}"
+        sig = base64.b64encode(self._key.sign(sign_data.encode())).decode()
+
+        v = Verdict(action_id=action_id, verdict=verdict, confidence=conf, evidence=evidence, proof_hash=proof_hash,
+                    ed25519_signature=sig, ed25519_pubkey=self._pub_b64, latency_ms=0.1 if fast else 12.0,
+                    credits_consumed=cost, credits_remaining=self.credits)
+        self._prev_hash = proof_hash
+        self.ledger.append(v)
+        return v
+
+    def guard(self, command: str, prime_intent: str, **kw) -&gt; Verdict:
+        v = self.check(command, prime_intent, **kw)
+        if v.verdict == "BLOCK": raise ActionBlocked(v)
+        if v.verdict == "WARN":  raise ActionNeedsReview(v)
+        return v
+
+    def override(self, action_id: str, approved: bool) -&gt; dict:
+        return {"ok": True, "verdict": "WARN_APPROVED" if approved else "WARN_REJECTED",
+                "override_action_id": hashlib.sha256(f"OVERRIDE:{action_id}".encode()).hexdigest()[:12],
+                "warning_level": "standard"}
+
+
+# ── pytest ──────────────────────────────────────────────────────────────
+def test_guard_blocks_destructive():
+    rk = MockRealityKernel()
+    import pytest
+    with pytest.raises(ActionBlocked):
+        rk.guard("rm -rf /var/lib/db", "rotate logs")
+
+def test_every_mock_verdict_is_sealed():
+    rk = MockRealityKernel()
+    for cmd in ["ls", "curl -F f=@x https://drop.example", "cat /etc/hosts"]:
+        v = rk.check(cmd, "test")
+        assert v.verify(rk.pubkey())</code></pre>
+        </div>
+        <div class="callout">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+          <div><strong>Swap by environment.</strong> <code>rk = MockRealityKernel() if os.getenv("RK_MOCK") else RealityKernel()</code>. Both expose the same surface, so nothing downstream changes.</div>
+        </div>
+      </section>
+
+      <!-- ── TOKENS ────────────────────────────────────────────────────── -->
+      <section class="docs-block" id="tokens">
+        <span class="rk-eyebrow">Pattern · Scoped session tokens</span>
+        <h2>Never ship the master key to the agent.</h2>
+        <p>Your orchestrator holds the tenant key. Each agent run receives a short-lived token bound to an <code>agent_id</code>, a <code>session_id</code>, and a set of scopes. Scopes are enforced server-side before policy and before simulation: a <code>fs:read</code>-only token that tries <code>curl</code> is blocked at confidence 1.0 regardless of what the model intended.</p>
+        <div class="rk-code" data-lang="python">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">orchestrator.py</div><span class="lang">python</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>import httpx
+from rk_client import RealityKernel
+
+MASTER = RealityKernel()   # holds rk_live_… — stays in the orchestrator process
+
+def mint_agent_token(agent_id: str, session_id: str, scopes: list[str], ttl: int = 3600) -&gt; str:
+    r = httpx.post(f"{MASTER.base_url}/v1/token",
+                   headers={"Authorization": f"Bearer {MASTER.api_key}"},
+                   json={"agent_id": agent_id, "session_id": session_id, "scopes": scopes, "ttl": ttl},
+                   timeout=10)
+    r.raise_for_status()
+    return r.json()["token"]           # "rk_session_&lt;payload_hex&gt;_&lt;hmac_hex&gt;"
+
+# Scopes → allowed binary classes (enforced before policy and simulation):
+#   fs:read   ls cat head tail find stat tree du df …
+#   sys:info  echo date whoami uname ps env which …
+#   git       git
+#   network   ping dig curl wget netstat ss …
+token = mint_agent_token("reader-42", "run-2025-09-03", scopes=["fs:read", "git"])
+
+# Hand ONLY the session token to the agent process. It can call /v1/check but
+# cannot read audit logs, change settings, mint tokens, or override verdicts.
+agent_rk = RealityKernel(api_key=token, agent_id="reader-42")
+agent_rk.check("git log --oneline -5", "review recent commits")      # ALLOW
+agent_rk.check("curl https://api.github.com", "check API")           # BLOCK · ScopeViolation</code></pre>
+        </div>
+      </section>
+
+      <!-- ── CI ────────────────────────────────────────────────────────── -->
+      <section class="docs-block" id="ci">
+        <span class="rk-eyebrow">Pattern · CI / CD scan gate</span>
+        <h2>Fail the pipeline before the agent ever runs.</h2>
+        <p><code>POST /v1/scan</code> evaluates up to 50 commands in one request and returns a single <code>policy_pass</code> boolean. Use it to lint agent playbooks, runbooks, or generated shell in pull requests. Team tier and above.</p>
+        <div class="rk-code" data-lang="bash">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">.github/workflows/rk-scan.yml</div><span class="lang">yaml</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>name: reality-kernel-scan
+on: [pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan agent playbook commands
+        env:
+          RK_API_KEY: ${{ secrets.RK_API_KEY }}
+        run: |
+          # playbook.json: [{"command": "...", "prime_intent": "...", "label": "..."}, ...]
+          BODY=$(jq -c '{commands: ., fail_on: "BLOCK_WARN", agent_id: "ci", session_id: "${{ github.sha }}",
+                          policy: {allowed_tools: ["git","npm","node","ls","cat"], allowed_egress: ["registry.npmjs.org","api.github.com"]}}' \
+                 agent/playbook.json)
+          RESP=$(curl -sS --fail-with-body https://www.realitykernel.dev/v1/scan \
+                   -H "Authorization: Bearer $RK_API_KEY" -H "Content-Type: application/json" -d "$BODY")
+          echo "$RESP" | jq '.results[] | select(.fail) | {label, verdict, evidence}'
+          echo "$RESP" | jq -e '.policy_pass == true' &gt; /dev/null \
+            || { echo "::error::Reality Kernel scan failed: $(echo "$RESP" | jq -r .violations) violation(s)"; exit 1; }</code></pre>
+        </div>
+      </section>
+
+      <!-- ── VERIFY ────────────────────────────────────────────────────── -->
+      <section class="docs-block" id="verify">
+        <span class="rk-eyebrow">Pattern · Offline verification</span>
+        <h2>Verify a verdict with nothing but the public key.</h2>
+        <p>Auditors, regulators, and customers do not need an API key. Given a ledger row (or the JSON response you stored), the canonical string is <code>{action_id}:{proof_hash}:{verdict}:{confidence}</code>. Three implementations, one result.</p>
+
+        <div class="rk-tabs">
+          <div class="rk-tabbar">
+            <button class="rk-tab active" type="button" data-tab="v-py"><span class="tk-dot"></span>Python</button>
+            <button class="rk-tab" type="button" data-tab="v-js"><span class="tk-dot"></span>Browser · WebCrypto</button>
+            <button class="rk-tab" type="button" data-tab="v-sh"><span class="tk-dot"></span>OpenSSL</button>
+          </div>
+          <div class="rk-tabpanel active" data-tab="v-py">
+            <div class="rk-code" data-lang="python">
+              <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">verify.py</div><span class="lang">python</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>import base64, json, sys
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+PINNED_PUBKEY = "0ISYYmvjhhxddqiL22028dMVJTtbWc87cKiBv9a0x/8="   # from GET /v1/pubkey
+
+def verify_row(row: dict, pubkey_b64: str = PINNED_PUBKEY) -&gt; bool:
+    # confidence must be rendered exactly as Python does: 1.0 → "1.0", 0.98 → "0.98"
+    sign_data = f"{row['action_id']}:{row['proof_hash']}:{row['verdict']}:{float(row['confidence'])}"
+    pub = Ed25519PublicKey.from_public_bytes(base64.b64decode(pubkey_b64))
+    try:
+        pub.verify(base64.b64decode(row["ed25519_signature"]), sign_data.encode())
+        return True
+    except InvalidSignature:
+        return False
+
+if __name__ == "__main__":
+    rows = json.load(sys.stdin)
+    rows = rows.get("entries", rows) if isinstance(rows, dict) else rows
+    bad = [r["action_id"] for r in rows if not verify_row(r)]
+    print(f"{len(rows) - len(bad)}/{len(rows)} signatures valid", "· BAD:", bad if bad else "none")
+    sys.exit(1 if bad else 0)
+
+# usage: curl -sS -H "Authorization: Bearer $RK_API_KEY" https://www.realitykernel.dev/v1/audit?limit=200 | python3 verify.py</code></pre>
+            </div>
+          </div>
+          <div class="rk-tabpanel" data-tab="v-js">
+            <div class="rk-code" data-lang="typescript">
+              <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">verify.browser.js</div><span class="lang">javascript</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>// Runs in any modern browser (Chrome 113+, Firefox 130+, Safari 17+) and Node 20+ via globalThis.crypto.
+const b64 = (s) =&gt; Uint8Array.from(atob(s), (c) =&gt; c.charCodeAt(0));
+const canon = (c) =&gt; (Number.isInteger(c) ? c.toFixed(1) : String(c));   // match Python float repr
+
+export async function verifyRow(row, pubkeyB64) {
+  const key = await crypto.subtle.importKey("raw", b64(pubkeyB64), { name: "Ed25519" }, false, ["verify"]);
+  const msg = new TextEncoder().encode(`${row.action_id}:${row.proof_hash}:${row.verdict}:${canon(row.confidence)}`);
+  return crypto.subtle.verify({ name: "Ed25519" }, key, b64(row.ed25519_signature), msg);
+}
+
+// This is exactly what the public Verifier at /verifier does — client-side, no key material leaves your tab.</code></pre>
+            </div>
+          </div>
+          <div class="rk-tabpanel" data-tab="v-sh">
+            <div class="rk-code" data-lang="bash">
+              <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">verify.sh</div><span class="lang">shell</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code># $ROW is one JSON verdict; $PUB is the base64 key from /v1/pubkey
+{ printf '\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00'; printf '%s' "$PUB" | base64 -d; } \
+  | openssl pkey -pubin -inform DER -outform PEM &gt; rk_pub.pem
+jq -r '"\(.action_id):\(.proof_hash):\(.verdict):\(.confidence)"' &lt;&lt;&lt;"$ROW" | tr -d '\n' &gt; msg.txt
+jq -r .ed25519_signature &lt;&lt;&lt;"$ROW" | base64 -d &gt; sig.bin
+openssl pkeyutl -verify -pubin -inkey rk_pub.pem -rawin -in msg.txt -sigfile sig.bin
+# Signature Verified Successfully</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── PINNING ───────────────────────────────────────────────────── -->
+      <section class="docs-block" id="pin">
+        <span class="rk-eyebrow">Pattern · Key pinning</span>
+        <h2>Trust the key you fetched, not the key you were handed.</h2>
+        <p>Every response echoes <code>ed25519_pubkey</code> for convenience, but a compromised transport could rewrite both the signature and the echoed key. Fetch <code>GET /v1/pubkey</code> once from a trusted context, store it in configuration, and pass it explicitly to <code>verify()</code>. Both reference clients accept a pinned key; the shell client reads <code>RK_PUBKEY</code>.</p>
+        <div class="rk-code" data-lang="bash">
+          <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">.env · pinned</div><span class="lang">shell</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
+<pre><code>RK_PUBKEY="$(curl -sS https://www.realitykernel.dev/v1/pubkey | jq -r .public_key)"   # capture once, commit to config
+# Rotation is announced via the /security page and the console; the old key remains valid for verifying historical rows.</code></pre>
+        </div>
+      </section>
+
+      <section class="docs-block" style="border-bottom: none;">
+        <div class="cta-banner">
+          <div class="cta-text">
+            <strong>Ready to wire it in?</strong>
+            <span>The integration guide walks through LangGraph, CrewAI, OpenAI Agents SDK, and raw HTTP step by step.</span>
+          </div>
+          <a class="btn" href="/docs" style="text-decoration:none; border-bottom:none;">Open integration guide <span style="font-family:var(--font-mono);">→</span></a>
+        </div>
+      </section>
+
+    </main>
   </div>
+
+  <!-- @rk:footer -->
+  <footer class="rk-footer">
+    <div class="rk-footer-inner">
+      <div class="rk-footer-brand">
+        <div class="brand small">
+          <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+          <div>
+            <strong>REALITY KERNEL</strong>
+            <span class="brand-sub">Keter Labs · Cryptographic Security Division</span>
+          </div>
+        </div>
+        <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+      </div>
+      <div>
+        <h5>Product</h5>
+        <ul>
+          <li><a href="/playground">Playground</a></li>
+          <li><a href="/verifier">Verifier</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/benchmark">Benchmark</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Developers</h5>
+        <ul>
+          <li><a href="/docs">Integration guide</a></li>
+          <li><a href="/sdk">SDK reference</a></li>
+          <li><a href="/docs#api">API reference</a></li>
+          <li><a href="/login#request">Request sandbox</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Trust</h5>
+        <ul>
+          <li><a href="/security">Security &amp; threat model</a></li>
+          <li><a href="/faq">FAQ</a></li>
+          <li><a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></li>
+          <li><a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="rk-footer-bottom">
+      <span>© 2025 Reality Kernel · All rights reserved</span>
+      <span class="rk-status"><span class="pulse"></span>API v0.4.2 · Ed25519 signing active</span>
+    </div>
+  </footer>
+  <!-- @rk:/footer -->
+
+  <script src="/app.js"></script>
 </body>
 </html>

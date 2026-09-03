@@ -1,86 +1,525 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Reality Kernel | Enforce and Prove AI Agent Safety</title>
-  <meta name="description" content="Your AI agents are making decisions you can't verify. Reality Kernel enforces what they're allowed to do and proves what they actually did." />
+  <title>Reality Kernel · Causal verification for the autonomous era</title>
+  <meta name="description" content="Reality Kernel is an execution-layer security engine and cryptographic audit ledger for autonomous AI agents. Deterministic execution boundaries, kernel-level eBPF attestation, and Ed25519-signed verdicts." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.realitykernel.dev/" />
+  <meta property="og:title" content="Reality Kernel · Causal verification for the autonomous era" />
+  <meta property="og:description" content="Execution-layer security and a cryptographic audit ledger for autonomous AI agents. ALLOW / WARN / BLOCK, sealed with Ed25519." />
+  <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta property="og:site_name" content="Reality Kernel" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Reality Kernel · Causal verification for the autonomous era" />
+  <meta name="twitter:description" content="Execution-layer security and a cryptographic audit ledger for autonomous AI agents." />
+  <meta name="twitter:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com http://localhost:8000;
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="/tw.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <style>
-    :root { --bg:#050507; --panel:#0b0f0d; --panel2:#101613; --text:#eafaf1; --muted:#9eb5a9; --green:#6EE7B7; --border:#1d2a24; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:radial-gradient(circle at top,#0d1611,var(--bg) 40%); color:var(--text); }
-    a { color:var(--green); text-decoration:none; }
-    .wrap { max-width:1120px; margin:0 auto; padding:0 20px; }
-    .nav { display:flex; justify-content:space-between; align-items:center; padding:18px 0; border-bottom:1px solid var(--border); }
-    .brand { font-weight:700; letter-spacing:.06em; color:var(--green); }
-    .links a { margin-left:16px; color:var(--muted); }
-    .hero { padding:70px 0 44px; }
-    h1 { font-size:clamp(2rem,5vw,3.4rem); line-height:1.06; margin:0 0 18px; max-width:18ch; }
-    .lead { color:var(--muted); font-size:1.1rem; max-width:68ch; }
-    .cta { margin-top:24px; display:flex; gap:12px; flex-wrap:wrap; }
-    .btn { display:inline-block; padding:12px 18px; border-radius:10px; border:1px solid var(--border); font-weight:600; }
-    .btn.primary { background:var(--green); color:#042214; border-color:transparent; }
-    .grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:42px 0; }
-    .card { background:linear-gradient(180deg,var(--panel),var(--panel2)); border:1px solid var(--border); border-radius:14px; padding:18px; }
-    .card h3 { margin:0 0 8px; color:var(--green); }
-    .social { margin:12px 0 56px; padding:18px; border:1px dashed #2a3f36; border-radius:14px; background:#08100c; }
-    .pillars { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin-top:12px; }
-    .pill { padding:10px 12px; border:1px solid var(--border); border-radius:999px; color:var(--muted); text-align:center; }
-    footer { border-top:1px solid var(--border); padding:20px 0 36px; color:#7f968b; font-size:.93rem; }
-  </style>
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#f8fafc" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
 </head>
-<body>
-  <div class="wrap">
-    <header class="nav">
-      <div class="brand">REALITY KERNEL</div>
-      <nav class="links">
-        <a href="/integration">Integration</a>
-        <a href="/sdk">SDK</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/login">Dashboard</a>
+<body class="min-h-screen bg-slate-50 text-slate-700 antialiased">
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       CANVAS · blueprint grid behind the whole page, faded toward the bottom
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10 blueprint blueprint-fade"></div>
+
+  <!-- @rk:header-light -->
+  <header class="rk-header fixed inset-x-0 top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:gap-6 sm:px-8">
+      <a href="/" class="rk-brand flex items-center gap-3">
+        <span class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm"><img src="/logo.png" alt="Reality Kernel" width="26" height="26" class="h-[26px] w-[26px]" /></span>
+        <span class="leading-none">
+          <span class="block text-[13px] font-bold tracking-[0.12em] text-slate-900">REALITY KERNEL</span>
+          <span class="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400 sm:block">Execution-layer security</span>
+        </span>
+      </a>
+      <nav class="rk-nav absolute inset-x-0 top-16 hidden flex-col gap-1 border-b border-slate-200 bg-white p-3 shadow-card md:static md:flex md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+        <a href="/playground" class="nav-link">Playground</a>
+        <a href="/verifier" class="nav-link">Verifier</a>
+        <a href="/docs" class="nav-link">Docs</a>
+        <a href="/security" class="nav-link">Security</a>
+        <a href="/pricing" class="nav-link">Pricing</a>
       </nav>
-    </header>
+      <div class="rk-header-cta flex items-center gap-2">
+        <a href="/login" class="btn-secondary hidden !py-2 sm:inline-flex" data-auth="signin">Sign in</a>
+        <a href="/login#request" class="btn-primary whitespace-nowrap !px-3 !py-2 sm:!px-4" data-auth="request">Request Access</a>
+        <button class="rk-menu-toggle inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 md:hidden" type="button" aria-label="Toggle navigation">
+          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+  <!-- @rk:/header-light -->
 
-    <section class="hero">
-      <h1>Your AI agents are making decisions you can't verify.</h1>
-      <p class="lead">Reality Kernel enforces what they're allowed to do and proves what they actually did. With a control plane for policy and a sensor plane at the kernel layer, you get prevention plus cryptographic proof.</p>
-      <div class="cta">
-        <a class="btn primary" href="/login">Start Free</a>
-        <a class="btn" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Book a Demo</a>
+  <main id="top" class="relative pt-16">
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         HERO · headline + Execution Sandbox Layer
+         ════════════════════════════════════════════════════════════════════ -->
+    <section class="relative overflow-hidden">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 pb-10 sm:pt-20">
+
+        <div class="mx-auto max-w-3xl text-center">
+          <span class="eyebrow justify-center animate-fade-up">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping-slow"></span>
+              <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+            </span>
+            Execution-layer security · API v0.4.2 live
+          </span>
+          <h1 class="mt-5 text-4xl sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08] font-bold tracking-tight text-slate-900 text-balance animate-fade-up [animation-delay:60ms]">
+            Your AI agent can run commands.<br class="hidden sm:block" />
+            <span class="text-slate-500">We decide which ones actually happen.</span>
+          </h1>
+          <p class="mt-6 text-lg leading-8 text-slate-600 text-balance animate-fade-up [animation-delay:120ms]">
+            Reality Kernel sits between an autonomous agent and your infrastructure. Every system call is
+            simulated against the agent's stated goal, judged in under a millisecond, and sealed with an
+            Ed25519 signature — <em class="not-italic font-semibold text-slate-800">before</em> it touches a real host.
+          </p>
+          <div class="mt-8 flex flex-wrap items-center justify-center gap-3 animate-fade-up [animation-delay:180ms]">
+            <a href="/login#request" class="btn-primary" data-auth="request">Request Access</a>
+            <a href="/docs" class="btn-secondary">Read the integration guide</a>
+          </div>
+          <p class="mt-4 font-mono text-xs text-slate-500 animate-fade-up [animation-delay:220ms]">
+            pip install reality-kernel &nbsp;·&nbsp; 3 lines to integrate &nbsp;·&nbsp; verdicts p50 <span class="chip">0.31 ms</span>
+          </p>
+        </div>
+
+        <!-- ──────────────────────────────────────────────────────────────────
+             EXECUTION SANDBOX LAYER · the interactive centrepiece
+             ────────────────────────────────────────────────────────────────── -->
+        <div id="sandbox" class="mt-14 sm:mt-16 animate-fade-up [animation-delay:260ms]">
+          <div class="card overflow-hidden shadow-window">
+
+            <!-- window chrome -->
+            <div class="flex items-center justify-between gap-4 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
+              <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                  <span class="window-dot bg-slate-300"></span>
+                  <span class="window-dot bg-slate-300"></span>
+                  <span class="window-dot bg-slate-300"></span>
+                </div>
+                <span class="font-mono text-xs font-medium text-slate-600">Execution Sandbox Layer</span>
+                <span class="hidden sm:inline chip">agent_pid 4188</span>
+              </div>
+              <div class="flex items-center gap-2 font-mono text-[11px] text-slate-500">
+                <span class="hidden sm:inline">engine</span>
+                <span id="sb-engine-status" class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                  <span data-status-label>live</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- three-column stage -->
+            <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)]">
+
+              <!-- LEFT · Agent panel -->
+              <section class="border-b border-slate-200/80 p-5 sm:p-6 lg:border-b-0 lg:border-r" aria-labelledby="sb-agent-title">
+                <div class="flex items-center justify-between">
+                  <h2 id="sb-agent-title" class="eyebrow">
+                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="3"/><path d="M12 3v4M8 13h.01M16 13h.01"/></svg>
+                    Autonomous agent
+                  </h2>
+                  <span class="chip">weather-bot</span>
+                </div>
+
+                <div class="mt-4 rounded-xl border border-slate-200/80 bg-slate-50/60 p-4">
+                  <div class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Goal</div>
+                  <p class="mt-1 text-[15px] font-semibold tracking-tight text-slate-900">Fetch weather data for New York</p>
+                  <div class="mt-3 flex flex-wrap gap-1.5">
+                    <span class="chip">intent_hash 0x4c11d8aa</span>
+                    <span class="chip">n_worlds 5</span>
+                  </div>
+                </div>
+
+                <div class="mt-4">
+                  <div class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Attempted action</div>
+                  <div id="sb-command" class="mt-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs leading-5 text-slate-700 break-all min-h-[2.75rem]">
+                    <span class="text-emerald-600">$</span> <span data-cmd>cat ./cache/weather.json</span>
+                  </div>
+                  <p id="sb-command-note" class="mt-2 text-xs leading-5 text-slate-500">Reads the cached forecast file. This is what the agent <span class="font-medium text-slate-700">should</span> be doing.</p>
+                </div>
+
+                <dl class="mt-5 grid grid-cols-2 gap-2 text-xs">
+                  <div class="rounded-lg border border-slate-200/80 bg-white px-3 py-2">
+                    <dt class="text-slate-400">Capability</dt>
+                    <dd id="sb-capability" class="mt-0.5 font-mono font-medium text-slate-700">READ</dd>
+                  </div>
+                  <div class="rounded-lg border border-slate-200/80 bg-white px-3 py-2">
+                    <dt class="text-slate-400">Divergence</dt>
+                    <dd id="sb-divergence" class="mt-0.5 font-mono font-medium text-slate-700 tabular">0.00</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <!-- CENTER · Interception Wall -->
+              <section class="relative border-b border-slate-200/80 p-5 sm:p-6 lg:border-b-0 lg:border-r blueprint" aria-labelledby="sb-wall-title">
+                <div class="flex items-center justify-between">
+                  <h2 id="sb-wall-title" class="eyebrow">
+                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/></svg>
+                    Reality Kernel interception wall
+                  </h2>
+                  <span id="sb-phase" class="font-mono text-[11px] text-slate-400">idle</span>
+                </div>
+
+                <!-- stage -->
+                <div id="sb-stage" data-state="idle" class="group relative mt-4 h-[248px] select-none rounded-xl border border-slate-200/80 bg-white/70">
+
+                  <!-- pipeline (SVG lines drawn behind nodes) -->
+                  <svg class="absolute inset-0 h-full w-full" viewBox="0 0 400 248" preserveAspectRatio="none" aria-hidden="true">
+                    <!-- base rails -->
+                    <line x1="70" y1="124" x2="330" y2="124" stroke="#e2e8f0" stroke-width="2" />
+                    <!-- trusted flow: agent -> host (green) -->
+                    <path id="sb-rail-safe" d="M70 124 H 200" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="6 6" class="opacity-0 transition-opacity duration-300 [.is-safe_&]:opacity-100 [.is-safe_&]:animate-dash" />
+                    <!-- hostile flow: attacker -> agent (red), animated via stroke-dashoffset -->
+                    <path id="sb-rail-attack" d="M330 124 H 200" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" style="transition: stroke-dashoffset .55s cubic-bezier(.16,1,.3,1), opacity .3s;" class="opacity-0" />
+                    <!-- warn flow (amber) -->
+                    <path id="sb-rail-warn" d="M330 124 H 200" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" style="transition: stroke-dashoffset .55s cubic-bezier(.16,1,.3,1), opacity .3s;" class="opacity-0" />
+                  </svg>
+
+                  <!-- AGENT node (left) -->
+                  <div class="absolute left-[8%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+                    <div class="relative grid h-16 w-16 place-items-center">
+                      <span class="absolute inset-0 rounded-full border border-emerald-400/50 animate-pulse-ring"></span>
+                      <span class="absolute inset-0 rounded-full border border-emerald-400/30 animate-pulse-ring [animation-delay:1.2s]"></span>
+                      <span id="sb-agent-node" class="relative grid h-9 w-9 place-items-center rounded-full bg-white ring-1 ring-slate-200 shadow-sm animate-float transition-all duration-300">
+                        <span class="h-3.5 w-3.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_0_3px_rgb(16_185_129_/_0.15)]"></span>
+                      </span>
+                    </div>
+                    <span class="font-mono text-[10px] uppercase tracking-wider text-slate-500">agent</span>
+                  </div>
+
+                  <!-- SHIELD INTERCEPT WALL (center) -->
+                  <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+                    <div id="sb-shield" class="relative grid h-[124px] w-[64px] place-items-center rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition-all duration-200">
+                      <!-- wall slats -->
+                      <div class="absolute inset-x-3 inset-y-3 grid grid-rows-6 gap-1 opacity-70" aria-hidden="true">
+                        <span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span>
+                        <span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span><span class="rounded-sm bg-slate-100"></span>
+                      </div>
+                      <svg id="sb-shield-icon" class="relative h-7 w-7 text-slate-500 transition-colors duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/><path id="sb-shield-check" d="M9 12l2 2 4-4" class="opacity-0 transition-opacity"/><path id="sb-shield-x" d="M9.5 9.5l5 5M14.5 9.5l-5 5" class="opacity-0 transition-opacity"/></svg>
+                    </div>
+                    <span class="font-mono text-[10px] uppercase tracking-wider text-slate-500">shield intercept</span>
+                  </div>
+
+                  <!-- ATTACKER / external node (right) -->
+                  <div class="absolute right-[8%] top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+                    <div id="sb-attacker-node" class="grid h-12 w-12 place-items-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-400 transition-all duration-300">
+                      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 3h4v4l3 3-3 3v4h-4l-3 3-3-3H5v-4l-3-3 3-3V5h4l3-3z"/><path d="M12 8v4M12 16h.01"/></svg>
+                    </div>
+                    <span class="font-mono text-[10px] uppercase tracking-wider text-slate-500">external</span>
+                  </div>
+
+                  <!-- impact flash -->
+                  <div id="sb-flash" class="pointer-events-none absolute inset-0 rounded-xl bg-red-500/0 transition-colors duration-150"></div>
+                </div>
+
+                <!-- verdict readout -->
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <div id="sb-verdict" class="verdict-badge idle" role="status" aria-live="polite">
+                    <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
+                    <span data-verdict-text>VERDICT: — • TIME: —</span>
+                  </div>
+                  <div class="flex items-center gap-2 font-mono text-[11px] text-slate-500">
+                    <span>proof</span>
+                    <span id="sb-proof" class="chip">SHA-256 · —</span>
+                  </div>
+                </div>
+              </section>
+
+              <!-- RIGHT · Attacker Vector -->
+              <section class="p-5 sm:p-6" aria-labelledby="sb-attack-title">
+                <div class="flex items-center justify-between">
+                  <h2 id="sb-attack-title" class="eyebrow">
+                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M13 6l6 6-6 6"/></svg>
+                    Attacker vector
+                  </h2>
+                  <span class="chip">simulation</span>
+                </div>
+                <p class="mt-3 text-xs leading-5 text-slate-500">Pick a scenario. The command is sent to the real engine and the verdict you see is the engine's — not a scripted animation.</p>
+
+                <div class="mt-4 flex flex-col gap-2" role="group" aria-label="Simulation scenarios">
+                  <button type="button" class="sim-btn sim-btn-safe justify-start is-active" data-scenario="safe">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    Simulate Safe Command
+                  </button>
+                  <button type="button" class="sim-btn sim-btn-danger justify-start" data-scenario="traversal">
+                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
+                    <span class="text-left">Simulate Symlink Directory Traversal Exploit</span>
+                  </button>
+                  <button type="button" class="sim-btn sim-btn-danger justify-start" data-scenario="exfil">
+                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
+                    Simulate SSH Key Exfiltration
+                  </button>
+                  <button type="button" class="sim-btn sim-btn-danger justify-start" data-scenario="rce">
+                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
+                    Simulate Remote Code Injection
+                  </button>
+                  <button type="button" class="sim-btn sim-btn-warn justify-start" data-scenario="fetch">
+                    <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+                    Simulate Unlisted Network Call
+                  </button>
+                </div>
+
+                <div class="mt-5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Evidence</span>
+                    <span id="sb-worlds" class="font-mono text-[11px] text-slate-400">worlds 0/0</span>
+                  </div>
+                  <ul id="sb-evidence" class="mt-2 space-y-1.5 text-xs text-slate-600 min-h-[3.5rem]">
+                    <li class="text-slate-400">No evidence — run a scenario.</li>
+                  </ul>
+                </div>
+              </section>
+            </div>
+
+            <!-- footer log -->
+            <div class="border-t border-slate-200/80 bg-slate-50/70 px-4 py-3 sm:px-6">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Audit log</span>
+                <span class="font-mono text-[11px] text-slate-400">action_id <span id="sb-action-id" class="chip">—</span></span>
+              </div>
+              <div id="sb-log" class="mt-2 space-y-0.5 h-[68px] overflow-hidden">
+                <div class="log-line"><time>00:00.000</time><span>kernel ready · Ed25519 signing active · awaiting first action</span></div>
+              </div>
+            </div>
+          </div>
+
+          <p class="mt-4 text-center text-xs text-slate-500">
+            Live verdicts come from <span class="chip">POST /v1/demo</span>. Rate-limited to 10 requests/min per visitor; recorded results are shown once the limit is reached.
+          </p>
+        </div>
       </div>
     </section>
 
-    <section class="grid3">
-      <article class="card">
-        <h3>Block before damage</h3>
-        <p>Stop dangerous agent actions before they execute, not after incident response begins.</p>
-      </article>
-      <article class="card">
-        <h3>Prove to auditors</h3>
-        <p>Every verdict is sealed with Ed25519 signatures so your team can show defensible evidence.</p>
-      </article>
-      <article class="card">
-        <h3>Works with any AI framework</h3>
-        <p>Add Reality Kernel to LangChain, LangGraph, CrewAI, OpenAI Agents SDK, AutoGen, or custom agents.</p>
-      </article>
-    </section>
-
-    <section class="social">
-      <h2>Built for enterprise trust</h2>
-      <p class="lead">Reality Kernel implements all four OWASP AIMM pillars: Identity, Attestation, Scoped Delegation, and Traceability.</p>
-      <p><strong>Market validation:</strong> CrowdStrike Falcon Guardian confirms the category. Their focus is userland detection and alerting. Reality Kernel focuses on <strong>kernel-layer enforcement + cryptographic proof</strong> — a bypass-resistant control point.</p>
-      <div class="pillars">
-        <div class="pill">OWASP AIMM: Identity</div>
-        <div class="pill">OWASP AIMM: Attestation</div>
-        <div class="pill">OWASP AIMM: Scoped Delegation</div>
-        <div class="pill">OWASP AIMM: Traceability</div>
+    <!-- ════════════════════════════════════════════════════════════════════
+         TRUST STRIP
+         ════════════════════════════════════════════════════════════════════ -->
+    <section class="border-y border-slate-200/70 bg-white/60 backdrop-blur">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+        <dl class="grid grid-cols-2 gap-6 sm:grid-cols-4">
+          <div><dt class="text-xs text-slate-500">Verdict latency (p50)</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular">0.31<span class="text-base font-semibold text-slate-400"> ms</span></dd></div>
+          <div><dt class="text-xs text-slate-500">Signature scheme</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Ed25519</dd></div>
+          <div><dt class="text-xs text-slate-500">Proof chain</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">SHA-256</dd></div>
+          <div><dt class="text-xs text-slate-500">Integration</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">3 lines</dd></div>
+        </dl>
       </div>
     </section>
 
-    <footer>
-      <div>Control Plane: API policy, credits, dashboard &nbsp;•&nbsp; Sensor Plane: eBPF kernel hooks of real agent behavior</div>
-    </footer>
-  </div>
+    <!-- ════════════════════════════════════════════════════════════════════
+         HOW IT WORKS · the loop, for humans
+         ════════════════════════════════════════════════════════════════════ -->
+    <section id="how" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
+      <div class="max-w-2xl">
+        <span class="eyebrow">How the loop works</span>
+        <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Four steps between “the agent wants to” and “it happened”.</h2>
+        <p class="mt-4 text-base leading-7 text-slate-600">No model fine-tuning, no prompt guards to bypass. Reality Kernel judges the <em class="not-italic font-semibold text-slate-800">action</em>, not the conversation.</p>
+      </div>
+
+      <ol class="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <li class="card p-6 transition hover:shadow-card-hover">
+          <div class="flex items-center gap-3"><span class="step-num">1</span><h3 class="font-semibold tracking-tight text-slate-900">Intercept</h3></div>
+          <p class="mt-3 text-sm leading-6 text-slate-600">Every shell command, file write or network call the agent emits is paused at the execution layer — a few microseconds before the OS sees it.</p>
+          <div class="mt-4 chip">rk.check(cmd, intent)</div>
+        </li>
+        <li class="card p-6 transition hover:shadow-card-hover">
+          <div class="flex items-center gap-3"><span class="step-num">2</span><h3 class="font-semibold tracking-tight text-slate-900">Simulate</h3></div>
+          <p class="mt-3 text-sm leading-6 text-slate-600">The command is replayed in parallel “worlds”. If the outcome diverges from the agent's stated goal — reading a password file while fetching weather — divergence spikes.</p>
+          <div class="mt-4 flex gap-1.5"><span class="chip">n_worlds 5</span><span class="chip">divergence 0.90</span></div>
+        </li>
+        <li class="card p-6 transition hover:shadow-card-hover">
+          <div class="flex items-center gap-3"><span class="step-num">3</span><h3 class="font-semibold tracking-tight text-slate-900">Verdict</h3></div>
+          <p class="mt-3 text-sm leading-6 text-slate-600">One of three answers, in under a millisecond. Only <span class="font-medium text-slate-800">ALLOW</span> lets the command reach real infrastructure.</p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="verdict-badge allow !px-2 !py-1">ALLOW</span>
+            <span class="verdict-badge warn !px-2 !py-1">WARN</span>
+            <span class="verdict-badge block !px-2 !py-1">BLOCK</span>
+          </div>
+        </li>
+        <li class="card p-6 transition hover:shadow-card-hover">
+          <div class="flex items-center gap-3"><span class="step-num">4</span><h3 class="font-semibold tracking-tight text-slate-900">Seal</h3></div>
+          <p class="mt-3 text-sm leading-6 text-slate-600">The decision is hashed into a SHA-256 chain and signed with Ed25519. Anyone can verify it later without trusting us — or the agent.</p>
+          <div class="mt-4 flex gap-1.5"><span class="chip">SHA-256</span><span class="chip">Ed25519</span><a href="/verifier" class="chip !text-slate-800 hover:bg-slate-200">verify →</a></div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         PILLARS · what makes it different
+         ════════════════════════════════════════════════════════════════════ -->
+    <section class="border-y border-slate-200/70 bg-white/60">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
+        <div class="grid gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
+          <div class="lg:sticky lg:top-28">
+            <span class="eyebrow">Why execution-layer</span>
+            <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Prompt filters read words. We read consequences.</h2>
+            <p class="mt-4 text-base leading-7 text-slate-600">A jailbroken model can phrase anything politely. It cannot, however, make <span class="chip">cat …/../../etc/shadow</span> look like a weather lookup once the command is actually simulated.</p>
+            <div class="mt-8 flex flex-wrap gap-3">
+              <a href="/security" class="btn-secondary">Security model</a>
+              <a href="/benchmark" class="btn-secondary">Benchmarks</a>
+            </div>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <article class="card p-6">
+              <div class="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Sub-millisecond, deterministic</h3>
+              <p class="mt-2 text-sm leading-6 text-slate-600">Static capability analysis first, causal simulation only when needed. Same input, same verdict, every time.</p>
+              <div class="mt-4 chip">p50 0.31 ms · p99 1.2 ms</div>
+            </article>
+            <article class="card p-6">
+              <div class="grid h-9 w-9 place-items-center rounded-lg bg-sky-50 text-sky-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Cryptographic audit ledger</h3>
+              <p class="mt-2 text-sm leading-6 text-slate-600">Every verdict is chained and signed. Compliance teams get a tamper-evident record of what agents tried — and what was stopped.</p>
+              <div class="mt-4 flex gap-1.5"><span class="chip">proof_hash</span><span class="chip">signature</span></div>
+            </article>
+            <article class="card p-6">
+              <div class="grid h-9 w-9 place-items-center rounded-lg bg-violet-50 text-violet-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
+              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Intent-aware, not rule-bound</h3>
+              <p class="mt-2 text-sm leading-6 text-slate-600">The same <span class="chip">curl</span> is fine for a weather agent and hostile for a file-indexing agent. Verdicts are relative to the declared goal.</p>
+            </article>
+            <article class="card p-6">
+              <div class="grid h-9 w-9 place-items-center rounded-lg bg-amber-50 text-amber-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div>
+              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Framework-agnostic SDK</h3>
+              <p class="mt-2 text-sm leading-6 text-slate-600">Python and TypeScript SDKs, a REST API, and a human-override endpoint for WARN verdicts. Works with LangChain, AutoGen, CrewAI or plain scripts.</p>
+              <div class="mt-4 flex gap-1.5"><span class="chip">/v1/check</span><span class="chip">/v1/override</span></div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         INTEGRATION · three lines
+         ════════════════════════════════════════════════════════════════════ -->
+    <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
+      <div class="grid gap-10 lg:grid-cols-2 lg:items-center">
+        <div>
+          <span class="eyebrow">Integration</span>
+          <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Wrap the agent's executor. Ship.</h2>
+          <p class="mt-4 text-base leading-7 text-slate-600">Call <span class="chip">check()</span> before you execute. Honour the verdict. That's the entire integration — the engine does the rest.</p>
+          <ul class="mt-6 space-y-3 text-sm text-slate-600">
+            <li class="flex gap-3"><span class="mt-1 h-4 w-4 shrink-0 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center"><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>Verdict returned with confidence, evidence and a signed proof hash.</li>
+            <li class="flex gap-3"><span class="mt-1 h-4 w-4 shrink-0 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center"><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>WARN verdicts can be escalated to a human via <span class="chip">/v1/override</span>.</li>
+            <li class="flex gap-3"><span class="mt-1 h-4 w-4 shrink-0 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center"><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>Public key at <span class="chip">/v1/pubkey</span> for offline verification.</li>
+          </ul>
+          <div class="mt-8 flex flex-wrap gap-3">
+            <a href="/docs" class="btn-primary">Integration guide</a>
+            <a href="/playground" class="btn-secondary">Open the playground</a>
+          </div>
+        </div>
+
+        <div class="card overflow-hidden shadow-window">
+          <div class="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
+            <div class="flex items-center gap-1.5"><span class="window-dot bg-slate-300"></span><span class="window-dot bg-slate-300"></span><span class="window-dot bg-slate-300"></span></div>
+            <span class="font-mono text-xs text-slate-500">agent.py</span>
+            <span class="chip">python</span>
+          </div>
+<pre class="overflow-x-auto p-5 font-mono text-[12.5px] leading-6 text-slate-700"><code><span class="text-violet-600">from</span> reality_kernel <span class="text-violet-600">import</span> RealityKernel
+
+rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
+
+<span class="text-violet-600">def</span> <span class="text-sky-700">run</span>(cmd, goal):
+    v = rk.check(cmd, prime_intent=goal)
+    <span class="text-violet-600">if</span> v.verdict != <span class="text-emerald-700">"ALLOW"</span>:
+        <span class="text-violet-600">raise</span> Blocked(v.evidence, v.proof_hash)
+    <span class="text-violet-600">return</span> subprocess.run(cmd, shell=<span class="text-sky-700">True</span>)
+
+<span class="text-slate-400"># ALLOW  confidence=0.98  latency=0.31ms</span>
+<span class="text-slate-400"># proof_hash=sha256:9f2c…e41a  sig=ed25519:…</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         CTA
+         ════════════════════════════════════════════════════════════════════ -->
+    <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-24">
+      <div class="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-slate-900 px-6 py-14 text-center shadow-window sm:px-12">
+        <div aria-hidden="true" class="pointer-events-none absolute inset-0 opacity-[0.12]" style="background-image:linear-gradient(to right,#fff 1px,transparent 1px),linear-gradient(to bottom,#fff 1px,transparent 1px);background-size:40px 40px;"></div>
+        <div class="relative">
+          <span class="eyebrow justify-center !text-slate-400">Private beta</span>
+          <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-white text-balance">Put a kernel between your agents and reality.</h2>
+          <p class="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-300">Developer tier is free: 1,000 signed verdicts a month, full API access, no card. Starter begins at $99/month.</p>
+          <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <a href="/login#request" class="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 active:scale-[0.98]" data-auth="request">Request Access</a>
+            <a href="/pricing" class="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 active:scale-[0.98]">See pricing</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- @rk:footer-light -->
+  <footer class="border-t border-slate-200/80 bg-white">
+    <div class="mx-auto grid max-w-7xl gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm"><img src="/logo.png" alt="Reality Kernel" class="h-[26px] w-[26px]" /></span>
+          <span class="leading-none">
+            <span class="block text-[13px] font-bold tracking-[0.12em] text-slate-900">REALITY KERNEL</span>
+            <span class="mt-1 block font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">Keter Labs · Cryptographic Security Division</span>
+          </span>
+        </div>
+        <p class="mt-5 max-w-sm text-sm leading-6 text-slate-500">Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+      </div>
+      <div>
+        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">Product</h5>
+        <ul class="mt-4 space-y-2.5 text-sm">
+          <li><a class="text-slate-600 hover:text-slate-900" href="/playground">Playground</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="/verifier">Verifier</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="/pricing">Pricing</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="/benchmark">Benchmark</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">Developers</h5>
+        <ul class="mt-4 space-y-2.5 text-sm">
+          <li><a class="text-slate-600 hover:text-slate-900" href="/docs">Integration guide</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="/sdk">SDK reference</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="/docs#api">API reference</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="/login#request">Request sandbox</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">Trust</h5>
+        <ul class="mt-4 space-y-2.5 text-sm">
+          <li><a class="text-slate-600 hover:text-slate-900" href="/security">Security &amp; threat model</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="/faq">FAQ</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></li>
+          <li><a class="text-slate-600 hover:text-slate-900" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="border-t border-slate-200/80">
+      <div class="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-5 font-mono text-[11px] text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <span>© 2025 Reality Kernel · All rights reserved</span>
+        <span class="inline-flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>API v0.4.2 · Ed25519 signing active</span>
+      </div>
+    </div>
+  </footer>
+  <!-- @rk:/footer-light -->
+
+  <script src="/app.js"></script>
+  <script src="/landing.js"></script>
 </body>
 </html>

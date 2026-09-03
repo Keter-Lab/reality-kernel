@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; scroll-behavior: smooth; }
+  body { @apply bg-slate-50 text-slate-700 font-sans; font-feature-settings: 'cv11', 'ss01', 'ss03'; }
+  ::selection { @apply bg-emerald-100 text-emerald-900; }
+  :focus-visible { @apply outline-none ring-2 ring-emerald-500/60 ring-offset-2 ring-offset-slate-50 rounded-md; }
+}
+
+@layer components {
+  /* Ultra-subtle developer blueprint grid: 1px slate lines every 40px, faded at the edges. */
+  .blueprint {
+    background-color: rgb(248 250 252);
+    background-image:
+      linear-gradient(to right, rgb(148 163 184 / 0.13) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(148 163 184 / 0.13) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: center top;
+  }
+  .blueprint-fade {
+    -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 20%, black 30%, transparent 100%);
+            mask-image: radial-gradient(ellipse 90% 80% at 50% 20%, black 30%, transparent 100%);
+  }
+  .card { @apply bg-white border border-slate-200/80 rounded-2xl shadow-card; }
+  .chip { @apply font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 whitespace-nowrap; }
+  .eyebrow { @apply inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 active:scale-[0.98]; }
+  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 border border-slate-200 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98]; }
+  .nav-link { @apply rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 hover:bg-slate-100; }
+  .nav-link.active { @apply text-slate-900 bg-slate-100; }
+  .verdict-badge { @apply inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 font-mono text-xs font-semibold tracking-wide; }
+  .verdict-badge.allow { @apply bg-emerald-50 text-emerald-700 border-emerald-200; }
+  .verdict-badge.warn  { @apply bg-amber-50 text-amber-700 border-amber-200; }
+  .verdict-badge.block { @apply bg-red-50 text-red-600 border-red-200; }
+  .verdict-badge.idle  { @apply bg-slate-50 text-slate-500 border-slate-200; }
+  .sim-btn { @apply inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed; }
+  .sim-btn-safe   { @apply bg-white border-slate-200 text-slate-800 hover:border-emerald-300 hover:bg-emerald-50/50; }
+  .sim-btn-danger { @apply bg-white border-slate-200 text-slate-800 hover:border-red-300 hover:bg-red-50/50; }
+  .sim-btn-warn   { @apply bg-white border-slate-200 text-slate-800 hover:border-amber-300 hover:bg-amber-50/50; }
+  .sim-btn.is-active { @apply ring-2 ring-slate-900/10 border-slate-400; }
+  .window-dot { @apply h-2.5 w-2.5 rounded-full; }
+  .log-line { @apply grid grid-cols-[64px_1fr] gap-3 font-mono text-[11.5px] leading-5 text-slate-600; }
+  .log-line time { @apply text-slate-400 tabular-nums; }
+  .step-num { @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 font-mono text-xs font-semibold text-white; }
+  /* Mobile nav (toggled by app.js -> nav.rk-nav.open) */
+  nav.rk-nav.open { @apply flex; }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  .text-balance { text-wrap: balance; }
+  .shield-glow-red   { filter: drop-shadow(0 0 10px rgb(239 68 68 / 0.55)); }
+  .shield-glow-green { filter: drop-shadow(0 0 10px rgb(16 185 129 / 0.55)); }
+  .shield-glow-amber { filter: drop-shadow(0 0 10px rgb(245 158 11 / 0.55)); }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-pulse-ring, .animate-ping-slow, .animate-float, .animate-dash { animation: none !important; }
+  }
+}

@@ -10,13 +10,13 @@
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data:;
-    connect-src 'self' https://vitals.vercel-insights.com;
-    frame-ancestors 'none';
+    connect-src 'self' https://vitals.vercel-insights.com http://localhost:8000 http://127.0.0.1:8000;
+   
     base-uri 'self';
     form-action 'self'
   " />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <meta name="description" content="Forensic replay of Reality Kernel's tamper-evident SHA-256 audit chain. Verify online with an API key, or offline against exported JSON." />
+  <meta name="description" content="Public transparency portal. Verify any Reality Kernel verdict's Ed25519 signature against the published key, or replay an entire SHA-256 audit chain — online with an API key or offline against exported JSON. Zero trust, pure cryptography." />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/favicon.png" />
@@ -25,40 +25,46 @@
 </head>
 <body>
 
-  <header class="landing-nav">
-    <a href="/" style="text-decoration:none; border-bottom:none;">
+  <!-- @rk:header -->
+  <header class="rk-header">
+    <a href="/" class="rk-brand">
       <div class="brand">
-        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="38" height="38" /></div>
         <div>
           <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
-          <span class="brand-sub">Chain Verifier</span>
+          <span class="brand-sub">Execution-layer security</span>
         </div>
       </div>
     </a>
-    <nav class="nav-links">
-      <a href="/" class="nav-link">Product</a>
-      <a href="/security" class="nav-link">Security</a>
-      <a href="/integration" class="nav-link">Docs</a>
-      <a href="/pricing" class="nav-link">Pricing</a>
-      <a href="/playground" class="nav-link">Playground</a>
+    <nav class="rk-nav">
+      <a href="/playground">Playground</a>
+      <a href="/verifier">Verifier</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
     </nav>
-    <div class="nav-cta">
-      <a href="/login" class="btn btn-sm ghost" style="margin-top:0; text-decoration:none; border-bottom:none;" id="nav-auth-btn">Sign in</a>
+    <div class="rk-header-cta">
+      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
+      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
     </div>
   </header>
+  <!-- @rk:/header -->
 
-  <div style="height: 76px;"></div>
+  <div class="rk-header-spacer"></div>
 
   <section class="verifier-shell">
     <div class="verifier-headline">
       <div class="vh-text">
-        <span class="doc-eyebrow">Forensic replay</span>
-        <h1>Audit chain <em>verifier.</em></h1>
-        <p>Replay your ledger. Confirm every SHA-256 chain link. Surface tampered rows the moment they exist. Works online with an API key, or air-gapped against exported JSON.</p>
+        <span class="doc-eyebrow">Transparency portal</span>
+        <h1>Verify. <em>Don't trust.</em></h1>
+        <p>Paste a single verdict and mathematically prove its Ed25519 seal against the published public key — or replay an entire ledger and confirm every SHA-256 chain link. Everything runs in your browser. No API key is required to verify a signature.</p>
       </div>
       <div class="vh-text" style="align-self:center;">
         <div class="verifier-mode-help">
-          <strong>How verification works.</strong> Each audit entry stores a proof hash and a reference to the previous block's hash inside its evidence array. We walk the chain from newest to oldest; any broken link fails the whole audit. No trust, just cryptography.
+          <strong>Two proofs, one ledger.</strong> Every verdict is signed over <code>action_id:proof_hash:verdict:confidence</code> with the key served at <code>/v1/pubkey</code>. Every ledger row also carries <code>prev_hash</code> of the row before it. Signature proves authorship; chain proves ordering and completeness. Alter either and verification fails.
         </div>
       </div>
     </div>
@@ -66,13 +72,13 @@
     <div class="verifier-strip">
       <div class="verifier-strip-cell">
         <div class="vs-label"><span class="dot ok"></span>Chain health</div>
-        <div class="vs-value">Sequential SHA-256</div>
-        <div class="vs-sub">Every proof links to the previous block.</div>
+        <div class="vs-value">Ed25519 + SHA-256</div>
+        <div class="vs-sub">Signed authorship · chained ordering.</div>
       </div>
       <div class="verifier-strip-cell">
         <div class="vs-label"><span class="dot info"></span>Verification modes</div>
-        <div class="vs-value">Online + offline</div>
-        <div class="vs-sub">API key fetch or local JSON audit.</div>
+        <div class="vs-value">Signature · online · offline</div>
+        <div class="vs-sub">Single verdict, live ledger, or exported JSON.</div>
       </div>
       <div class="verifier-strip-cell">
         <div class="vs-label"><span class="dot warn"></span>Forensic posture</div>
@@ -88,7 +94,11 @@
 
     <div class="verifier-workspace">
       <div class="vw-tabs">
-        <button class="vw-tab active" id="tabOnline">
+        <button class="vw-tab active" id="tabSig">
+          <span style="width:16px;height:16px;display:inline-flex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          Signature · public key
+        </button>
+        <button class="vw-tab" id="tabOnline">
           <span style="width:16px;height:16px;display:inline-flex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M12 4l8 8-8 8"/></svg></span>
           Online · API key
         </button>
@@ -99,7 +109,53 @@
       </div>
       <div class="vw-body">
 
-        <div id="onlineSection">
+        <div id="sigSection">
+          <p style="font-size: 14px; color: var(--text-2); margin-bottom: 18px; line-height: 1.6;">
+            Paste the fields from any <code>POST /v1/check</code> response or ledger row. The verifier fetches the master public key from <code>GET /v1/pubkey</code> (or uses the key you paste), reconstructs the canonical string, and verifies the Ed25519 signature with WebCrypto — entirely client-side.
+          </p>
+          <form id="sigForm">
+            <div class="form-grid">
+              <div>
+                <label for="sigActionId">action_id</label>
+                <input id="sigActionId" class="mono" placeholder="4c11d8aa93f2" required spellcheck="false" autocomplete="off" />
+              </div>
+              <div>
+                <label for="sigVerdict">verdict</label>
+                <select id="sigVerdict" required>
+                  <option value="ALLOW">ALLOW</option>
+                  <option value="WARN">WARN</option>
+                  <option value="BLOCK" selected>BLOCK</option>
+                  <option value="WARN_APPROVED">WARN_APPROVED</option>
+                  <option value="WARN_REJECTED">WARN_REJECTED</option>
+                </select>
+              </div>
+              <div class="full">
+                <label for="sigProof">proof_hash</label>
+                <input id="sigProof" class="mono" placeholder="64-hex SHA-256" required spellcheck="false" autocomplete="off" pattern="[a-fA-F0-9]{64}" />
+              </div>
+              <div>
+                <label for="sigConf">confidence <span style="color:var(--text-faint); letter-spacing:0; text-transform:none; font-weight:400;">(as returned, e.g. 1.0 or 0.98)</span></label>
+                <input id="sigConf" class="mono" placeholder="1.0" required spellcheck="false" autocomplete="off" inputmode="decimal" />
+              </div>
+              <div>
+                <label for="sigPub">ed25519_pubkey <span style="color:var(--text-faint); letter-spacing:0; text-transform:none; font-weight:400;">(blank = fetch from /v1/pubkey)</span></label>
+                <input id="sigPub" class="mono" placeholder="base64 · 32 bytes" spellcheck="false" autocomplete="off" />
+              </div>
+              <div class="full">
+                <label for="sigSig">ed25519_signature</label>
+                <input id="sigSig" class="mono" placeholder="base64 · 64 bytes" required spellcheck="false" autocomplete="off" />
+              </div>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:18px;">
+              <button type="submit" id="sigBtn" class="btn" style="margin:0; min-width: 200px;">Verify signature</button>
+              <button type="button" id="sigPaste" class="btn ghost" style="margin:0;">Paste JSON response</button>
+              <span class="subtle" id="sigKeyStatus" style="margin-left:auto;">Public key: not yet fetched</span>
+            </div>
+          </form>
+          <div id="sigResult" class="sig-result"></div>
+        </div>
+
+        <div id="onlineSection" hidden>
           <p style="font-size: 14px; color: var(--text-2); margin-bottom: 18px; line-height: 1.6;">
             Paste your API key. The verifier hits <code>GET /v1/audit</code> under your auth, then walks the chain locally in your browser. Your key never leaves this page.
           </p>
@@ -147,20 +203,53 @@
     <div id="toastStack" class="toast-stack"></div>
   </section>
 
-  <footer class="site-footer">
-    <p>REALITY KERNEL · SOVEREIGN REASONING SYSTEM · TAMPER-EVIDENT LEDGER</p>
-    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 12px; align-items: center;">
-      <a href="mailto:contact@realitykernel.dev" title="Email us" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-        contact@realitykernel.dev
-      </a>
-      <span style="color: var(--text-faint);">·</span>
-      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" title="LinkedIn" style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; text-decoration: none; border-bottom: none;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
-        Keter Labs
-      </a>
+  <!-- @rk:footer -->
+  <footer class="rk-footer">
+    <div class="rk-footer-inner">
+      <div class="rk-footer-brand">
+        <div class="brand small">
+          <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+          <div>
+            <strong>REALITY KERNEL</strong>
+            <span class="brand-sub">Keter Labs · Cryptographic Security Division</span>
+          </div>
+        </div>
+        <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+      </div>
+      <div>
+        <h5>Product</h5>
+        <ul>
+          <li><a href="/playground">Playground</a></li>
+          <li><a href="/verifier">Verifier</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/benchmark">Benchmark</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Developers</h5>
+        <ul>
+          <li><a href="/docs">Integration guide</a></li>
+          <li><a href="/sdk">SDK reference</a></li>
+          <li><a href="/docs#api">API reference</a></li>
+          <li><a href="/login#request">Request sandbox</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Trust</h5>
+        <ul>
+          <li><a href="/security">Security &amp; threat model</a></li>
+          <li><a href="/faq">FAQ</a></li>
+          <li><a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></li>
+          <li><a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="rk-footer-bottom">
+      <span>© 2025 Reality Kernel · All rights reserved</span>
+      <span class="rk-status"><span class="pulse"></span>API v0.4.2 · Ed25519 signing active</span>
     </div>
   </footer>
+  <!-- @rk:/footer -->
 
   <script src="/app.js"></script>
   <script>
@@ -178,26 +267,115 @@
       }
 
       // Tabs
+      const tabSig = document.getElementById('tabSig');
       const tabOnline = document.getElementById('tabOnline');
       const tabOffline = document.getElementById('tabOffline');
+      const sigSection = document.getElementById('sigSection');
       const onlineSection = document.getElementById('onlineSection');
       const offlineSection = document.getElementById('offlineSection');
       const outBlock = document.getElementById('verifierOutput');
 
-      tabOnline.onclick = function () {
-        tabOnline.classList.add('active');
-        tabOffline.classList.remove('active');
-        onlineSection.hidden = false;
-        offlineSection.hidden = true;
+      function showTab(which) {
+        [tabSig, tabOnline, tabOffline].forEach(t => t.classList.remove('active'));
+        sigSection.hidden = which !== 'sig';
+        onlineSection.hidden = which !== 'online';
+        offlineSection.hidden = which !== 'offline';
         outBlock.hidden = true;
+        ({ sig: tabSig, online: tabOnline, offline: tabOffline })[which].classList.add('active');
+        history.replaceState(null, '', which === 'sig' ? location.pathname : '#' + which);
+      }
+      tabSig.onclick = () => showTab('sig');
+      tabOnline.onclick = () => showTab('online');
+      tabOffline.onclick = () => showTab('offline');
+      if (location.hash === '#online') showTab('online');
+      if (location.hash === '#offline') showTab('offline');
+
+      // ── Ed25519 single-verdict verification (WebCrypto, client-side) ──
+      const b64ToBytes = (b64) => { const bin = atob(b64.trim()); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
+      // Server signs Python float repr: 1.0 → "1.0", 0.98 → "0.98". Preserve user text if already canonical.
+      function canonConfidence(txt) {
+        const t = String(txt).trim();
+        if (/^\d+\.\d+$/.test(t)) return t;
+        const n = Number(t);
+        if (!Number.isFinite(n)) return t;
+        return Number.isInteger(n) ? n.toFixed(1) : String(n);
+      }
+      let cachedPub = null;
+      async function fetchPubkey() {
+        if (cachedPub) return cachedPub;
+        const r = await fetch(rk.API_BASE + '/v1/pubkey');
+        if (!r.ok) throw new Error('pubkey HTTP ' + r.status);
+        const j = await r.json();
+        cachedPub = j.public_key;
+        document.getElementById('sigKeyStatus').textContent = 'Public key: ' + cachedPub.slice(0, 10) + '… (fetched from /v1/pubkey)';
+        return cachedPub;
+      }
+      async function ed25519Verify(pubB64, sigB64, message) {
+        const pub = b64ToBytes(pubB64), sig = b64ToBytes(sigB64);
+        if (pub.length !== 32) throw new Error('public key must be 32 bytes (got ' + pub.length + ')');
+        if (sig.length !== 64) throw new Error('signature must be 64 bytes (got ' + sig.length + ')');
+        if (!(globalThis.crypto && crypto.subtle)) throw new Error('WebCrypto unavailable in this browser');
+        const key = await crypto.subtle.importKey('raw', pub, { name: 'Ed25519' }, false, ['verify']);
+        return crypto.subtle.verify({ name: 'Ed25519' }, key, sig, new TextEncoder().encode(message));
+      }
+      function renderSig(kind, title, lines) {
+        const el = document.getElementById('sigResult');
+        el.className = 'sig-result show ' + kind;
+        const pill = kind === 'ok' ? '<span class="pill ok">VERIFIED</span>' : kind === 'bad' ? '<span class="pill block">INVALID</span>' : '<span class="pill warn">ERROR</span>';
+        el.innerHTML = '<div class="sr-head">' + pill + '<strong>' + esc(title) + '</strong></div>' +
+          lines.map(([k, v]) => '<div class="sr-line"><b>' + esc(k) + '</b>' + esc(v) + '</div>').join('');
+      }
+      document.getElementById('sigForm').onsubmit = async function (e) {
+        e.preventDefault();
+        const btn = document.getElementById('sigBtn'); btn.disabled = true; btn.textContent = 'Verifying…';
+        const actionId = document.getElementById('sigActionId').value.trim();
+        const proof = document.getElementById('sigProof').value.trim();
+        const verdict = document.getElementById('sigVerdict').value;
+        const conf = canonConfidence(document.getElementById('sigConf').value);
+        const sig = document.getElementById('sigSig').value.trim();
+        const pubIn = document.getElementById('sigPub').value.trim();
+        const message = actionId + ':' + proof + ':' + verdict + ':' + conf;
+        try {
+          const pub = pubIn || await fetchPubkey();
+          if (pubIn) document.getElementById('sigKeyStatus').textContent = 'Public key: ' + pubIn.slice(0, 10) + '… (pasted)';
+          const ok = await ed25519Verify(pub, sig, message);
+          if (ok) {
+            renderSig('ok', 'Signature is authentic.', [
+              ['Signed data', message],
+              ['Public key', pub],
+              ['Meaning', 'This exact verdict, confidence, and proof hash were issued by the Reality Kernel signing authority for action ' + actionId + '. Any alteration to any field would have failed.'],
+            ]);
+            toast('success', 'Verified', 'Ed25519 signature matches the public key.');
+          } else {
+            renderSig('bad', 'Signature does not verify.', [
+              ['Attempted data', message],
+              ['Public key', pub],
+              ['Likely causes', 'A field was altered after signing · confidence formatting differs from the wire value · signature belongs to a different row · wrong public key.'],
+            ]);
+            toast('warn', 'Invalid', 'Signature does not match this payload.');
+          }
+        } catch (err) {
+          renderSig('err', 'Could not verify.', [['Error', err.message || String(err)]]);
+        } finally {
+          btn.disabled = false; btn.textContent = 'Verify signature';
+        }
       };
-      tabOffline.onclick = function () {
-        tabOffline.classList.add('active');
-        tabOnline.classList.remove('active');
-        offlineSection.hidden = false;
-        onlineSection.hidden = true;
-        outBlock.hidden = true;
+      document.getElementById('sigPaste').onclick = async function () {
+        let txt = '';
+        try { txt = await navigator.clipboard.readText(); } catch { txt = prompt('Paste the JSON response or ledger row:') || ''; }
+        try {
+          const j = JSON.parse(txt);
+          const row = Array.isArray(j) ? j[0] : (j.entries ? j.entries[0] : j);
+          if (row.action_id) document.getElementById('sigActionId').value = row.action_id;
+          if (row.proof_hash) document.getElementById('sigProof').value = row.proof_hash;
+          if (row.verdict) document.getElementById('sigVerdict').value = row.verdict;
+          if (row.confidence !== undefined) document.getElementById('sigConf').value = canonConfidence(row.confidence);
+          if (row.ed25519_signature) document.getElementById('sigSig').value = row.ed25519_signature;
+          if (row.ed25519_pubkey) document.getElementById('sigPub').value = row.ed25519_pubkey;
+          toast('info', 'Fields populated', 'Review and click Verify signature.');
+        } catch { toast('warn', 'Parse error', 'Clipboard did not contain valid JSON.'); }
       };
+      fetchPubkey().catch(() => { document.getElementById('sigKeyStatus').textContent = 'Public key: unavailable — paste it manually'; });
 
       // Auto-fill key if logged in
       const key = rk.getKey();
@@ -306,11 +484,36 @@
               '</div>' +
             '</div>' +
             '<div class="cl-status">' +
-              '<span class="pill ' + (r.linked ? 'ok' : 'block') + '">' + (r.linked ? 'VERIFIED' : 'TAMPERED') + '</span>' +
+              '<span class="pill ' + (r.linked ? 'ok' : 'block') + '">' + (r.linked ? 'CHAINED' : 'TAMPERED') + '</span>' +
+              '<span class="pill muted sig-pill" data-idx="' + i + '">SIG …</span>' +
               (e.cost !== undefined && e.cost !== null ? '<span style="font-family:var(--font-mono); font-size:10px; color:var(--text-faint); letter-spacing:0.1em;">' + esc(String(e.cost)) + ' cr</span>' : '') +
             '</div>';
           timeline.appendChild(div);
         }
+
+        // Asynchronously verify each row's Ed25519 seal against the published key.
+        (async function () {
+          let pub = null;
+          try { pub = await fetchPubkey(); } catch {}
+          let sigOk = 0, sigBad = 0, sigNone = 0;
+          for (let i = 0; i < entries.length; i++) {
+            const e = entries[i];
+            const pill = timeline.querySelector('.sig-pill[data-idx="' + i + '"]');
+            if (!pill) continue;
+            if (!e.ed25519_signature) { pill.textContent = 'UNSIGNED'; sigNone++; continue; }
+            try {
+              const msg = e.action_id + ':' + e.proof_hash + ':' + e.verdict + ':' + canonConfidence(e.confidence);
+              const ok = await ed25519Verify(e.ed25519_pubkey || pub, e.ed25519_signature, msg);
+              pill.className = 'pill ' + (ok ? 'ok' : 'block') + ' sig-pill'; pill.textContent = ok ? 'SIG OK' : 'SIG BAD';
+              ok ? sigOk++ : sigBad++;
+            } catch { pill.textContent = 'SIG ?'; sigNone++; }
+          }
+          const note = document.createElement('div');
+          note.style.cssText = 'margin-top:10px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); letter-spacing:.06em;';
+          note.textContent = 'Ed25519 · ' + sigOk + ' valid · ' + sigBad + ' invalid · ' + sigNone + ' unsigned/legacy';
+          if (sigBad) { badge.className = 'pill block'; badge.textContent = 'SIGNATURE FAILURE'; }
+          summary.appendChild(note);
+        })();
 
         if (chainOk) {
           badge.className = 'pill ok';

@@ -3,91 +3,330 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pricing | Reality Kernel</title>
-  <meta name="description" content="Starter, Professional, and Enterprise pricing for Reality Kernel." />
+  <title>Pricing · Reality Kernel</title>
+  <meta name="description" content="Developer sandbox with 500 free credits, Starter at $99/mo for 10,000 checks, Professional at $499/mo for 100,000 checks, and Enterprise with on-premises eBPF kernel sensor. Transparent credit accounting: 1 credit per fast-path check, 5 per shadow-world simulation." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.realitykernel.dev/pricing" />
+  <meta property="og:title" content="Pricing · Reality Kernel" />
+  <meta property="og:description" content="Developer (free) · Starter ($99/mo) · Professional ($499/mo) · Enterprise (custom). Transparent credit accounting." />
+  <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data:;
+    connect-src 'self' https://vitals.vercel-insights.com;
+   
+    base-uri 'self';
+    form-action 'self'
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <style>
-    :root { --bg:#050507; --panel:#0c120f; --text:#e7f8ef; --muted:#9ab0a4; --green:#6EE7B7; --border:#213028; }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
-    .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
-    .nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--border)}
-    .brand{font-weight:700;letter-spacing:.06em;color:var(--green)}
-    .links a{margin-left:16px;color:var(--muted);text-decoration:none}
-    h1{font-size:clamp(2rem,4vw,3rem);margin:44px 0 12px}
-    .sub{color:var(--muted);max-width:74ch}
-    .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:28px 0 24px}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px}
-    .price{font-size:2rem;font-weight:700;color:var(--green);margin:6px 0 10px}
-    ul{padding-left:18px;color:#c2d7cc} li{margin:8px 0}
-    .for{color:var(--muted);font-size:.95rem;margin-top:8px}
-    .featured{border-color:var(--green);box-shadow:0 0 0 1px rgba(110,231,183,.15)}
-    .note{margin:18px 0 40px;padding:14px;border:1px dashed #315245;border-radius:12px;background:#09120d;color:#bdd7cb}
-    .cta a{display:inline-block;padding:10px 14px;border:1px solid var(--border);border-radius:10px;color:var(--text);text-decoration:none;margin-right:8px}
-    .cta .primary{background:var(--green);color:#052415;border-color:transparent}
-  </style>
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="theme-color" content="#050507" />
+  <script defer src="/_vercel/speed-insights/script.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <header class="nav">
-      <div class="brand">REALITY KERNEL</div>
-      <nav class="links">
-        <a href="/">Home</a>
-        <a href="/integration">Integration</a>
-        <a href="/sdk">SDK</a>
-        <a href="/login">Dashboard</a>
-      </nav>
-    </header>
+  <div class="scroll-progress-bar" id="scrollProgress"></div>
 
-    <h1>Pricing built for every stage of agent deployment</h1>
-    <p class="sub">Start quickly, scale confidently, and move into regulated production with kernel-level enforcement and cryptographic proof.</p>
-
-    <section class="tiers">
-      <article class="card">
-        <h2>Starter</h2>
-        <div class="price">$99<span style="font-size:1rem;color:#a9c0b5">/month</span></div>
-        <ul>
-          <li>10,000 checks/month</li>
-          <li>ALLOW / WARN / BLOCK verdicts</li>
-          <li>Ed25519 signed audit log</li>
-          <li>Discord alerts</li>
-        </ul>
-        <p class="for"><strong>For:</strong> developers testing agent security</p>
-      </article>
-
-      <article class="card featured">
-        <h2>Professional</h2>
-        <div class="price">$499<span style="font-size:1rem;color:#a9c0b5">/month</span></div>
-        <ul>
-          <li>100,000 checks/month</li>
-          <li>Everything in Starter</li>
-          <li>Session tracking (slow-drip detection)</li>
-          <li>Least-agency policy enforcement</li>
-          <li>API scan for CI/CD pipelines</li>
-        </ul>
-        <p class="for"><strong>For:</strong> teams deploying agents in production</p>
-      </article>
-
-      <article class="card">
-        <h2>Enterprise</h2>
-        <div class="price">Custom</div>
-        <ul>
-          <li>Unlimited checks</li>
-          <li>eBPF kernel-level sensor (on-premises)</li>
-          <li>OWASP AIMM compliance report</li>
-          <li>SOC 2 / HIPAA audit trail</li>
-          <li>Dedicated support + SLA</li>
-          <li>Design partnership available</li>
-        </ul>
-        <p class="for"><strong>For:</strong> enterprises in regulated industries</p>
-      </article>
-    </section>
-
-    <div class="note">Deploying Reality Kernel inside your platform? Ask about our <strong>Design Partnership</strong> program.</div>
-
-    <div class="cta" style="margin-bottom:40px">
-      <a class="primary" href="/login">Start Free</a>
-      <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Book a Demo</a>
+  <!-- @rk:header -->
+  <header class="rk-header">
+    <a href="/" class="rk-brand">
+      <div class="brand">
+        <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="38" height="38" /></div>
+        <div>
+          <strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong>
+          <span class="brand-sub">Execution-layer security</span>
+        </div>
+      </div>
+    </a>
+    <nav class="rk-nav">
+      <a href="/playground">Playground</a>
+      <a href="/verifier">Verifier</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
+    </nav>
+    <div class="rk-header-cta">
+      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
+      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
     </div>
-  </div>
+  </header>
+  <!-- @rk:/header -->
+
+  <section class="rk-page-hero">
+    <div class="rk-inner">
+      <div>
+        <span class="rk-eyebrow">Pricing</span>
+        <h1>Priced per verdict.<br><em>Not per promise.</em></h1>
+        <p>Every plan runs the same engine, returns the same signed verdicts, and writes to the same tamper-evident ledger. Tiers differ in volume, session intelligence, and where the sensor plane lives.</p>
+      </div>
+      <div class="data-ribbon" style="margin-top:0;">
+        <span><b>1</b> credit · fast path</span>
+        <span><b>5</b> credits · simulation</span>
+        <span><b>0</b> credits · overrides</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="rk-section rk-tight">
+    <div class="rk-inner">
+      <div class="price-grid reveal">
+
+        <!-- Developer -->
+        <div class="price-card">
+          <div class="pc-tier"><span>Tier 0</span><span class="pc-badge">Sandbox</span></div>
+          <div class="pc-name">Developer</div>
+          <div class="pc-price"><span class="amt">$0</span><span class="per">/ verified request</span></div>
+          <p class="pc-sub">For engineers evaluating execution-layer controls in a single agent or framework.</p>
+          <div class="pc-meter">
+            <div><b>Credits</b><span>500 · one-time</span></div>
+            <div><b>Key</b><span>Cryptographic tenant key</span></div>
+          </div>
+          <ul>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Fast-path cloud checks via <code>POST /v1/check</code></span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Full shadow-world simulation (5 credits / call)</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Ed25519-signed verdicts · public key at <code>/v1/pubkey</code></span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Local mock mode in the SDK for offline test suites</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Operator console · audit ledger · chain verifier</span></li>
+            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>Session accumulator &amp; least-agency policy</span></li>
+            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>CI/CD scan pipeline · alert webhooks</span></li>
+          </ul>
+          <a href="/login#request" class="btn ghost">Request Developer Access</a>
+          <div class="pc-foot">Delivered after domain verification · 6–12h</div>
+        </div>
+
+        <!-- Starter -->
+        <div class="price-card">
+          <div class="pc-tier"><span>Tier 1</span><span class="pc-badge">Starter</span></div>
+          <div class="pc-name">Starter</div>
+          <div class="pc-price"><span class="amt">$99</span><span class="per">/ month</span></div>
+          <p class="pc-sub">For developers testing agent security against real traffic before a production rollout.</p>
+          <div class="pc-meter">
+            <div><b>Checks</b><span>10,000 / month</span></div>
+            <div><b>Burst</b><span>120 req / min / key</span></div>
+          </div>
+          <ul>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Everything in Developer</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>ALLOW / WARN / BLOCK verdicts with full evidence</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Ed25519-signed, SHA-256-chained audit log</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Discord alerts on WARN / BLOCK</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Monthly credit refill · idempotency keys</span></li>
+            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>Session accumulator &amp; least-agency policy</span></li>
+            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>CI/CD scan pipeline</span></li>
+          </ul>
+          <a href="mailto:contact@realitykernel.dev?subject=Starter%20Plan%20Activation" class="btn ghost">Activate Starter</a>
+          <div class="pc-foot">Monthly · cancel anytime</div>
+        </div>
+
+        <!-- Professional -->
+        <div class="price-card featured">
+          <div class="pc-tier"><span>Tier 2</span><span class="pc-badge">Most deployed</span></div>
+          <div class="pc-name">Professional</div>
+          <div class="pc-price"><span class="amt">$499</span><span class="per">/ month</span></div>
+          <p class="pc-sub">For teams shipping agents to production who need sequence-aware detection and policy enforcement.</p>
+          <div class="pc-meter">
+            <div><b>Checks</b><span>100,000 / month</span></div>
+            <div><b>Burst</b><span>120 req / min / key</span></div>
+          </div>
+          <ul>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Everything in Starter</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>Session accumulator</strong> — slow-drip exfiltration chain rules, keyed to tenant + agent identity</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>Least-agency policy</strong> — <code>allowed_tools</code>, <code>allowed_egress</code> enforced pre-simulation</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Scoped session tokens via <code>POST /v1/token</code></span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>CI/CD scan pipeline</strong> — <code>POST /v1/scan</code>, up to 50 commands, gate on <code>policy_pass</code></span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Discord webhooks with signed one-click operator overrides</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Strict mode · configurable retention · idempotency keys</span></li>
+          </ul>
+          <a href="mailto:contact@realitykernel.dev?subject=Professional%20Plan%20Activation" class="btn">Activate Professional</a>
+          <div class="pc-foot">Monthly · cancel anytime · overage at list rate</div>
+        </div>
+
+        <!-- Enterprise -->
+        <div class="price-card">
+          <div class="pc-tier"><span>Tier 3</span><span class="pc-badge">Sovereign</span></div>
+          <div class="pc-name">Enterprise</div>
+          <div class="pc-price"><span class="amt">Custom</span></div>
+          <p class="pc-sub">For regulated environments that require kernel-level attestation and evidence that survives an audit.</p>
+          <div class="pc-meter">
+            <div><b>Checks</b><span>Unlimited</span></div>
+            <div><b>Deploy</b><span>Dedicated VPC / on-prem</span></div>
+          </div>
+          <ul>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Everything in Professional</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong><code>rk-sensor</code></strong> — on-premises eBPF kernel sensor (Rust · Linux ≥ 5.8)</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Syscall attestation reconciled against issued verdicts</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>SOC 2 &amp; HIPAA-aligned cryptographic audit trails · SIEM export</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Region-locked data residency · customer-held signing keys</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Custom SLA · named engineer · private architecture review</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>Design Partnership</strong> program for platform embeds</span></li>
+          </ul>
+          <a href="mailto:contact@realitykernel.dev?subject=Enterprise%20Architecture%20Review" class="btn ghost">Book Architecture Review</a>
+          <div class="pc-foot">Annual · procurement-ready · DPA available</div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CREDIT ACCOUNTING ─────────────────────────────────────────────── -->
+  <section class="rk-section rk-alt">
+    <div class="rk-inner narrow">
+      <span class="rk-eyebrow">Credit accounting</span>
+      <h2 class="rk-h2">How a <em>credit</em> is counted.</h2>
+      <p class="rk-lead" style="margin-bottom:28px;">The engine decides the cost from the shape of the command, not from your plan. Read-only verbs and allow-listed binaries never pay the simulation price. Every response returns the exact charge in <code>credits_consumed</code> and your balance in <code>credits_remaining</code>.</p>
+
+      <div class="card" style="padding: 8px 20px;">
+        <table class="credit-table">
+          <thead><tr><th>Operation</th><th>Cost</th><th>Trigger</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Fast-path check</td>
+              <td><span class="cost">1 credit</span></td>
+              <td>Command matches the read-only fast path (<code>ls</code>, <code>cat</code>, <code>git status</code>, …). Returns in under a millisecond.</td>
+            </tr>
+            <tr>
+              <td>Shadow-world simulation</td>
+              <td><span class="cost">5 credits</span></td>
+              <td>Command has side effects — filesystem writes, egress, privilege changes, interpreters. Projected across 5 parallel trajectories.</td>
+            </tr>
+            <tr>
+              <td>Policy violation</td>
+              <td><span class="cost">1 credit</span></td>
+              <td>Least-agency <code>policy</code> rejects the command before simulation. Signed <code>BLOCK</code> at confidence 1.0.</td>
+            </tr>
+            <tr>
+              <td>Batch scan entry</td>
+              <td><span class="cost">1 or 5</span></td>
+              <td>Each entry in <code>POST /v1/scan</code> is priced exactly as an individual check.</td>
+            </tr>
+            <tr>
+              <td>Operator override</td>
+              <td><span class="cost">0 credits</span></td>
+              <td><code>POST /v1/override</code> appends a signed <code>WARN_APPROVED</code> / <code>WARN_REJECTED</code> row. Never billed.</td>
+            </tr>
+            <tr>
+              <td>Idempotent replay</td>
+              <td><span class="cost">0 credits</span></td>
+              <td>Repeat a request with the same <code>Idempotency-Key</code> within 5 minutes and the cached verdict is returned free.</td>
+            </tr>
+            <tr>
+              <td>Public key · audit read · token mint</td>
+              <td><span class="cost">0 credits</span></td>
+              <td><code>GET /v1/pubkey</code>, <code>GET /v1/audit</code>, <code>POST /v1/token</code>, and <code>GET /v1/me</code> are metadata operations.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout" style="margin-top:22px;">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+        <div><strong>Low-balance signalling.</strong> When remaining credits fall below 10% of your limit, every response carries <code>X-RK-Credits-Low: true</code> and a human-readable <code>X-RK-Credits-Warning</code> header so your client can alert before a <code>402</code> ever occurs.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ───────────────────────────────────────────────────────────── -->
+  <section class="rk-section">
+    <div class="rk-inner narrow">
+      <span class="rk-eyebrow">Questions</span>
+      <h2 class="rk-h2">Billing &amp; <em>provisioning.</em></h2>
+
+      <div class="faq-list" style="margin-top: 32px;">
+        <div class="faq-item">
+          <button class="faq-q" type="button">What exactly does "500 free credits" buy me?<span class="caret">+</span></button>
+          <div class="faq-a"><p>Roughly 500 fast-path checks, 100 full shadow-world simulations, or any mix. In a typical agent workload where ~95% of tool calls are read-only, 500 credits covers several hundred real agent actions — enough to wire up a framework, run your test suite, and verify signatures end-to-end. Credits do not expire while the key is active.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">Why is the sandbox gated behind domain verification?<span class="caret">+</span></button>
+          <div class="faq-a"><p>A tenant key signs into a shared audit ledger and consumes real compute. Automated domain verification lets us issue keys to engineering teams within hours while keeping the ledger free of throwaway identities. Requests from free-mail domains are reviewed manually and may take slightly longer.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">Is a 100,000-check Professional plan 100,000 credits?<span class="caret">+</span></button>
+          <div class="faq-a"><p>No — it is 100,000 <em>checks</em> at the blended fast-path/simulation mix observed across production tenants, which we provision as a credit pool with headroom. If your workload is unusually simulation-heavy, the console shows your live burn rate and we right-size the pool with you rather than surprise you with overage.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">What happens when I run out?<span class="caret">+</span></button>
+          <div class="faq-a"><p>The API returns <code>402 Insufficient credits</code> and writes nothing to the ledger. It does not fail open. Your integration should treat a <code>402</code> the same way it treats a <code>BLOCK</code> — halt and escalate — which is why the SDK reference clients do exactly that by default.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">Do you retain my commands?<span class="caret">+</span></button>
+          <div class="faq-a"><p>The audit row stores the command and stated intent so that auditors can reconstruct the decision, with per-tenant retention you control from the console (<code>retention_days</code>). Enterprise deployments in a dedicated VPC keep the ledger entirely inside your boundary.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">What does the Design Partnership include?<span class="caret">+</span></button>
+          <div class="faq-a"><p>Platform vendors embedding Reality Kernel into their own agent runtime receive co-engineering time, roadmap input on the sensor plane, white-labelled verifier tooling, and preferential terms. It is scoped per engagement — book an architecture review to start the conversation.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rk-cta" style="padding-top: 60px;">
+    <h2>Start with <em>500 credits.</em></h2>
+    <p>Wire up your first agent tonight. Move to Starter or Professional when you're ready for sequence detection and CI gates.</p>
+    <div class="row">
+      <a href="/login#request" class="btn btn-lg"><span>Request Developer Access</span><span style="font-family:var(--font-mono);">→</span></a>
+      <a href="mailto:contact@realitykernel.dev?subject=Architecture%20Review%20Request" class="btn btn-lg ghost">Book Architecture Review</a>
+    </div>
+  </section>
+
+  <!-- @rk:footer -->
+  <footer class="rk-footer">
+    <div class="rk-footer-inner">
+      <div class="rk-footer-brand">
+        <div class="brand small">
+          <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
+          <div>
+            <strong>REALITY KERNEL</strong>
+            <span class="brand-sub">Keter Labs · Cryptographic Security Division</span>
+          </div>
+        </div>
+        <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+      </div>
+      <div>
+        <h5>Product</h5>
+        <ul>
+          <li><a href="/playground">Playground</a></li>
+          <li><a href="/verifier">Verifier</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/benchmark">Benchmark</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Developers</h5>
+        <ul>
+          <li><a href="/docs">Integration guide</a></li>
+          <li><a href="/sdk">SDK reference</a></li>
+          <li><a href="/docs#api">API reference</a></li>
+          <li><a href="/login#request">Request sandbox</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Trust</h5>
+        <ul>
+          <li><a href="/security">Security &amp; threat model</a></li>
+          <li><a href="/faq">FAQ</a></li>
+          <li><a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></li>
+          <li><a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="rk-footer-bottom">
+      <span>© 2025 Reality Kernel · All rights reserved</span>
+      <span class="rk-status"><span class="pulse"></span>API v0.4.2 · Ed25519 signing active</span>
+    </div>
+  </footer>
+  <!-- @rk:/footer -->
+
+  <script src="/app.js"></script>
+  <script>
+    document.querySelectorAll('.faq-q').forEach(q => q.addEventListener('click', () => q.parentElement.classList.toggle('open')));
+  </script>
 </body>
 </html>

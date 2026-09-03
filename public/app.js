@@ -96,8 +96,129 @@
     logout, fmtTime, fmtNum, isPlausibleKey, htmlEscape, newIdempotencyKey 
   };
 
+  /* ── Portal v2 shared behaviours ────────────────────────────────────── */
+
+  // Minimal, dependency-free syntax highlighter for docs code blocks.
+  // Operates on already-escaped text. Good enough for python/ts/bash/json.
+  const KW = {
+    python: /\b(import|from|as|def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|try|except|finally|raise|with|lambda|yield|async|await|pass|break|continue|global|nonlocal|del|assert)\b/g,
+    typescript: /\b(import|from|export|default|const|let|var|function|return|if|else|for|while|in|of|new|class|extends|interface|type|async|await|throw|try|catch|finally|switch|case|break|continue|typeof|instanceof|null|undefined|true|false|this|enum|implements|readonly|as|satisfies)\b/g,
+    bash: /(^|\s)(export|if|then|else|fi|for|do|done|while|case|esac|function|local|return|exit|set|echo|curl|jq|python3?|node|npx|pip|npm)(?=\s|$)/gm,
+    json: /\b(true|false|null)\b/g,
+  };
+  function highlight(src, lang) {
+    lang = (lang || '').toLowerCase();
+    if (lang === 'js' || lang === 'javascript' || lang === 'ts') lang = 'typescript';
+    if (lang === 'sh' || lang === 'shell' || lang === 'curl') lang = 'bash';
+    if (lang === 'py') lang = 'python';
+    let s = htmlEscape(src);
+    const slots = [];
+    // Placeholders use private-use code points (no digits/letters) so later passes never re-tokenise them.
+    const stash = (cls, txt) => { slots.push('<span class="' + cls + '">' + txt + '</span>'); return '\u0000' + String.fromCharCode(0xE000 + slots.length - 1) + '\u0000'; };
+    const slotIdx = (ch) => ch.charCodeAt(0) - 0xE000;
+    // comments
+    if (lang === 'python' || lang === 'bash') s = s.replace(/(^|[^:\\])(#[^\n]*)/gm, (m, a, c) => a + stash('tk-c', c));
+    if (lang === 'typescript') s = s.replace(/(\/\/[^\n]*)/g, (m) => stash('tk-c', m)).replace(/\/\*[\s\S]*?\*\//g, (m) => stash('tk-c', m));
+    // strings (escaped quotes appear as &quot; / &#39;)
+    s = s.replace(/(&quot;(?:(?!&quot;)[^\n])*&quot;|&#39;(?:(?!&#39;)[^\n])*&#39;|`[^`]*`)/g, (m) => stash('tk-s', m));
+    // decorators / types
+    if (lang === 'python') s = s.replace(/(^|\s)(@[\w.]+)/gm, (m, a, d) => a + stash('tk-t', d));
+    // numbers
+    s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, (m) => stash('tk-n', m));
+    // keywords
+    if (KW[lang]) s = s.replace(KW[lang], (m, a, b) => (lang === 'bash' ? a + stash('tk-k', b) : stash('tk-k', m)));
+    // function calls
+    if (lang === 'python' || lang === 'typescript') s = s.replace(/\b([A-Za-z_][\w]*)(?=\()/g, (m) => stash('tk-f', m));
+    // json keys
+    if (lang === 'json') s = s.replace(/\u0000([\uE000-\uF8FF])\u0000(?=\s*:)/g, (m, ch) => { const i = slotIdx(ch); slots[i] = slots[i].replace('tk-s', 'tk-k'); return m; });
+    return s.replace(/\u0000([\uE000-\uF8FF])\u0000/g, (m, ch) => slots[slotIdx(ch)]);
+  }
+
+  function enhanceCodeBlocks(root) {
+    (root || document).querySelectorAll('.rk-code').forEach(block => {
+      const pre = block.querySelector('pre');
+      if (!pre || block.dataset.enhanced) return;
+      block.dataset.enhanced = '1';
+      const codeEl = pre.querySelector('code') || pre;
+      const raw = codeEl.textContent.replace(/^\n+|\n+$/g, '');
+      codeEl.textContent = raw;
+      const lang = block.dataset.lang || '';
+      if (lang && !block.dataset.nohl) codeEl.innerHTML = highlight(raw, lang);
+      const btn = block.querySelector('.rk-copy');
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(raw);
+            btn.classList.add('copied');
+            const label = btn.querySelector('span'); const prev = label ? label.textContent : '';
+            if (label) label.textContent = 'Copied';
+            setTimeout(() => { btn.classList.remove('copied'); if (label) label.textContent = prev || 'Copy'; }, 1600);
+          } catch { /* clipboard blocked — no-op */ }
+        });
+      }
+    });
+  }
+
+  function initTabs(root) {
+    (root || document).querySelectorAll('.rk-tabs').forEach(group => {
+      const tabs = group.querySelectorAll('.rk-tab');
+      const panels = group.querySelectorAll('.rk-tabpanel');
+      tabs.forEach((t, i) => t.addEventListener('click', () => {
+        tabs.forEach(x => x.classList.remove('active'));
+        panels.forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        const target = t.dataset.tab ? group.querySelector('.rk-tabpanel[data-tab="' + t.dataset.tab + '"]') : panels[i];
+        if (target) target.classList.add('active');
+      }));
+    });
+  }
+
+  function initHeader() {
+    const header = document.querySelector('.rk-header');
+    if (!header) return;
+    const path = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
+    const alias = { '/integration': '/docs', '/integrate': '/docs', '/sdk': '/docs' };
+    const cur = alias[path] || path;
+    header.querySelectorAll('nav.rk-nav a').forEach(a => {
+      const href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
+      if (href === cur || (href === '/docs' && cur === '/docs')) a.classList.add('active');
+    });
+    const toggle = header.querySelector('.rk-menu-toggle');
+    const nav = header.querySelector('nav.rk-nav');
+    if (toggle && nav) toggle.addEventListener('click', () => nav.classList.toggle('open'));
+    // Signed-in visitors see the console, not the access CTA
+    if (getKey()) {
+      header.querySelectorAll('[data-auth="signin"]').forEach(a => { a.textContent = 'Operator Console'; a.href = '/dashboard'; });
+      header.querySelectorAll('[data-auth="request"]').forEach(a => { a.style.display = 'none'; });
+    }
+  }
+
+  function initScrollSpy() {
+    const side = document.querySelector('.docs-side');
+    if (!side) return;
+    const links = Array.from(side.querySelectorAll('a[href^="#"]'));
+    const targets = links.map(l => document.getElementById(l.getAttribute('href').slice(1))).filter(Boolean);
+    if (!targets.length) return;
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + e.target.id));
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+    targets.forEach(t => obs.observe(t));
+  }
+
+  window.rk.highlight = highlight;
+  window.rk.enhanceCodeBlocks = enhanceCodeBlocks;
+
   document.addEventListener('DOMContentLoaded', () => {
     const isAuth = !!getKey();
+
+    initHeader();
+    enhanceCodeBlocks();
+    initTabs();
+    initScrollSpy();
     
     // 1. Update navigation auth button
     const navAuthBtn = document.getElementById('nav-auth-btn');

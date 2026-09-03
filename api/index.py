@@ -153,12 +153,26 @@ DEMO_RPM         = int(os.environ.get("RK_DEMO_RPM", "10"))
 DEMO_RATE_WINDOW = 60
 CHECK_BURST_PM   = int(os.environ.get("RK_CHECK_BURST", "120"))
 CHECK_WINDOW     = 60
+LEAD_RPH         = int(os.environ.get("RK_LEAD_RPH", "5"))      # access requests / IP / hour
+LEAD_WINDOW      = 3600
+
+# Developer-sandbox lead capture. Either (or both) sinks may be configured:
+#   RK_LEAD_WEBHOOK_URL — Discord / Slack-compatible webhook that receives a summary
+#   Supabase table `access_requests` — written when SUPABASE_* is configured
+LEAD_WEBHOOK_URL = os.environ.get("RK_LEAD_WEBHOOK_URL", "").strip()
+SANDBOX_CREDITS  = int(os.environ.get("RK_SANDBOX_CREDITS", "500"))
+_FREE_MAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com", "live.com",
+    "icloud.com", "me.com", "aol.com", "proton.me", "protonmail.com", "gmx.com", "mail.com",
+    "yandex.com", "zoho.com", "fastmail.com", "hey.com",
+}
 
 # ⚠️  SERVERLESS NOTE (VULN-003): These in-memory buckets are NOT shared across
 # Vercel cold-start instances. Rate limits are best-effort per instance only.
 # TO FIX: Replace with Upstash Redis (UPSTASH_REDIS_URL) or a Supabase RPC.
 _demo_calls:  dict = defaultdict(deque)
 _check_calls: dict = defaultdict(deque)
+_lead_calls:  dict = defaultdict(deque)
 
 # Idempotency cache (best-effort)
 _IDEMP_TTL = 300
@@ -203,10 +217,14 @@ app.add_middleware(
 
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+# Routes that do not touch the Supabase ledger and must stay reachable even
+# when the auth store is not configured (public key discovery, health, leads).
+_NO_SUPABASE_ROUTES = {"/", "/healthz", "/v1/version", "/v1/pubkey", "/v1/access-request", "/v1/demo"}
+
 class ConfigurationGuardMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if not SUPABASE_URL or not SUPABASE_KEY:
-            if request.url.path in ["/healthz", "/v1/version"]:
+            if request.url.path in _NO_SUPABASE_ROUTES:
                 return await call_next(request)
             return JSONResponse(
                 {"detail": "Service Unavailable. Supabase environment variables are missing.", "error": "config_error"},
@@ -695,6 +713,18 @@ class WebhookRequest(BaseModel):
     url: str = Field(default="", max_length=500)
 
 
+class AccessRequest(BaseModel):
+    """Developer-sandbox access request (public, unauthenticated, rate-limited)."""
+    full_name:  str = Field(min_length=2,  max_length=120)
+    work_email: str = Field(min_length=6,  max_length=254, pattern=r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    company:    str = Field(min_length=1,  max_length=160)
+    framework:  str = Field(default="custom", max_length=40,
+                            pattern=r'^(langgraph|langchain|crewai|openai-agents|autogen|custom)$')
+    use_case:   str = Field(default="", max_length=600)
+    # Honeypot — real browsers leave this empty; bots tend to fill every field.
+    website:    str = Field(default="", max_length=200)
+
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -944,6 +974,9 @@ def check_command(
             "latency_ms":        0.1,
             "credits_consumed":  FAST_PATH_COST,
             "credits_remaining": remaining,
+            # Contract parity with the full-engine path: every verdict is signed.
+            "ed25519_signature": ed25519_sig,
+            "ed25519_pubkey":    ed25519_pubkey,
         }
 
         if idempotency_key:
@@ -1406,6 +1439,102 @@ def scan_commands(
         "credits_consumed": total_cost,
         "credits_remaining": remaining,
         "results":       results,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  /v1/access-request — Developer sandbox lead capture (public)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _lead_store_supabase(row: dict) -> bool:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return False
+    try:
+        r = sb_client.post(f"{SUPABASE_REST}/access_requests", headers=_sb_headers(), json=row)
+        if r.status_code in (200, 201):
+            return True
+        logger.warning("access_requests insert non-2xx: %s %s", r.status_code, r.text[:200])
+    except Exception as e:  # never leak upstream detail to the caller
+        logger.warning("access_requests insert failed: %s", e)
+    return False
+
+
+def _lead_notify_webhook(row: dict) -> bool:
+    if not LEAD_WEBHOOK_URL:
+        return False
+    summary = (
+        f"**New developer sandbox request** · `{row['request_id']}`\n"
+        f"• **Name:** {row['full_name']}\n"
+        f"• **Email:** {row['work_email']}  ({'corporate' if row['corporate_domain'] else 'free-mail'})\n"
+        f"• **Company:** {row['company']}\n"
+        f"• **Framework:** {row['framework']}\n"
+        + (f"• **Use case:** {row['use_case']}\n" if row.get('use_case') else "")
+        + f"• **Provision:** {SANDBOX_CREDITS} credits · Developer tier"
+    )
+    # Discord accepts {content}; Slack-compatible sinks accept {text}. Send both.
+    payload = {"content": summary[:1900], "text": summary[:1900], "username": "Reality Kernel · Leads"}
+    try:
+        r = httpx.post(LEAD_WEBHOOK_URL, json=payload, timeout=4.0)
+        return r.status_code < 300
+    except Exception as e:
+        logger.warning("lead webhook failed: %s", e)
+        return False
+
+
+@app.post("/v1/access-request", status_code=202)
+def request_access(body: AccessRequest, request: Request):
+    """
+    Accepts a Developer-tier sandbox request. No auth. Rate-limited per IP.
+
+    The request is persisted (Supabase `access_requests`) and/or forwarded to
+    RK_LEAD_WEBHOOK_URL. Tenant key issuance itself stays OFFLINE in the private
+    admin tooling — this endpoint never mints credentials.
+    """
+    # Honeypot tripped → accept silently so bots learn nothing.
+    if body.website.strip():
+        return {"ok": True, "request_id": "rq_" + hashlib.sha256(os.urandom(16)).hexdigest()[:12],
+                "status": "received", "credits": SANDBOX_CREDITS}
+
+    ip = _client_ip(request)
+    if not _rate_limit(_lead_calls, ip, LEAD_RPH, LEAD_WINDOW):
+        raise HTTPException(429, "Too many access requests from this network. Please retry later.")
+
+    email  = body.work_email.strip().lower()
+    domain = email.rsplit("@", 1)[-1]
+    ts     = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    request_id = "rq_" + hashlib.sha256(f"{email}:{ts}:{ip}".encode()).hexdigest()[:12]
+
+    row = {
+        "request_id":        request_id,
+        "full_name":         body.full_name.strip()[:120],
+        "work_email":        email,
+        "email_domain":      domain,
+        "corporate_domain":  domain not in _FREE_MAIL_DOMAINS,
+        "company":           body.company.strip()[:160],
+        "framework":         body.framework,
+        "use_case":          body.use_case.strip()[:600],
+        "requested_credits": SANDBOX_CREDITS,
+        "plan":              "developer",
+        "status":            "pending_verification",
+        "client_ip":         ip,
+        "user_agent":        request.headers.get("user-agent", "")[:200],
+        "created_at":        ts,
+    }
+
+    stored   = _lead_store_supabase(row)
+    notified = _lead_notify_webhook(row)
+    if not stored and not notified:
+        # No sink configured or every sink failed — surface a clean 503, never a stack trace.
+        logger.error("access request %s could not be persisted or forwarded", request_id)
+        raise HTTPException(503, "Access desk temporarily unavailable. Please retry shortly.")
+
+    return {
+        "ok":           True,
+        "request_id":   request_id,
+        "status":       "received",
+        "credits":      SANDBOX_CREDITS,
+        "eta":          "6-12h",
+        "verification": "automated_domain" if row["corporate_domain"] else "manual_review",
     }
 
 
