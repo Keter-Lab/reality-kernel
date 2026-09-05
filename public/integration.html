@@ -129,6 +129,13 @@ export RK_AGENT_ID="billing-agent-prod"            # bound to every verdict + se
   "prime_intent": "Create a local backup of the web root",
   "session_id":   "run-2025-09-03-17",
   "agent_id":     "ops-agent",
+  "execution_binding": {
+    "argv": ["tar", "-czf", "/tmp/backup.tgz", "/var/www"],
+    "binary_sha256": "<sha256-of-executable>",
+    "cwd_sha256": "<sha256-of-working-directory>",
+    "env_sha256": "<sha256-of-selected-env>",
+    "wrapper_nonce": "local-run-uuid"
+  },
   "policy": {
     "allowed_tools":  ["tar", "ls", "cat", "gzip"],
     "allowed_egress": ["*.internal.example", "api.github.com"]
@@ -143,7 +150,7 @@ export RK_AGENT_ID="billing-agent-prod"            # bound to every verdict + se
             <div class="verdict-grid">
               <div class="verdict-card allow">
                 <span class="pill ok">ALLOW</span>
-                <p>Proceed. Log the <code>action_id</code> alongside your own trace so the audit chain and your telemetry can be joined later.</p>
+                <p>Proceed only after consuming <code>execution_permit</code> via <code>POST /v1/execute/consume</code>. Log both <code>action_id</code> and <code>execution_action_id</code> so runtime execution is cryptographically bound to the verdict.</p>
                 <code>confidence</code> reflects certainty that the action is benign.
               </div>
               <div class="verdict-card warn">
@@ -164,7 +171,7 @@ export RK_AGENT_ID="billing-agent-prod"            # bound to every verdict + se
             <p>Each verdict is signed over the canonical string <code>{action_id}:{proof_hash}:{verdict}:{confidence}</code>. Fetch the public key once from <code>GET /v1/pubkey</code> (no auth), pin it, and verify locally. Each ledger row also embeds <code>prev_hash:&lt;sha256&gt;</code> in its evidence — the <a href="/verifier">Verifier</a> replays the whole chain in your browser.</p>
             <div class="callout warn">
               <svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-              <div><strong>Canonical float formatting matters.</strong> The server renders confidence with Python semantics: <code>1.0</code> is <code>"1.0"</code>, <code>0.98</code> is <code>"0.98"</code>. JavaScript's <code>String(1.0)</code> yields <code>"1"</code> — always canonicalise integers to one decimal place before verifying. The reference clients below do this for you.</div>
+              <div><strong>Canonical confidence formatting matters.</strong> Signature verification uses a deterministic encoding: integers are rendered with one decimal place (for example <code>1.0</code>) and non-integers are rendered without trailing zeroes (for example <code>0.98</code>). JavaScript's <code>String(1.0)</code> yields <code>"1"</code> — canonicalise before verifying. The reference clients below do this for you.</div>
             </div>
           </li>
         </ol>
@@ -573,7 +580,7 @@ export class RealityKernelError extends Error {}
 export class ActionBlocked extends Error { constructor(public verdict: Verdict) { super(`BLOCK ${verdict.action_id}: ${verdict.evidence.join("; ")}`); } }
 export class ActionNeedsReview extends Error { constructor(public verdict: Verdict) { super(`WARN ${verdict.action_id}`); } }
 
-/** Server signs `${action_id}:${proof_hash}:${verdict}:${confidence}` with Python float repr. */
+/** Server signs `${action_id}:${proof_hash}:${verdict}:${confidence}` with deterministic canonical confidence encoding. */
 export function canonicalConfidence(c: number): string {
   return Number.isInteger(c) ? c.toFixed(1) : String(c);   // 1 → "1.0", 0.98 → "0.98"
 }
@@ -769,7 +776,8 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
             <tr><td><code>command</code></td><td><span class="ty">string</span></td><td>Compiled system command to evaluate. Max 4,096 chars.</td></tr>
             <tr><td><code>prime_intent</code></td><td><span class="ty">string</span></td><td>Operator's stated goal. Drives intent-divergence scoring. Max 1,024 chars.</td></tr>
             <tr><td><code>session_id</code></td><td><span class="ty">string</span></td><td>Client trace id, recorded on the ledger row. Max 120 chars. Session <em>state</em> is keyed server-side to tenant + <code>agent_id</code>.</td></tr>
-            <tr><td><code>agent_id</code></td><td><span class="ty">string</span></td><td>Identity of the acting agent. Max 120 chars. Overrides the token's bound agent if provided.</td></tr>
+            <tr><td><code>agent_id</code></td><td><span class="ty">string</span></td><td>Identity of the acting agent. Max 120 chars. For session tokens, this must match the token-bound <code>agent_id</code> (mismatch is rejected). For master keys, this field sets per-request attribution.</td></tr>
+            <tr><td><code>execution_binding</code></td><td><span class="ty">object</span></td><td>Immutable runtime artifact descriptor (<code>argv</code>, <code>binary_sha256</code>, <code>cwd_sha256</code>, <code>env_sha256</code>, <code>wrapper_nonce</code>). If omitted, benign results are downgraded from <code>ALLOW</code> to <code>WARN</code> (fail-closed).</td></tr>
             <tr><td><code>policy</code></td><td><span class="ty">object</span></td><td>Least-agency policy: <code>allowed_tools: string[]</code>, <code>allowed_egress: string[]</code> (supports <code>*.domain</code> and IPs), <code>read_only_paths: string[]</code>. <code>null</code> field = unconstrained; <code>[]</code> = deny all.</td></tr>
           </tbody>
         </table>
@@ -782,6 +790,8 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
             <tr><td><code>confidence</code></td><td><span class="ty">float</span></td><td>0–1. Part of the signed payload — do not round before verifying.</td></tr>
             <tr><td><code>evidence</code></td><td><span class="ty">string[]</span></td><td>Human-readable signals. Ledger rows additionally carry <code>prev_hash:&lt;sha256&gt;</code>.</td></tr>
             <tr><td><code>proof_hash</code></td><td><span class="ty">string</span></td><td>SHA-256 over <code>action_id:command:intent:verdict:confidence:policy:prev_hash</code>.</td></tr>
+            <tr><td><code>execution_binding_required</code> · <code>execution_binding_present</code> · <code>execution_binding_hash</code></td><td><span class="ty">bool · bool · string</span></td><td>Runtime enforcement contract. Hash is over the command, intent, tenant identity, and binding object.</td></tr>
+            <tr><td><code>execution_permit</code></td><td><span class="ty">object|null</span></td><td>Present only on <code>ALLOW</code> with binding. Contains <code>{token, expires, nonce, ttl_sec, artifact_hash}</code> and must be consumed exactly once before execution.</td></tr>
             <tr><td><code>ed25519_signature</code></td><td><span class="ty">string</span></td><td>Base64 Ed25519 signature over <code>action_id:proof_hash:verdict:confidence</code>.</td></tr>
             <tr><td><code>ed25519_pubkey</code></td><td><span class="ty">string</span></td><td>Base64 raw 32-byte public key. Pin the value from <code>/v1/pubkey</code> rather than trusting this echo.</td></tr>
             <tr><td><code>worlds_evaluated</code> · <code>worlds_in_basin_b</code> · <code>max_divergence</code></td><td><span class="ty">int · int · float</span></td><td>Simulation telemetry. Zero / 1.0 for policy blocks.</td></tr>
@@ -803,9 +813,9 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
   "algorithm": "Ed25519",
   "public_key": "0ISYYmvjhhxddqiL22028dMVJTtbWc87cKiBv9a0x/8=",
   "encoding": "base64-raw",
-  "sign_data_format": "{action_id}:{proof_hash}:{verdict}:{confidence}",
+  "sign_data_format": "{action_id}:{proof_hash}:{verdict}:{confidence_canonical}",
   "note": "Use this key to verify any Reality Kernel audit signature offline. No API key required.",
-  "version": "0.4.2-ELITE"
+  "contract": "v1"
 }</code></pre>
         </div>
 
@@ -818,7 +828,7 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
             <tr><td><code>decision</code><span class="req">required</span></td><td><span class="ty">"approved"|"rejected"</span></td><td>Approving a WARN with confidence &gt; 0.60 is flagged <code>warning_level: "critical"</code> in the ledger.</td></tr>
           </tbody>
         </table>
-        <p>Response: <code>{ ok, verdict: "WARN_APPROVED" | "WARN_REJECTED", override_action_id, warning_level: "standard" | "critical" }</code>. Discord alerts include pre-signed one-click links that hit <code>/v1/override/direct</code> with an HMAC token valid for 24 hours.</p>
+        <p>Response: <code>{ ok, verdict: "WARN_APPROVED" | "WARN_REJECTED", override_action_id, warning_level: "standard" | "critical" }</code>. Discord alerts include pre-signed one-click links that hit <code>/v1/override/direct</code> with a short-lived HMAC token and nonce; links are single-use per nonce on each instance.</p>
 
         <h3 id="api-more">Additional routes</h3>
         <table class="param-table">
@@ -826,12 +836,13 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
           <tbody>
             <tr><td><code>POST /v1/token</code></td><td><span class="ty">master</span></td><td>Mint an HMAC-signed session token: <code>{ agent_id, session_id, scopes[], ttl }</code>. Scopes map to binary classes: <code>fs:read</code>, <code>sys:info</code>, <code>git</code>, <code>network</code>.</td></tr>
             <tr><td><code>POST /v1/scan</code></td><td><span class="ty">bearer</span></td><td>Batch up to 50 <code>{command, prime_intent, label}</code> entries for CI. Gate on <code>policy_pass</code>; choose <code>fail_on: "BLOCK" | "WARN" | "BLOCK_WARN"</code>.</td></tr>
+            <tr><td><code>POST /v1/execute/consume</code></td><td><span class="ty">bearer</span></td><td>Consume <code>execution_permit</code> exactly once to attest runtime execution against immutable binding; appends a signed <code>EXEC_AUTH</code> audit row.</td></tr>
             <tr><td><code>GET /v1/audit?limit=</code></td><td><span class="ty">master</span></td><td>Newest-first ledger rows (≤200). Feed directly into the <a href="/verifier">Verifier</a>.</td></tr>
             <tr><td><code>GET /v1/me</code></td><td><span class="ty">master</span></td><td>Plan, credits, retention, strict mode, webhook.</td></tr>
             <tr><td><code>PATCH /v1/settings</code></td><td><span class="ty">master</span></td><td><code>{ strict_mode, retention_days, siem_url }</code>.</td></tr>
             <tr><td><code>POST /v1/webhook</code> · <code>/v1/webhook/test</code></td><td><span class="ty">master</span></td><td>Set and test a Discord webhook for WARN alerts with signed override buttons.</td></tr>
             <tr><td><code>POST /v1/demo</code></td><td><span class="ty">public</span></td><td>Unauthenticated, rate-limited engine preview. Powers the <a href="/playground">Playground</a>. Not logged, not signed.</td></tr>
-            <tr><td><code>GET /healthz</code> · <code>/v1/version</code></td><td><span class="ty">public</span></td><td>Liveness and cost constants (<code>fast_path_cost</code>, <code>full_engine_cost</code>).</td></tr>
+            <tr><td><code>GET /healthz</code> · <code>/v1/version</code></td><td><span class="ty">public</span></td><td>Rate-limited public metadata (contract + cost constants) with minimized fingerprint surface.</td></tr>
           </tbody>
         </table>
       </section>
