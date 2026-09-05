@@ -208,7 +208,11 @@
       try {
         const res = await rk.call('/v1/check', {
           method: 'POST',
-          body: JSON.stringify({ command: cmd, prime_intent: intent })
+          body: JSON.stringify({
+            command: cmd,
+            prime_intent: intent,
+            execution_binding: { argv: [cmd], wrapper_nonce: rk.newIdempotencyKey() }
+          })
         });
         resContainer.style.display = 'block';
         if (res.ok) {
@@ -744,7 +748,11 @@
     const r = await rk.call('/v1/check', {
       method: 'POST',
       headers: { 'Idempotency-Key': idemp },
-      body: JSON.stringify({ command: cmd, prime_intent: intent }),
+      body: JSON.stringify({
+        command: cmd,
+        prime_intent: intent,
+        execution_binding: { argv: [cmd], wrapper_nonce: idemp }
+      }),
     });
 
     $btn.disabled = false;

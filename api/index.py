@@ -159,6 +159,9 @@ CHECK_WINDOW     = 60
 LEAD_RPH         = int(os.environ.get("RK_LEAD_RPH", "5"))      # access requests / IP / hour
 LEAD_WINDOW      = 3600
 DIRECT_OVERRIDE_TTL_SEC = max(60, min(86400, int(os.environ.get("RK_DIRECT_OVERRIDE_TTL_SEC", "600"))))
+EXECUTION_PERMIT_TTL_SEC = max(30, min(900, int(os.environ.get("RK_EXECUTION_PERMIT_TTL_SEC", "120"))))
+PUBLIC_META_RPM = int(os.environ.get("RK_PUBLIC_META_RPM", "90"))
+PUBLIC_META_WINDOW = 60
 
 # Developer-sandbox lead capture. Either (or both) sinks may be configured:
 #   RK_LEAD_WEBHOOK_URL — Discord / Slack-compatible webhook that receives a summary
@@ -177,11 +180,13 @@ _FREE_MAIL_DOMAINS = {
 _demo_calls:  dict = defaultdict(deque)
 _check_calls: dict = defaultdict(deque)
 _lead_calls:  dict = defaultdict(deque)
+_public_meta_calls: dict = defaultdict(deque)
 
 # Idempotency cache (best-effort)
 _IDEMP_TTL = 300
 _idemp_cache: dict = {}
 _override_token_replay_guard: dict[str, float] = {}
+_execution_token_replay_guard: dict[str, float] = {}
 
 # Max body size
 MAX_BODY_BYTES = 64 * 1024   # 64 KiB
@@ -215,7 +220,7 @@ app.add_middleware(
     expose_headers=[
         "X-RK-Credits-Remaining", "X-RK-Credits-Limit",
         "X-RK-Credits-Low", "X-RK-Credits-Warning",
-        "X-RK-Request-Id", "X-RK-Idempotent-Replay"
+        "X-RK-Request-Id", "X-RK-Idempotent-Replay", "X-RK-Enforcement-Mode"
     ],
     max_age=600,
 )
@@ -268,7 +273,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 f"{time.time()}:{id(request)}".encode()
             ).hexdigest()[:12],
         )
-        h.setdefault("X-RK-API-Version", API_VERSION)
+        h.setdefault("X-RK-API-Contract", "v1")
         return response
 
 
@@ -489,11 +494,67 @@ def _resolve_effective_agent_id(auth: dict, requested_agent_id: str) -> str:
     # Session tokens are identity-bound: body agent_id may not override token binding.
     if auth.get("is_session_token"):
         if requested and token_agent and requested != token_agent:
+            logger.warning("session token agent mismatch: token_agent=%s requested_agent=%s", token_agent, requested)
             raise HTTPException(403, "agent_id mismatch with session token binding.")
         return token_agent or requested
 
     # Master keys may set explicit per-request agent identity for attribution.
     return requested or token_agent
+
+
+def _execution_binding_payload(binding: "ExecutionBinding | None") -> dict:
+    if not binding:
+        return {
+            "argv": [],
+            "env_sha256": "",
+            "cwd_sha256": "",
+            "binary_sha256": "",
+            "wrapper_nonce": "",
+        }
+
+    return {
+        "argv": [str(part)[:256] for part in (binding.argv or [])][:128],
+        "env_sha256": binding.env_sha256,
+        "cwd_sha256": binding.cwd_sha256,
+        "binary_sha256": binding.binary_sha256,
+        "wrapper_nonce": binding.wrapper_nonce,
+    }
+
+
+def _execution_artifact_hash(
+    command: str,
+    prime_intent: str,
+    key_hash: str,
+    agent_id: str,
+    session_id: str,
+    binding: "ExecutionBinding | None",
+) -> str:
+    payload = {
+        "command": command,
+        "prime_intent": prime_intent,
+        "key_hash": key_hash,
+        "agent_id": agent_id,
+        "session_id": session_id,
+        "binding": _execution_binding_payload(binding),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _mint_execution_permit(action_id: str, key_hash: str, artifact_hash: str) -> dict:
+    now = int(time.time())
+    exp = now + EXECUTION_PERMIT_TTL_SEC
+    nonce = secrets.token_hex(12)
+    secret = SERVER_SECRET if SERVER_SECRET else b"dev-fallback-secret-12345"
+    payload = f"{action_id}:{key_hash}:{artifact_hash}:{exp}:{nonce}".encode()
+    token = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    return {
+        "token": token,
+        "expires": str(exp),
+        "nonce": nonce,
+        "ttl_sec": EXECUTION_PERMIT_TTL_SEC,
+        "artifact_hash": artifact_hash,
+    }
 
 
 def _consume_override_token_once(action_id: str, decision: str, key_hash: str, token: str, expires: str, nonce: str) -> None:
@@ -526,6 +587,36 @@ def _consume_override_token_once(action_id: str, decision: str, key_hash: str, t
         raise HTTPException(409, "Override token already consumed.")
 
     _override_token_replay_guard[replay_key] = float(exp)
+
+
+def _consume_execution_token_once(action_id: str, key_hash: str, artifact_hash: str, token: str, expires: str, nonce: str) -> None:
+    try:
+        exp = int(expires)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid expiration format") from exc
+
+    now = int(time.time())
+    if exp < now:
+        raise HTTPException(400, "Execution permit expired")
+
+    if (exp - now) > (EXECUTION_PERMIT_TTL_SEC + 30):
+        raise HTTPException(400, "Execution permit lifetime exceeds policy.")
+
+    secret = SERVER_SECRET if SERVER_SECRET else b"dev-fallback-secret-12345"
+    payload = f"{action_id}:{key_hash}:{artifact_hash}:{expires}:{nonce}".encode()
+    expected_sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_sig, token):
+        raise HTTPException(403, "Invalid execution permit token")
+
+    stale_keys = [k for k, ttl in _execution_token_replay_guard.items() if ttl < now]
+    for k in stale_keys:
+        _execution_token_replay_guard.pop(k, None)
+
+    replay_key = f"{key_hash}:{action_id}:{nonce}"
+    if replay_key in _execution_token_replay_guard:
+        raise HTTPException(409, "Execution permit already consumed.")
+
+    _execution_token_replay_guard[replay_key] = float(exp)
 
 
 def _extract_binaries(command: str) -> list[str]:
@@ -642,6 +733,13 @@ def _rate_limit(bucket: dict, key: str, limit: int, window: int) -> bool:
         return False
     q.append(now)
     return True
+
+
+def _enforce_public_meta_rate_limit(request: Request, route: str) -> None:
+    ip = _client_ip(request)
+    key = f"{route}:{ip}"
+    if not _rate_limit(_public_meta_calls, key, PUBLIC_META_RPM, PUBLIC_META_WINDOW):
+        raise HTTPException(429, "Public metadata rate limit exceeded.")
 
 
 def _credit_headers(limit: int, used: int) -> dict:
@@ -777,12 +875,21 @@ class TokenRequest(BaseModel):
     ttl:        int = Field(default=3600, ge=60, le=86400)
 
 
+class ExecutionBinding(BaseModel):
+    argv: list[str] | None = Field(default=None, max_length=128)
+    env_sha256: str = Field(default="", max_length=64, pattern=r'^[a-f0-9]*$')
+    cwd_sha256: str = Field(default="", max_length=64, pattern=r'^[a-f0-9]*$')
+    binary_sha256: str = Field(default="", max_length=64, pattern=r'^[a-f0-9]*$')
+    wrapper_nonce: str = Field(default="", max_length=120)
+
+
 class CheckRequest(BaseModel):
     command:      str | None = Field(default="", max_length=MAX_COMMAND_LEN)
     prime_intent: str | None = Field(default="", max_length=MAX_INTENT_LEN)
     session_id:   str = Field(default="", max_length=120)
     agent_id:     str = Field(default="", max_length=120)
     policy:       LeastAgencyPolicy | None = None
+    execution_binding: ExecutionBinding | None = None
 
 
 class OverrideRequest(BaseModel):
@@ -796,6 +903,18 @@ class DirectOverrideRequest(BaseModel):
     token:     str = Field(min_length=64, max_length=64, pattern=r'^[a-f0-9]{64}$')
     expires:   str = Field(min_length=1, max_length=20, pattern=r'^\d+$')
     nonce:     str = Field(min_length=16, max_length=64, pattern=r'^[a-f0-9]+$')
+
+
+class ExecutionConsumeRequest(BaseModel):
+    action_id: str = Field(min_length=1, max_length=120, pattern=r'^[a-zA-Z0-9\-_]+$')
+    command: str = Field(default="", max_length=MAX_COMMAND_LEN)
+    prime_intent: str = Field(default="", max_length=MAX_INTENT_LEN)
+    session_id: str = Field(default="", max_length=120)
+    agent_id: str = Field(default="", max_length=120)
+    execution_binding: ExecutionBinding | None = None
+    token: str = Field(min_length=64, max_length=64, pattern=r'^[a-f0-9]{64}$')
+    expires: str = Field(min_length=1, max_length=20, pattern=r'^\d+$')
+    nonce: str = Field(min_length=16, max_length=64, pattern=r'^[a-f0-9]+$')
 
 
 class WebhookRequest(BaseModel):
@@ -821,30 +940,34 @@ class AccessRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.get("/")
-def root():
+def root(request: Request):
+    _enforce_public_meta_rate_limit(request, "/")
     return {
-        "name":    "Reality Kernel API",
-        "version": API_VERSION,
-        "edge":    "vercel-serverless",
+        "name": "Reality Kernel API",
+        "status": "ok",
+        "contract": "v1",
     }
 
 
 @app.get("/healthz")
-def healthz():
-    return {"ok": True, "ts": time.time(), "version": API_VERSION}
+def healthz(request: Request):
+    _enforce_public_meta_rate_limit(request, "/healthz")
+    return {"ok": True, "contract": "v1"}
 
 
 @app.get("/v1/version")
-def version():
+def version(request: Request):
+    _enforce_public_meta_rate_limit(request, "/v1/version")
     return {
-        "api_version": API_VERSION,
-        "fast_path_cost":   FAST_PATH_COST,
+        "contract": "v1",
+        "fast_path_cost": FAST_PATH_COST,
         "full_engine_cost": FULL_ENGINE_COST,
+        "metadata_minimized": True,
     }
 
 
 @app.get("/v1/pubkey")
-def get_public_key():
+def get_public_key(request: Request):
     """Public endpoint — no auth required.
 
     Returns the Ed25519 public key used to sign all Reality Kernel audit verdicts.
@@ -861,6 +984,7 @@ def get_public_key():
         # sign_data = f"{action_id}:{proof_hash}:{verdict}:{confidence}"
         pub.verify(base64.b64decode(signature_b64), sign_data.encode())  # raises if invalid
     """
+    _enforce_public_meta_rate_limit(request, "/v1/pubkey")
     if not _ED25519_AVAILABLE or not _ed25519_public_key_b64:
         raise HTTPException(503, "Ed25519 signing not available on this instance.")
     return {
@@ -869,7 +993,7 @@ def get_public_key():
         "encoding":   "base64-raw",
         "sign_data_format": "{action_id}:{proof_hash}:{verdict}:{confidence_canonical}",
         "note": "Use this key to verify any Reality Kernel audit signature offline. No API key required.",
-        "version": API_VERSION,
+        "contract": "v1",
     }
 
 
@@ -990,6 +1114,17 @@ def check_command(
     cmd_val = body.command or ""
     intent_val = body.prime_intent or ""
     effective_agent_id = _resolve_effective_agent_id(auth, body.agent_id)
+    effective_session_id = body.session_id[:120] or auth.get("session_id", "")[:120]
+    binding_payload = _execution_binding_payload(body.execution_binding)
+    binding_has_argv = bool(binding_payload.get("argv"))
+    artifact_hash = _execution_artifact_hash(
+        command=cmd_val,
+        prime_intent=intent_val,
+        key_hash=auth["key_hash"],
+        agent_id=effective_agent_id,
+        session_id=effective_session_id,
+        binding=body.execution_binding,
+    )
 
     if not _rate_limit(_check_calls, auth["key_hash"], CHECK_BURST_PM, CHECK_WINDOW):
         raise HTTPException(429, "Rate limit exceeded per key.")
@@ -1003,7 +1138,7 @@ def check_command(
             response.headers["X-RK-Idempotent-Replay"] = "true"
             return {k: v for k, v in cached.items() if k != "_headers"}
 
-    # 1. Least Agency Policy Check
+    # 1) Least Agency Policy gate
     policy_violation = _verify_least_agency_policy(cmd_val, body.policy, auth.get("scopes", []))
     if policy_violation:
         ts = time.time()
@@ -1028,79 +1163,82 @@ def check_command(
         ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
 
         audit_row = {
-            "key_hash":      auth["key_hash"],
-            "action_id":     action_id,
-            "command":       _fingerprint_text(cmd_val, "cmd"),
-            "prime_intent":  _fingerprint_text(intent_val, "intent"),
-            "session_id":    body.session_id[:120] or auth.get("session_id", "")[:120],
-            "agent_id":      effective_agent_id,
-            "verdict":       "BLOCK",
-            "confidence":    1.0,
-            "evidence":      evidence_list,
-            "proof_hash":    proof_hash,
-            "cost":          FAST_PATH_COST,
+            "key_hash": auth["key_hash"],
+            "action_id": action_id,
+            "command": _fingerprint_text(cmd_val, "cmd"),
+            "prime_intent": _fingerprint_text(intent_val, "intent"),
+            "session_id": effective_session_id,
+            "agent_id": effective_agent_id,
+            "verdict": "BLOCK",
+            "confidence": 1.0,
+            "evidence": evidence_list,
+            "proof_hash": proof_hash,
+            "cost": FAST_PATH_COST,
             "credits_after": remaining,
-            "fast_path":     True,
-            "client_ip":     _client_ip(request),
+            "fast_path": True,
+            "client_ip": _client_ip(request),
             "ed25519_signature": ed25519_sig,
             "ed25519_pubkey": ed25519_pubkey,
         }
-
         _sb_insert_audit(audit_row)
 
         headers = _credit_headers(limit, new_used)
         for k, v in headers.items():
             response.headers[k] = v
+        response.headers["X-RK-Enforcement-Mode"] = "fail-closed"
 
         out = {
-            "action_id":         action_id,
-            "verdict":           "BLOCK",
-            "confidence":        1.0,
-            "worlds_evaluated":  0,
+            "action_id": action_id,
+            "verdict": "BLOCK",
+            "confidence": 1.0,
+            "worlds_evaluated": 0,
             "worlds_in_basin_b": 0,
-            "max_divergence":    1.0,
-            "evidence":          [policy_violation],
-            "proof_hash":        proof_hash,
-            "latency_ms":        0.1,
-            "credits_consumed":  FAST_PATH_COST,
+            "max_divergence": 1.0,
+            "evidence": [policy_violation],
+            "proof_hash": proof_hash,
+            "execution_binding_required": True,
+            "execution_binding_present": binding_has_argv,
+            "execution_binding_hash": artifact_hash,
+            "latency_ms": 0.1,
+            "credits_consumed": FAST_PATH_COST,
             "credits_remaining": remaining,
-            # Contract parity with the full-engine path: every verdict is signed.
             "ed25519_signature": ed25519_sig,
-            "ed25519_pubkey":    ed25519_pubkey,
+            "ed25519_pubkey": ed25519_pubkey,
         }
 
         if idempotency_key:
             _idemp_put(auth["key_hash"], idempotency_key, {**out, "_headers": headers})
-
         return out
 
     is_fast = is_fast_path(cmd_val)
-    cost    = FAST_PATH_COST if is_fast else FULL_ENGINE_COST
+    cost = FAST_PATH_COST if is_fast else FULL_ENGINE_COST
 
     limit = auth["limit"]
-    used  = int(auth["row"].get("credits_used", 0))
+    used = int(auth["row"].get("credits_used", 0))
     if (used + cost) > limit:
         raise HTTPException(402, "Insufficient credits for this operation.")
 
     t0 = time.perf_counter()
-    
+
     # Session state tracking
-    # Tie the session ledger to the Tenant ID (key_hash) and Agent ID
-    # instead of the user-provided session_id, to prevent amnesia via rotation.
     session_agent = effective_agent_id or auth.get("agent_id", "") or "default"
     session_id = f"{auth['key_hash']}_{session_agent}"
     is_escalated, session_evidence = update_and_check_session(
         session_id, cmd_val, sb_client, SUPABASE_REST, _sb_headers()
     )
-    
-    decision = analyse(
-        command=cmd_val,
-        prime_intent=intent_val,
-        n_worlds=5,
-        verbose=False,
-        suppress_audit=True,
-    )
-    
+
+    try:
+        decision = analyse(
+            command=cmd_val,
+            prime_intent=intent_val,
+            n_worlds=5,
+            verbose=False,
+            suppress_audit=True,
+        )
+    except Exception as exc:
+        logger.warning("analysis unavailable for key=%s: %s", auth["key_hash"], exc)
+        raise HTTPException(503, "analysis unavailable (fail-closed): do not execute") from exc
+
     # Session escalation override
     if is_escalated and decision.verdict == "ALLOW":
         decision.verdict = "WARN"
@@ -1108,22 +1246,32 @@ def check_command(
     if is_escalated and decision.verdict == "WARN" and any("Slow-Drip" in e for e in session_evidence):
         decision.verdict = "BLOCK"
         decision.confidence = 1.0
-        
+
     if session_evidence:
         decision.evidence = list(decision.evidence) + session_evidence
+
+    # Runtime enforcement: no ALLOW without explicit immutable execution binding.
+    if decision.verdict == "ALLOW" and not binding_has_argv:
+        decision.verdict = "WARN"
+        decision.confidence = max(float(decision.confidence or 0.0), 0.51)
+        decision.evidence = list(decision.evidence) + [
+            "Runtime execution binding missing: ALLOW downgraded to WARN (fail-closed)."
+        ]
 
     # Strict Mode Enforcement
     strict_mode = auth["row"].get("strict_mode", False)
     if strict_mode and decision.confidence >= 0.85 and decision.verdict != "BLOCK":
         decision.verdict = "BLOCK"
-        decision.evidence = list(decision.evidence) + ["Strict Mode Enforcement: Confidence >= 85% automatically blocked."]
-        
+        decision.evidence = list(decision.evidence) + [
+            "Strict Mode Enforcement: Confidence >= 85% automatically blocked."
+        ]
+
     latency_ms = round((time.perf_counter() - t0) * 1000, 1)
 
-    new_used  = _sb_deduct(auth["key_hash"], cost)
+    new_used = _sb_deduct(auth["key_hash"], cost)
     remaining = max(0, limit - new_used)
 
-    # 2. Cryptographic Proof Chain Link
+    # 2) Cryptographic proof chain link
     recent_logs = _sb_recent_audit_strict(auth["key_hash"], limit=1)
     prev_hash = recent_logs[0].get("proof_hash", "") if recent_logs else ""
 
@@ -1135,36 +1283,29 @@ def check_command(
     if prev_hash:
         evidence_list.append(f"prev_hash:{prev_hash}")
 
-    # ── Ed25519 Signature ──────────────────────────────────────────────────────
-    # Sign the canonical verdict payload so any third party can verify offline
-    # using the public key at /v1/pubkey — no API key required.
     ed_sign_data = _sign_data_string(decision.action_id, proof_hash, decision.verdict, decision.confidence)
     ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
 
     audit_row = {
-        "key_hash":      auth["key_hash"],
-        "action_id":     decision.action_id,
-        "command":       _fingerprint_text(cmd_val, "cmd"),
-        "prime_intent":  _fingerprint_text(intent_val, "intent"),
-        "session_id":    body.session_id[:120] or auth.get("session_id", "")[:120],
-        "agent_id":      body.agent_id[:120] or auth.get("agent_id", "")[:120],
-        "verdict":       decision.verdict,
-        "confidence":    decision.confidence,
-        "evidence":      evidence_list,
-        "proof_hash":    proof_hash,
-        "cost":          cost,
+        "key_hash": auth["key_hash"],
+        "action_id": decision.action_id,
+        "command": _fingerprint_text(cmd_val, "cmd"),
+        "prime_intent": _fingerprint_text(intent_val, "intent"),
+        "session_id": effective_session_id,
+        "agent_id": effective_agent_id,
+        "verdict": decision.verdict,
+        "confidence": decision.confidence,
+        "evidence": evidence_list,
+        "proof_hash": proof_hash,
+        "cost": cost,
         "credits_after": remaining,
-        "fast_path":     is_fast,
-        "client_ip":     _client_ip(request),
+        "fast_path": is_fast,
+        "client_ip": _client_ip(request),
         "ed25519_signature": ed25519_sig,
         "ed25519_pubkey": ed25519_pubkey,
     }
-
     _sb_insert_audit(audit_row)
 
-    # ── Discord Alert ─────────────────────────────────────────────────────────
-    # Non-blocking: fires AFTER audit write, never delays the API response.
-    # Notifies on WARN always; BLOCK only if DISCORD_NOTIFY_BLOCK=true.
     discord_webhook = auth["row"].get("discord_webhook") or ""
     discord_notify(
         verdict=decision.verdict,
@@ -1176,7 +1317,7 @@ def check_command(
         worlds_evaluated=decision.worlds_evaluated,
         evidence=evidence_list,
         webhook_url=discord_webhook,
-        session_id=body.session_id[:120] or auth.get("session_id", "")[:120],
+        session_id=effective_session_id,
         agent_id=effective_agent_id,
         key_hash=auth["key_hash"],
     )
@@ -1184,27 +1325,100 @@ def check_command(
     headers = _credit_headers(limit, new_used)
     for k, v in headers.items():
         response.headers[k] = v
+    response.headers["X-RK-Enforcement-Mode"] = "fail-closed"
 
     out = {
-        "action_id":         decision.action_id,
-        "verdict":           decision.verdict,
-        "confidence":        decision.confidence,
-        "worlds_evaluated":  decision.worlds_evaluated,
+        "action_id": decision.action_id,
+        "verdict": decision.verdict,
+        "confidence": decision.confidence,
+        "worlds_evaluated": decision.worlds_evaluated,
         "worlds_in_basin_b": decision.worlds_in_basin_b,
-        "max_divergence":    decision.max_divergence,
-        "evidence":          decision.evidence,
-        "proof_hash":        proof_hash,
-        "latency_ms":        latency_ms,
-        "credits_consumed":  cost,
+        "max_divergence": decision.max_divergence,
+        "evidence": decision.evidence,
+        "proof_hash": proof_hash,
+        "execution_binding_required": True,
+        "execution_binding_present": binding_has_argv,
+        "execution_binding_hash": artifact_hash,
+        "latency_ms": latency_ms,
+        "credits_consumed": cost,
         "credits_remaining": remaining,
+        "ed25519_signature": ed25519_sig,
+        "ed25519_pubkey": ed25519_pubkey,
     }
-    out["ed25519_signature"] = ed25519_sig
-    out["ed25519_pubkey"] = ed25519_pubkey
+    if decision.verdict == "ALLOW" and binding_has_argv:
+        out["execution_permit"] = _mint_execution_permit(decision.action_id, auth["key_hash"], artifact_hash)
 
     if idempotency_key:
         _idemp_put(auth["key_hash"], idempotency_key, {**out, "_headers": headers})
 
     return out
+
+
+@app.post("/v1/execute/consume")
+def consume_execution_permit(body: ExecutionConsumeRequest, request: Request, auth=Depends(get_api_key)):
+    effective_agent_id = _resolve_effective_agent_id(auth, body.agent_id)
+    effective_session_id = body.session_id[:120] or auth.get("session_id", "")[:120]
+    artifact_hash = _execution_artifact_hash(
+        command=body.command or "",
+        prime_intent=body.prime_intent or "",
+        key_hash=auth["key_hash"],
+        agent_id=effective_agent_id,
+        session_id=effective_session_id,
+        binding=body.execution_binding,
+    )
+
+    _consume_execution_token_once(
+        action_id=body.action_id,
+        key_hash=auth["key_hash"],
+        artifact_hash=artifact_hash,
+        token=body.token,
+        expires=body.expires,
+        nonce=body.nonce,
+    )
+
+    consumed_at = int(time.time())
+    execution_action_id = hashlib.sha256(
+        f"EXEC_AUTH:{body.action_id}:{artifact_hash}:{consumed_at}".encode()
+    ).hexdigest()[:12]
+    proof_hash = hashlib.sha256(
+        f"{execution_action_id}:execute-consume:{body.action_id}:{artifact_hash}:{consumed_at}".encode()
+    ).hexdigest()
+
+    ed_sign_data = _sign_data_string(execution_action_id, proof_hash, "EXEC_AUTH", 1.0)
+    ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
+
+    _sb_insert_audit({
+        "key_hash": auth["key_hash"],
+        "action_id": execution_action_id,
+        "command": _fingerprint_text(body.command or "", "cmd"),
+        "prime_intent": _fingerprint_text(body.prime_intent or "", "intent"),
+        "session_id": effective_session_id,
+        "agent_id": effective_agent_id,
+        "verdict": "EXEC_AUTH",
+        "confidence": 1.0,
+        "evidence": [
+            f"exec_auth_of:{body.action_id}",
+            f"artifact_hash:{artifact_hash}",
+            f"permit_nonce:{body.nonce}",
+        ],
+        "proof_hash": proof_hash,
+        "cost": 0,
+        "credits_after": int(auth["row"].get("credits_used", 0)),
+        "fast_path": True,
+        "client_ip": _client_ip(request),
+        "ed25519_signature": ed25519_sig,
+        "ed25519_pubkey": ed25519_pubkey,
+    })
+
+    return {
+        "ok": True,
+        "action_id": body.action_id,
+        "execution_action_id": execution_action_id,
+        "artifact_hash": artifact_hash,
+        "consumed_at": consumed_at,
+        "ed25519_signature": ed25519_sig,
+        "ed25519_pubkey": ed25519_pubkey,
+    }
 
 
 @app.post("/v1/override")
@@ -1452,13 +1666,17 @@ def scan_commands(
             new_used = _sb_deduct(auth["key_hash"], cost)
             total_cost += cost
 
-            decision = analyse(
-                command=cmd_val,
-                prime_intent=intent_val,
-                n_worlds=5,
-                verbose=False,
-                suppress_audit=True,
-            )
+            try:
+                decision = analyse(
+                    command=cmd_val,
+                    prime_intent=intent_val,
+                    n_worlds=5,
+                    verbose=False,
+                    suppress_audit=True,
+                )
+            except Exception as exc:
+                logger.warning("scan analysis unavailable for key=%s: %s", auth["key_hash"], exc)
+                raise HTTPException(503, "analysis unavailable (fail-closed): scan aborted") from exc
             
             strict_mode = auth["row"].get("strict_mode", False)
             if strict_mode and decision.confidence >= 0.85 and decision.verdict != "BLOCK":
@@ -1517,6 +1735,7 @@ def scan_commands(
     remaining = max(0, limit - new_used)
     for k, v in _credit_headers(limit, new_used).items():
         response.headers[k] = v
+    response.headers["X-RK-Enforcement-Mode"] = "fail-closed"
 
     return {
         "policy_pass":   not policy_fail,
