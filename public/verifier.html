@@ -292,7 +292,7 @@
 
       // ── Ed25519 single-verdict verification (WebCrypto, client-side) ──
       const b64ToBytes = (b64) => { const bin = atob(b64.trim()); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
-      // Server signs Python float repr: 1.0 → "1.0", 0.98 → "0.98". Preserve user text if already canonical.
+      // Server signs canonical confidence text: integers -> one decimal (1.0), non-integers keep precision (0.98). Preserve user text if already canonical.
       function canonConfidence(txt) {
         const t = String(txt).trim();
         if (/^\d+\.\d+$/.test(t)) return t;

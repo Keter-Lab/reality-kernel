@@ -22,12 +22,15 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import sys
 import time
 import datetime
+from decimal import Decimal, InvalidOperation
 from collections import defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlparse
+import re
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
@@ -155,6 +158,7 @@ CHECK_BURST_PM   = int(os.environ.get("RK_CHECK_BURST", "120"))
 CHECK_WINDOW     = 60
 LEAD_RPH         = int(os.environ.get("RK_LEAD_RPH", "5"))      # access requests / IP / hour
 LEAD_WINDOW      = 3600
+DIRECT_OVERRIDE_TTL_SEC = max(60, min(86400, int(os.environ.get("RK_DIRECT_OVERRIDE_TTL_SEC", "600"))))
 
 # Developer-sandbox lead capture. Either (or both) sinks may be configured:
 #   RK_LEAD_WEBHOOK_URL — Discord / Slack-compatible webhook that receives a summary
@@ -177,6 +181,7 @@ _lead_calls:  dict = defaultdict(deque)
 # Idempotency cache (best-effort)
 _IDEMP_TTL = 300
 _idemp_cache: dict = {}
+_override_token_replay_guard: dict[str, float] = {}
 
 # Max body size
 MAX_BODY_BYTES = 64 * 1024   # 64 KiB
@@ -289,12 +294,31 @@ def _hash_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 
-def _fingerprint_text(value: str, label: str) -> str:
-    # Changed from zero-retention hash to full plaintext per user request 
-    # for auditor visibility. Old logs will remain redacted.
+def _redact_sensitive_text(value: str) -> str:
     if not value:
         return ''
-    return value
+    redacted = value
+    # common secret-bearing patterns observed in CLI usage
+    patterns = [
+        (r'(?i)(authorization\s*:\s*bearer\s+)([^\s"\']+)', r'\1[REDACTED]'),
+        (r'(?i)(api[_-]?key=)([^\s&]+)', r'\1[REDACTED]'),
+        (r'(?i)(token=)([^\s&]+)', r'\1[REDACTED]'),
+        (r'(?i)(password=)([^\s&]+)', r'\1[REDACTED]'),
+        (r'(?i)(-p\s+)([^\s]+)', r'\1[REDACTED]'),
+    ]
+    for pat, repl in patterns:
+        redacted = re.sub(pat, repl, redacted)
+    return redacted
+
+
+def _fingerprint_text(value: str, label: str) -> str:
+    if not value:
+        return ''
+    # Default to redacted storage to reduce accidental secret retention.
+    # Set RK_AUDIT_REDACTION=false to store plaintext when explicitly required.
+    if os.environ.get("RK_AUDIT_REDACTION", "true").lower() in ("0", "false", "no"):
+        return value
+    return _redact_sensitive_text(value)
 
 
 def _validate_discord_webhook(url: str) -> str:
@@ -438,7 +462,71 @@ def _client_ip(request: Request) -> str:
     return (request.client.host if request.client else "unknown")[:64]
 
 
-import re
+def _canonical_confidence(confidence: float | int | str) -> str:
+    """Deterministic confidence encoding used by signature payloads."""
+    try:
+        dec = Decimal(str(confidence).strip())
+    except (InvalidOperation, AttributeError):
+        dec = Decimal("0")
+
+    if dec == dec.to_integral_value():
+        return f"{dec.to_integral_value()}.0"
+
+    norm = format(dec.normalize(), "f")
+    if "." in norm:
+        norm = norm.rstrip("0").rstrip(".")
+    return norm
+
+
+def _sign_data_string(action_id: str, proof_hash: str, verdict: str, confidence: float | int | str) -> str:
+    return f"{action_id}:{proof_hash}:{verdict}:{_canonical_confidence(confidence)}"
+
+
+def _resolve_effective_agent_id(auth: dict, requested_agent_id: str) -> str:
+    requested = (requested_agent_id or "").strip()[:120]
+    token_agent = (auth.get("agent_id") or "").strip()[:120]
+
+    # Session tokens are identity-bound: body agent_id may not override token binding.
+    if auth.get("is_session_token"):
+        if requested and token_agent and requested != token_agent:
+            raise HTTPException(403, "agent_id mismatch with session token binding.")
+        return token_agent or requested
+
+    # Master keys may set explicit per-request agent identity for attribution.
+    return requested or token_agent
+
+
+def _consume_override_token_once(action_id: str, decision: str, key_hash: str, token: str, expires: str, nonce: str) -> None:
+    try:
+        exp = int(expires)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid expiration format") from exc
+
+    now = int(time.time())
+    if exp < now:
+        raise HTTPException(400, "Token expired")
+
+    # Reject links with unexpectedly long lifetime even if mathematically valid.
+    if (exp - now) > (DIRECT_OVERRIDE_TTL_SEC + 30):
+        raise HTTPException(400, "Token lifetime exceeds policy.")
+
+    secret = SERVER_SECRET if SERVER_SECRET else b"dev-fallback-secret-12345"
+    payload = f"{action_id}:{decision}:{key_hash}:{expires}:{nonce}".encode()
+    expected_sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_sig, token):
+        raise HTTPException(403, "Invalid cryptographic token")
+
+    # Best-effort anti-replay guard (instance-local in serverless).
+    stale_keys = [k for k, ttl in _override_token_replay_guard.items() if ttl < now]
+    for k in stale_keys:
+        _override_token_replay_guard.pop(k, None)
+
+    replay_key = f"{key_hash}:{action_id}:{decision}:{nonce}"
+    if replay_key in _override_token_replay_guard:
+        raise HTTPException(409, "Override token already consumed.")
+
+    _override_token_replay_guard[replay_key] = float(exp)
+
 
 def _extract_binaries(command: str) -> list[str]:
     parts = re.split(r';|&&|\|\||\|', command)
@@ -707,6 +795,7 @@ class DirectOverrideRequest(BaseModel):
     decision:  str = Field(min_length=1, max_length=20, pattern=r'^(approved|rejected)$')
     token:     str = Field(min_length=64, max_length=64, pattern=r'^[a-f0-9]{64}$')
     expires:   str = Field(min_length=1, max_length=20, pattern=r'^\d+$')
+    nonce:     str = Field(min_length=16, max_length=64, pattern=r'^[a-f0-9]+$')
 
 
 class WebhookRequest(BaseModel):
@@ -778,7 +867,7 @@ def get_public_key():
         "algorithm":  "Ed25519",
         "public_key": _ed25519_public_key_b64,
         "encoding":   "base64-raw",
-        "sign_data_format": "{action_id}:{proof_hash}:{verdict}:{confidence}",
+        "sign_data_format": "{action_id}:{proof_hash}:{verdict}:{confidence_canonical}",
         "note": "Use this key to verify any Reality Kernel audit signature offline. No API key required.",
         "version": API_VERSION,
     }
@@ -900,6 +989,7 @@ def check_command(
 ):
     cmd_val = body.command or ""
     intent_val = body.prime_intent or ""
+    effective_agent_id = _resolve_effective_agent_id(auth, body.agent_id)
 
     if not _rate_limit(_check_calls, auth["key_hash"], CHECK_BURST_PM, CHECK_WINDOW):
         raise HTTPException(429, "Rate limit exceeded per key.")
@@ -934,7 +1024,7 @@ def check_command(
         new_used = _sb_deduct(auth["key_hash"], FAST_PATH_COST)
         remaining = max(0, limit - new_used)
 
-        ed_sign_data = f"{action_id}:{proof_hash}:BLOCK:1.0"
+        ed_sign_data = _sign_data_string(action_id, proof_hash, "BLOCK", 1.0)
         ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
 
         audit_row = {
@@ -943,7 +1033,7 @@ def check_command(
             "command":       _fingerprint_text(cmd_val, "cmd"),
             "prime_intent":  _fingerprint_text(intent_val, "intent"),
             "session_id":    body.session_id[:120] or auth.get("session_id", "")[:120],
-            "agent_id":      body.agent_id[:120] or auth.get("agent_id", "")[:120],
+            "agent_id":      effective_agent_id,
             "verdict":       "BLOCK",
             "confidence":    1.0,
             "evidence":      evidence_list,
@@ -997,7 +1087,8 @@ def check_command(
     # Session state tracking
     # Tie the session ledger to the Tenant ID (key_hash) and Agent ID
     # instead of the user-provided session_id, to prevent amnesia via rotation.
-    session_id = f"{auth['key_hash']}_{auth.get('agent_id', 'default')}"
+    session_agent = effective_agent_id or auth.get("agent_id", "") or "default"
+    session_id = f"{auth['key_hash']}_{session_agent}"
     is_escalated, session_evidence = update_and_check_session(
         session_id, cmd_val, sb_client, SUPABASE_REST, _sb_headers()
     )
@@ -1047,7 +1138,7 @@ def check_command(
     # ── Ed25519 Signature ──────────────────────────────────────────────────────
     # Sign the canonical verdict payload so any third party can verify offline
     # using the public key at /v1/pubkey — no API key required.
-    ed_sign_data = f"{decision.action_id}:{proof_hash}:{decision.verdict}:{decision.confidence}"
+    ed_sign_data = _sign_data_string(decision.action_id, proof_hash, decision.verdict, decision.confidence)
     ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
 
     audit_row = {
@@ -1086,7 +1177,8 @@ def check_command(
         evidence=evidence_list,
         webhook_url=discord_webhook,
         session_id=body.session_id[:120] or auth.get("session_id", "")[:120],
-        agent_id=body.agent_id[:120] or auth.get("agent_id", "")[:120],
+        agent_id=effective_agent_id,
+        key_hash=auth["key_hash"],
     )
 
     headers = _credit_headers(limit, new_used)
@@ -1151,7 +1243,7 @@ def override_verdict(body: OverrideRequest, auth=Depends(get_api_key)):
     payload_str = f"{override_action_id}:override:{body.action_id}:{verdict_str}:1.0::{prev_hash}"
     override_proof = hashlib.sha256(payload_str.encode()).hexdigest()
 
-    ed_sign_data = f"{override_action_id}:{override_proof}:{verdict_str}:1.0"
+    ed_sign_data = _sign_data_string(override_action_id, override_proof, verdict_str, 1.0)
     ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
 
     audit_row = {
@@ -1186,22 +1278,15 @@ def override_verdict(body: OverrideRequest, auth=Depends(get_api_key)):
 def override_verdict_direct(body: DirectOverrideRequest, auth=Depends(get_api_key)):
     if auth.get("is_session_token"):
         raise HTTPException(403, "Session tokens cannot override verdicts.")
-    import time as _time
-    # Verify expiration
-    try:
-        if float(body.expires) < _time.time():
-            raise HTTPException(400, "Token expired")
-    except ValueError:
-        raise HTTPException(400, "Invalid expiration format")
-
-    # Verify HMAC
-    secret = SERVER_SECRET if SERVER_SECRET else b"dev-fallback-secret-12345"
-    payload = f"{body.action_id}:{body.decision}:{body.expires}".encode()
-    expected_sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected_sig, body.token):
-        raise HTTPException(403, "Invalid cryptographic token")
-
     kh = auth["key_hash"]
+    _consume_override_token_once(
+        action_id=body.action_id,
+        decision=body.decision,
+        key_hash=kh,
+        token=body.token,
+        expires=body.expires,
+        nonce=body.nonce,
+    )
     verdict_str = "WARN_APPROVED" if body.decision == "approved" else "WARN_REJECTED"
     
     url_fetch = (
@@ -1224,7 +1309,7 @@ def override_verdict_direct(body: DirectOverrideRequest, auth=Depends(get_api_ke
     payload_str = f"{override_action_id}:direct-override:{body.action_id}:{verdict_str}:1.0::{prev_hash}"
     override_proof = hashlib.sha256(payload_str.encode()).hexdigest()
 
-    ed_sign_data = f"{override_action_id}:{override_proof}:{verdict_str}:1.0"
+    ed_sign_data = _sign_data_string(override_action_id, override_proof, verdict_str, 1.0)
     ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
 
     audit_row = {
@@ -1236,7 +1321,7 @@ def override_verdict_direct(body: DirectOverrideRequest, auth=Depends(get_api_ke
         "agent_id": orig.get("agent_id", ""),
         "verdict": verdict_str,
         "confidence": 1.0,
-        "evidence": [f"direct_override_of:{body.action_id}", f"prev_hash:{prev_hash}"],
+        "evidence": [f"direct_override_of:{body.action_id}", f"prev_hash:{prev_hash}", f"override_nonce:{body.nonce}"],
         "proof_hash": override_proof,
         "cost": 0,
         "credits_after": 0,
@@ -1248,7 +1333,7 @@ def override_verdict_direct(body: DirectOverrideRequest, auth=Depends(get_api_ke
 
     _sb_insert_audit(audit_row)
 
-    return {"ok": True, "verdict": verdict_str, "override_action_id": override_action_id}
+    return {"ok": True, "verdict": verdict_str, "override_action_id": override_action_id, "nonce": body.nonce}
 
 
 
@@ -1289,7 +1374,8 @@ def test_webhook(body: WebhookRequest, auth=Depends(get_api_key)):
         evidence=["This is a test alert requested from the Reality Kernel dashboard."],
         webhook_url=webhook_url,
         session_id="test-session",
-        agent_id="Dashboard User"
+        agent_id="Dashboard User",
+        key_hash=auth["key_hash"],
     )
     return {"ok": True}
 
@@ -1334,6 +1420,7 @@ def scan_commands(
     results = []
     total_cost = 0
     policy_fail = False
+    effective_agent_id = _resolve_effective_agent_id(auth, body.agent_id)
 
     limit = auth["limit"]
     used  = int(auth["row"].get("credits_used", 0))
@@ -1386,7 +1473,7 @@ def scan_commands(
             action_id  = decision.action_id
 
         final_conf = 1.0 if policy_violation else getattr(decision, "confidence", 1.0)
-        ed_sign_data = f"{action_id}:{proof_hash}:{verdict}:{final_conf}"
+        ed_sign_data = _sign_data_string(action_id, proof_hash, verdict, final_conf)
         ed25519_sig, ed25519_pubkey = _require_ed25519_signature(ed_sign_data)
 
         audit_row = {
@@ -1395,7 +1482,7 @@ def scan_commands(
             "command":       _fingerprint_text(cmd_val, "cmd"),
             "prime_intent":  _fingerprint_text(intent_val, "intent"),
             "session_id":    body.session_id[:120] or auth.get("session_id", "")[:120],
-            "agent_id":      body.agent_id[:120] or auth.get("agent_id", "")[:120],
+            "agent_id":      effective_agent_id,
             "verdict":       verdict,
             "confidence":    final_conf,
             "evidence":      evidence,

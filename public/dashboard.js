@@ -13,8 +13,9 @@
   const actionIdParam = urlParams.get('action_id');
   const tokenParam = urlParams.get('token');
   const expiresParam = urlParams.get('expires');
-  
-  if (actionParam && actionIdParam && tokenParam && expiresParam) {
+  const nonceParam = urlParams.get('nonce');
+
+  if (actionParam && actionIdParam && tokenParam && expiresParam && nonceParam) {
     // Show a loading overlay immediately
     const overlay = document.createElement('div');
     overlay.className = 'modal-backdrop show';
@@ -32,7 +33,8 @@
         action_id: actionIdParam,
         decision: decision,
         token: tokenParam,
-        expires: expiresParam
+        expires: expiresParam,
+        nonce: nonceParam
       })
     }).then(res => {
       if (res.ok) {
@@ -57,6 +59,18 @@
     });
     
     // Stop execution so the rest of the dashboard doesn't load underneath the modal
+    return;
+  }
+
+  if (actionParam && actionIdParam && tokenParam && expiresParam && !nonceParam) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-backdrop show';
+    overlay.innerHTML = `<div class="modal" style="text-align: center;">
+      <h3 style="margin-bottom: 16px; color: var(--block);">Link Expired</h3>
+      <p>This override link is from an older format and cannot be used anymore.</p>
+      <button class="btn btn-sm danger" onclick="window.location.href='/dashboard'" style="margin-top: 16px;">Back to Dashboard</button>
+    </div>`;
+    document.body.appendChild(overlay);
     return;
   }
 

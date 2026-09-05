@@ -396,7 +396,7 @@ jobs:
       <section class="docs-block" id="verify">
         <span class="rk-eyebrow">Pattern · Offline verification</span>
         <h2>Verify a verdict with nothing but the public key.</h2>
-        <p>Auditors, regulators, and customers do not need an API key. Given a ledger row (or the JSON response you stored), the canonical string is <code>{action_id}:{proof_hash}:{verdict}:{confidence}</code>. Three implementations, one result.</p>
+        <p>Auditors, regulators, and customers do not need an API key. Given a ledger row (or the JSON response you stored), the canonical string is <code>{action_id}:{proof_hash}:{verdict}:{confidence_canonical}</code>. Three implementations, one result.</p>
 
         <div class="rk-tabs">
           <div class="rk-tabbar">
@@ -414,7 +414,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 PINNED_PUBKEY = "0ISYYmvjhhxddqiL22028dMVJTtbWc87cKiBv9a0x/8="   # from GET /v1/pubkey
 
 def verify_row(row: dict, pubkey_b64: str = PINNED_PUBKEY) -&gt; bool:
-    # confidence must be rendered exactly as Python does: 1.0 → "1.0", 0.98 → "0.98"
+    # confidence must be canonical: integers → one decimal (1.0), non-integers keep precision (0.98)
     sign_data = f"{row['action_id']}:{row['proof_hash']}:{row['verdict']}:{float(row['confidence'])}"
     pub = Ed25519PublicKey.from_public_bytes(base64.b64decode(pubkey_b64))
     try:
@@ -438,7 +438,7 @@ if __name__ == "__main__":
               <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">verify.browser.js</div><span class="lang">javascript</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
 <pre><code>// Runs in any modern browser (Chrome 113+, Firefox 130+, Safari 17+) and Node 20+ via globalThis.crypto.
 const b64 = (s) =&gt; Uint8Array.from(atob(s), (c) =&gt; c.charCodeAt(0));
-const canon = (c) =&gt; (Number.isInteger(c) ? c.toFixed(1) : String(c));   // match Python float repr
+const canon = (c) =&gt; (Number.isInteger(c) ? c.toFixed(1) : String(c));   // canonical confidence encoding
 
 export async function verifyRow(row, pubkeyB64) {
   const key = await crypto.subtle.importKey("raw", b64(pubkeyB64), { name: "Ed25519" }, false, ["verify"]);
