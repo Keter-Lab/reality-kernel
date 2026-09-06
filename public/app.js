@@ -251,53 +251,196 @@
     }
   }
 
-  // FIX: was missing — caused ReferenceError crashing all DOMContentLoaded handlers
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', theme);
+    root.classList.add('theme-ready');
+  }
+
+  function initThemeToggle() {
+    const root = document.documentElement;
+    const stored = localStorage.getItem('rk_theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = stored || (prefersDark ? 'dark' : 'light');
+    applyTheme(theme);
+
+    const headerCta = document.querySelector('.rk-header .rk-header-cta');
+    if (!headerCta || headerCta.querySelector('.rk-theme-toggle')) return;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'rk-theme-toggle btn btn-sm ghost';
+    btn.setAttribute('aria-label', 'Toggle dark mode');
+
+    const icon = document.createElement('span');
+    icon.className = 'rk-theme-toggle-icon';
+
+    const moon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3c0 .34-.02.67-.02 1a7 7 0 0 0 8.81 6.79z"></path></svg>';
+    const sun = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>';
+
+    const syncIcon = () => {
+      const current = root.getAttribute('data-theme') || 'light';
+      const dark = current === 'dark';
+      icon.innerHTML = dark ? sun : moon;
+      btn.setAttribute('aria-pressed', String(dark));
+      btn.setAttribute('title', dark ? 'Switch to light mode' : 'Switch to dark mode');
+    };
+
+    btn.appendChild(icon);
+    btn.addEventListener('click', () => {
+      const current = root.getAttribute('data-theme') || 'light';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      localStorage.setItem('rk_theme', next);
+      syncIcon();
+    });
+
+    syncIcon();
+    const menuToggle = headerCta.querySelector('.rk-menu-toggle');
+    if (menuToggle) headerCta.insertBefore(btn, menuToggle);
+    else headerCta.appendChild(btn);
+  }
+
+  function buildList(ul, items, linkClass = '') {
+    if (!ul) return;
+    const classAttr = linkClass ? ' class="' + linkClass + '"' : '';
+    ul.innerHTML = items.map((item) => {
+      const external = item.external ? ' target="_blank" rel="noopener"' : '';
+      return '<li><a href="' + item.href + '"' + classAttr + external + '>' + item.label + '</a></li>';
+    }).join('');
+  }
+
+  function upsertSocialRow(target) {
+    if (!target) return;
+    target.classList.add('rk-footer-social');
+    target.innerHTML = [
+      '<a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">',
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>',
+      '</a>',
+      '<a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" aria-label="Reality Kernel on LinkedIn" title="LinkedIn">',
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.94 8.5A1.56 1.56 0 1 1 6.93 5.4a1.56 1.56 0 0 1 .01 3.1zM5.5 9.75h2.88V19H5.5V9.75zm5.07 0h2.76v1.26h.04c.38-.72 1.33-1.48 2.74-1.48 2.93 0 3.47 1.93 3.47 4.45V19h-2.88v-4.44c0-1.06-.02-2.42-1.47-2.42-1.47 0-1.69 1.15-1.69 2.34V19h-2.88V9.75z"></path></svg>',
+      '</a>'
+    ].join('');
+  }
+
+  function initFooterLegalLinks() {
+    const productLinks = [
+      { href: '/playground', label: 'Playground' },
+      { href: '/verifier', label: 'Verifier' },
+      { href: '/pricing', label: 'Pricing' },
+      { href: '/benchmark', label: 'Benchmark' },
+      { href: '/security', label: 'Security & threat model' },
+    ];
+    const developerLinks = [
+      { href: '/integration', label: 'Integration guide' },
+      { href: '/sdk', label: 'SDK reference' },
+      { href: '/integration#api', label: 'API reference' },
+      { href: '/login#request', label: 'Request sandbox' },
+    ];
+    const trustLinks = [
+      { href: '/about', label: 'About' },
+      { href: '/privacy', label: 'Privacy policy' },
+      { href: '/terms', label: 'Terms & conditions' },
+      { href: '/cookies', label: 'Cookie policy' },
+      { href: '/faq', label: 'FAQ' },
+    ];
+
+    document.querySelectorAll('.rk-footer').forEach((footer) => {
+      const groups = Array.from(footer.querySelectorAll('h5'));
+      const productHead = groups.find(h => h.textContent.trim().toLowerCase() === 'product');
+      const developerHead = groups.find(h => h.textContent.trim().toLowerCase() === 'developers');
+      const trustHead = groups.find(h => h.textContent.trim().toLowerCase() === 'trust');
+      buildList(productHead && productHead.nextElementSibling, productLinks);
+      buildList(developerHead && developerHead.nextElementSibling, developerLinks);
+      buildList(trustHead && trustHead.nextElementSibling, trustLinks);
+
+      const bottom = footer.querySelector('.rk-footer-bottom');
+      if (bottom) {
+        const spans = bottom.querySelectorAll(':scope > span');
+        if (spans[0]) spans[0].textContent = '© 2026 Reality Kernel · All rights reserved';
+        if (spans[1]) upsertSocialRow(spans[1]);
+        else {
+          const social = document.createElement('span');
+          upsertSocialRow(social);
+          bottom.appendChild(social);
+        }
+      }
+    });
+
+    const lightFooter = document.querySelector('footer.border-t.border-slate-200\\/80.bg-white');
+    if (lightFooter) {
+      const colHeadings = Array.from(lightFooter.querySelectorAll('h5'));
+      const productHead = colHeadings.find(h => h.textContent.trim().toLowerCase() === 'product');
+      const developerHead = colHeadings.find(h => h.textContent.trim().toLowerCase() === 'developers');
+      const trustHead = colHeadings.find(h => h.textContent.trim().toLowerCase() === 'trust');
+      const lightLinkClass = 'text-slate-600 hover:text-slate-900';
+      buildList(productHead && productHead.nextElementSibling, productLinks, lightLinkClass);
+      buildList(developerHead && developerHead.nextElementSibling, developerLinks, lightLinkClass);
+      buildList(trustHead && trustHead.nextElementSibling, trustLinks, lightLinkClass);
+
+      const bottomRow = lightFooter.querySelector('.mx-auto.flex.max-w-7xl');
+      if (bottomRow) {
+        const first = bottomRow.querySelector(':scope > span:first-child');
+        const second = bottomRow.querySelector(':scope > span:last-child');
+        if (first) first.textContent = '© 2026 Reality Kernel · All rights reserved';
+        if (second) upsertSocialRow(second);
+      }
+    }
+  }
+
   function applyRouteFallbackRedirects() {
     if (location.pathname.endsWith('.html')) {
       const clean = location.pathname.replace(/\.html$/, '');
       try { history.replaceState(null, '', clean + location.search + location.hash); } catch (e) { /* ignore */ }
     }
-  }
 
-  // FIX: was missing — caused ReferenceError crashing all DOMContentLoaded handlers
-  function initAgentCursor() {
-    if (window.matchMedia('(hover: none)').matches) return; // skip touch devices
-    const cursor = document.createElement('div');
-    cursor.className = 'agent-cursor';
-    document.body.appendChild(cursor);
-    document.addEventListener('mousemove', e => {
-      cursor.style.left = e.clientX + 'px';
-      cursor.style.top = e.clientY + 'px';
-      cursor.classList.add('active');
-    }, { passive: true });
-    document.addEventListener('mouseleave', () => cursor.classList.remove('active'));
-    document.addEventListener('mousedown', () => cursor.classList.add('clicking'));
-    document.addEventListener('mouseup', () => cursor.classList.remove('clicking'));
-  }
-
-  // Dark mode toggle
-  function initThemeToggle() {
-    const btn = document.getElementById('themeToggle');
-    if (!btn) return;
-    const html = document.documentElement;
-    const stored = localStorage.getItem('rk_theme') || 'light';
-    if (stored === 'dark') {
-      html.setAttribute('data-theme', 'dark');
-      requestAnimationFrame(() => html.classList.add('theme-ready'));
-    }
-    const updateLabel = () => {
-      const isDark = html.getAttribute('data-theme') === 'dark';
-      btn.textContent = isDark ? '\u25d1 Light' : '\u25d0 Dark';
-      btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+    const route = location.pathname.replace(/\/$/, '') || '/';
+    const redirects = {
+      '/docs': '/integration',
+      '/integrate': '/integration'
     };
-    updateLabel();
-    btn.addEventListener('click', () => {
-      html.classList.add('theme-ready');
-      const isDark = html.getAttribute('data-theme') === 'dark';
-      html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-      localStorage.setItem('rk_theme', isDark ? 'light' : 'dark');
-      updateLabel();
-    });
+    const target = redirects[route];
+    if (!target) return;
+
+    const is404Template = !!document.querySelector('.nf-wrap') || /404/.test(document.title);
+    if (is404Template) location.replace(target + location.hash);
+  }
+
+  function initAgentCursor() {
+    if (!window.matchMedia || window.matchMedia('(pointer: coarse)').matches) return;
+    const root = document.body;
+    if (!root || root.querySelector('.agent-cursor')) return;
+
+    const dot = document.createElement('div');
+    dot.className = 'agent-cursor';
+    root.appendChild(dot);
+    root.classList.add('has-agent-cursor');
+
+    let raf = 0;
+    let x = window.innerWidth / 2;
+    let y = window.innerHeight / 2;
+
+    const paint = () => {
+      dot.style.left = x + 'px';
+      dot.style.top = y + 'px';
+      raf = 0;
+    };
+
+    paint();
+    dot.classList.add('active');
+
+    const onPointerMove = (e) => {
+      x = e.clientX;
+      y = e.clientY;
+      dot.classList.add('active');
+      if (!raf) raf = requestAnimationFrame(paint);
+    };
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('mousedown', () => dot.classList.add('clicking'));
+    window.addEventListener('mouseup', () => dot.classList.remove('clicking'));
+    window.addEventListener('blur', () => dot.classList.remove('active'));
+    window.addEventListener('focus', () => dot.classList.add('active'));
   }
 
   function initScrollSpy() {
