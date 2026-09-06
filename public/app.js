@@ -40,12 +40,10 @@
           return { ok: false, status: r.status, body: null, headers: r.headers };
         }
         clearKey();
-        // FIX: redirect to /login not '/' so users land on the sign-in form
         if (location.pathname !== '/login' && !location.pathname.endsWith('login.html')) {
           location.href = '/login';
         }
       }
-      
       let body = null;
       try { body = await r.json(); } catch { /* ignore */ }
       return { ok: r.ok, status: r.status, body, headers: r.headers };
@@ -66,7 +64,6 @@
   }
 
   function requireKey() {
-    // FIX: redirect to /login, not '/' (homepage)
     if (!getKey()) { location.href = '/login'; return false; }
     return true;
   }
@@ -77,24 +74,24 @@
   }
 
   function fmtTime(ts) {
-    if (!ts) return '—';
+    if (!ts) return '\u2014';
     const d = (typeof ts === 'number') ? new Date(ts * 1000) : new Date(ts);
     if (isNaN(d.getTime())) return String(ts);
     return d.toLocaleString();
   }
   function fmtNum(n) {
-    if (n === null || n === undefined) return '—';
+    if (n === null || n === undefined) return '\u2014';
     return Number(n).toLocaleString();
   }
 
-  window.rk = { 
-    API_BASE, getKey, clearKey, call, verifyKey, requireKey, 
-    logout, fmtTime, fmtNum, isPlausibleKey, htmlEscape, newIdempotencyKey 
+  window.rk = {
+    API_BASE, getKey, clearKey, call, verifyKey, requireKey,
+    logout, fmtTime, fmtNum, isPlausibleKey, htmlEscape, newIdempotencyKey
   }
-  /* ── Portal v2 shared behaviours ────────────────────────────────────── */
 
-  // Minimal, dependency-free syntax highlighter for docs code blocks.
-  // Operates on already-escaped text. Good enough for python/ts/bash/json.
+  /* \u2500\u2500 Portal v2 shared behaviours \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+
+  // Minimal, dependency-free syntax highlighter.
   const KW = {
     python: /\b(import|from|as|def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|try|except|finally|raise|with|lambda|yield|async|await|pass|break|continue|global|nonlocal|del|assert)\b/g,
     typescript: /\b(import|from|export|default|const|let|var|function|return|if|else|for|while|in|of|new|class|extends|interface|type|async|await|throw|try|catch|finally|switch|case|break|continue|typeof|instanceof|null|undefined|true|false|this|enum|implements|readonly|as|satisfies)\b/g,
@@ -108,23 +105,15 @@
     if (lang === 'py') lang = 'python';
     let s = htmlEscape(src);
     const slots = [];
-    // Placeholders use private-use code points (no digits/letters) so later passes never re-tokenise them.
     const stash = (cls, txt) => { slots.push('<span class="' + cls + '">' + txt + '</span>'); return '\u0000' + String.fromCharCode(0xE000 + slots.length - 1) + '\u0000'; };
     const slotIdx = (ch) => ch.charCodeAt(0) - 0xE000;
-    // comments
     if (lang === 'python' || lang === 'bash') s = s.replace(/(^|[^:\\])(#[^\n]*)/gm, (m, a, c) => a + stash('tk-c', c));
     if (lang === 'typescript') s = s.replace(/(\/\/[^\n]*)/g, (m) => stash('tk-c', m)).replace(/\/\*[\s\S]*?\*\//g, (m) => stash('tk-c', m));
-    // strings (escaped quotes appear as &quot; / &#39;)
     s = s.replace(/(&quot;(?:(?!&quot;)[^\n])*&quot;|&#39;(?:(?!&#39;)[^\n])*&#39;|`[^`]*`)/g, (m) => stash('tk-s', m));
-    // decorators / types
     if (lang === 'python') s = s.replace(/(^|\s)(@[\w.]+)/gm, (m, a, d) => a + stash('tk-t', d));
-    // numbers
     s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, (m) => stash('tk-n', m));
-    // keywords
     if (KW[lang]) s = s.replace(KW[lang], (m, a, b) => (lang === 'bash' ? a + stash('tk-k', b) : stash('tk-k', m)));
-    // function calls
     if (lang === 'python' || lang === 'typescript') s = s.replace(/\b([A-Za-z_][\w]*)(?=\()/g, (m) => stash('tk-f', m));
-    // json keys
     if (lang === 'json') s = s.replace(/\u0000([\uE000-\uF8FF])\u0000(?=\s*:)/g, (m, ch) => { const i = slotIdx(ch); slots[i] = slots[i].replace('tk-s', 'tk-k'); return m; });
     return s.replace(/\u0000([\uE000-\uF8FF])\u0000/g, (m, ch) => slots[slotIdx(ch)]);
   }
@@ -148,7 +137,7 @@
             const label = btn.querySelector('span'); const prev = label ? label.textContent : '';
             if (label) label.textContent = 'Copied';
             setTimeout(() => { btn.classList.remove('copied'); if (label) label.textContent = prev || 'Copy'; }, 1600);
-          } catch { /* clipboard blocked — no-op */ }
+          } catch { /* clipboard blocked */ }
         });
       }
     });
@@ -158,54 +147,110 @@
     (root || document).querySelectorAll('.rk-tabs').forEach(group => {
       const tabs = Array.from(group.querySelectorAll('.rk-tab'));
       const panels = Array.from(group.querySelectorAll('.rk-tabpanel'));
-      if (!tabs.length || !panels.length) return
+      if (!tabs.length || !panels.length) return;
       const activate = (tab, index) => {
-        tabs.forEach(x => {
-          x.classList.remove('active');
-          x.setAttribute('aria-selected', 'false');
-          x.setAttribute('tabindex', '-1');
-        });
-        panels.forEach(x => {
-          x.classList.remove('active');
-          x.hidden = true;
-        })
-        tab.classList.add('active');
-        tab.setAttribute('aria-selected', 'true');
-        tab.setAttribute('tabindex', '0')
+        tabs.forEach(x => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); x.setAttribute('tabindex', '-1'); });
+        panels.forEach(x => { x.classList.remove('active'); x.hidden = true; });
+        tab.classList.add('active'); tab.setAttribute('aria-selected', 'true'); tab.setAttribute('tabindex', '0');
         const byDataTab = tab.dataset.tab ? group.querySelector('.rk-tabpanel[data-tab="' + tab.dataset.tab + '"]') : null;
         const target = byDataTab || panels[index] || null;
-        if (target) {
-          target.classList.add('active');
-          target.hidden = false;
-        }
-      }
-      tabs.forEach((t, i) => t.addEventListener('click', () => activate(t, i)))
+        if (target) { target.classList.add('active'); target.hidden = false; }
+      };
+      tabs.forEach((t, i) => t.addEventListener('click', () => activate(t, i)));
       const activeTab = tabs.find(t => t.classList.contains('active')) || tabs[0];
       activate(activeTab, tabs.indexOf(activeTab));
     });
   }
 
+  // FIX: nav was undefined — query it inside the function scope
   function initHeader() {
     const header = document.querySelector('.rk-header');
-    if (!header) return
+    if (!header) return;
+    const nav = header.querySelector('nav.rk-nav'); // FIX: was undefined, breaking mobile menu
     const path = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
     const alias = { '/integration': '/docs', '/integrate': '/docs', '/sdk': '/docs' };
     const cur = alias[path] || path;
     header.querySelectorAll('nav.rk-nav a').forEach(a => {
       const href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
       if (href === cur || (href === '/docs' && cur === '/docs')) a.classList.add('active');
-    })
+    });
     const toggle = header.querySelector('.rk-menu-toggle');
-    if (toggle && nav) toggle.addEventListener('click', () => nav.classList.toggle('open'))
-    // Signed-in visitors see the console, not the access CTA
+    if (toggle && nav) {
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.addEventListener('click', () => {
+        const isOpen = nav.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+      // Close nav when a link is clicked on mobile
+      nav.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', () => {
+          nav.classList.remove('open');
+          toggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+      // Close on outside click
+      document.addEventListener('click', (e) => {
+        if (!header.contains(e.target) && nav.classList.contains('open')) {
+          nav.classList.remove('open');
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+    // Signed-in visitors: show Dashboard, hide Request Access
     if (getKey()) {
       header.querySelectorAll('[data-auth="signin"]').forEach(a => { a.textContent = 'Dashboard'; a.href = '/dashboard'; });
       header.querySelectorAll('[data-auth="request"]').forEach(a => { a.style.display = 'none'; });
     }
   }
 
-  
-      }
+  // FIX: was missing — caused ReferenceError crashing all DOMContentLoaded handlers
+  function applyRouteFallbackRedirects() {
+    if (location.pathname.endsWith('.html')) {
+      const clean = location.pathname.replace(/\.html$/, '');
+      try { history.replaceState(null, '', clean + location.search + location.hash); } catch (e) { /* ignore */ }
+    }
+  }
+
+  // FIX: was missing — caused ReferenceError crashing all DOMContentLoaded handlers
+  function initAgentCursor() {
+    if (window.matchMedia('(hover: none)').matches) return; // skip touch devices
+    const cursor = document.createElement('div');
+    cursor.className = 'agent-cursor';
+    document.body.appendChild(cursor);
+    document.addEventListener('mousemove', e => {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top = e.clientY + 'px';
+      cursor.classList.add('active');
+    }, { passive: true });
+    document.addEventListener('mouseleave', () => cursor.classList.remove('active'));
+    document.addEventListener('mousedown', () => cursor.classList.add('clicking'));
+    document.addEventListener('mouseup', () => cursor.classList.remove('clicking'));
+  }
+
+  // Dark mode toggle
+  function initThemeToggle() {
+    const btn = document.getElementById('themeToggle');
+    if (!btn) return;
+    const html = document.documentElement;
+    const stored = localStorage.getItem('rk_theme') || 'light';
+    if (stored === 'dark') {
+      html.setAttribute('data-theme', 'dark');
+      requestAnimationFrame(() => html.classList.add('theme-ready'));
+    }
+    const updateLabel = () => {
+      const isDark = html.getAttribute('data-theme') === 'dark';
+      btn.textContent = isDark ? '\u25d1 Light' : '\u25d0 Dark';
+      btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+    };
+    updateLabel();
+    btn.addEventListener('click', () => {
+      html.classList.add('theme-ready');
+      const isDark = html.getAttribute('data-theme') === 'dark';
+      html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+      localStorage.setItem('rk_theme', isDark ? 'light' : 'dark');
+      updateLabel();
+    });
+  }
 
   function initScrollSpy() {
     const side = document.querySelector('.docs-side');
@@ -224,32 +269,31 @@
   }
 
   window.rk.highlight = highlight;
-  window.rk.enhanceCodeBlocks = enhanceCodeBlocks
+  window.rk.enhanceCodeBlocks = enhanceCodeBlocks;
+
   document.addEventListener('DOMContentLoaded', () => {
-    const isAuth = !!getKey()
+    const isAuth = !!getKey();
     applyRouteFallbackRedirects();
-    initHeader()
+    initHeader();
+    initThemeToggle();
     enhanceCodeBlocks();
     initTabs();
-    initScrollSpy()
-    // 1. Update navigation auth button
+    initScrollSpy();
+
     const navAuthBtn = document.getElementById('nav-auth-btn');
     if (navAuthBtn && isAuth) {
       navAuthBtn.textContent = 'Dashboard';
       navAuthBtn.href = '/dashboard';
     }
 
-    // 2. Hide elements that shouldn't be seen when logged in (like "Get API Key" CTAs)
     if (isAuth) {
-      document.querySelectorAll('.hide-on-auth').forEach(el => {
-        el.style.display = 'none';
-      });
+      document.querySelectorAll('.hide-on-auth').forEach(el => { el.style.display = 'none'; });
     }
 
-    // Elite-Tier Enhancements
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    initAgentCursor()
-    // 3. Scroll Progress Bar
+    initAgentCursor();
+
+    // Scroll Progress Bar
     const scrollProgress = document.getElementById('scrollProgress');
     if (scrollProgress && !prefersReducedMotion) {
       window.addEventListener('scroll', () => {
@@ -259,7 +303,7 @@
       }, { passive: true });
     }
 
-    // 4. Reveal Animations
+    // Reveal Animations
     if (!prefersReducedMotion) {
       const observer = new IntersectionObserver((entries) => {
         entries.forEach(e => {
@@ -274,7 +318,7 @@
       document.querySelectorAll('.reveal').forEach(el => el.classList.add('reveal-in'));
     }
 
-    // 5. Cmd+K Palette
+    // Cmd+K Palette
     const cmdOverlay = document.getElementById('cmdOverlay');
     const cmdInput = document.getElementById('cmdInput');
     if (cmdOverlay && cmdInput) {
@@ -282,56 +326,32 @@
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
           e.preventDefault();
           cmdOverlay.classList.add('active');
-          requestAnimationFrame(() => {
-            cmdOverlay.classList.add('show');
-            cmdInput.focus();
-          });
+          requestAnimationFrame(() => { cmdOverlay.classList.add('show'); cmdInput.focus(); });
         }
-        if (e.key === 'Escape' && cmdOverlay.classList.contains('active')) {
-          closeCmdPalette();
-        }
+        if (e.key === 'Escape' && cmdOverlay.classList.contains('active')) closeCmdPalette();
       });
-      cmdOverlay.addEventListener('click', (e) => {
-        if (e.target === cmdOverlay) closeCmdPalette();
-      });
+      cmdOverlay.addEventListener('click', (e) => { if (e.target === cmdOverlay) closeCmdPalette(); });
       function closeCmdPalette() {
         cmdOverlay.classList.remove('show');
         setTimeout(() => cmdOverlay.classList.remove('active'), 200);
       }
-      
       const cmdResults = document.querySelectorAll('.cmd-result');
       let selectedCmdIndex = 0;
       cmdInput.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          selectedCmdIndex = (selectedCmdIndex + 1) % cmdResults.length;
-          updateCmdSelection();
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          selectedCmdIndex = (selectedCmdIndex - 1 + cmdResults.length) % cmdResults.length;
-          updateCmdSelection();
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          const href = cmdResults[selectedCmdIndex].getAttribute('data-href');
-          if (href) location.href = href;
-        }
+        if (e.key === 'ArrowDown') { e.preventDefault(); selectedCmdIndex = (selectedCmdIndex + 1) % cmdResults.length; updateCmdSelection(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); selectedCmdIndex = (selectedCmdIndex - 1 + cmdResults.length) % cmdResults.length; updateCmdSelection(); }
+        else if (e.key === 'Enter') { e.preventDefault(); const href = cmdResults[selectedCmdIndex].getAttribute('data-href'); if (href) location.href = href; }
       });
       cmdResults.forEach((res, idx) => {
-        res.addEventListener('mouseover', () => {
-          selectedCmdIndex = idx;
-          updateCmdSelection();
-        });
-        res.addEventListener('click', () => {
-          const href = res.getAttribute('data-href');
-          if (href) location.href = href;
-        });
+        res.addEventListener('mouseover', () => { selectedCmdIndex = idx; updateCmdSelection(); });
+        res.addEventListener('click', () => { const href = res.getAttribute('data-href'); if (href) location.href = href; });
       });
       function updateCmdSelection() {
         cmdResults.forEach((r, i) => r.classList.toggle('selected', i === selectedCmdIndex));
       }
     }
 
-    // 6. Live Counter Ticker
+    // Live Counter Ticker
     const navLiveStats = document.getElementById('navLiveStats');
     if (navLiveStats && !prefersReducedMotion) {
       let currentBlocks = 1402;
@@ -343,7 +363,7 @@
       }, 2000);
     }
 
-    // 7. Terminal Theatre
+    // Terminal Theatre
     const termTheatre = document.getElementById('terminalTheatre');
     if (termTheatre && !prefersReducedMotion) {
       const termTyping = document.getElementById('termTyping');
@@ -352,33 +372,27 @@
         document.getElementById('termLine2'),
         document.getElementById('termLine3'),
         document.getElementById('termLine4')
-      ]
-      const command = 'curl -H "X-aws-ec2-metadata-token: $(cat token.txt)" http://169.254.169.254/latest/'
+      ];
+      const command = 'curl -H "X-aws-ec2-metadata-token: $(cat token.txt)" http://169.254.169.254/latest/';
       let theatreObserver = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) {
-          theatreObserver.disconnect();
-          setTimeout(() => runTerminalTheatre(), 500);
-        }
+        if (entries[0].isIntersecting) { theatreObserver.disconnect(); setTimeout(() => runTerminalTheatre(), 500); }
       }, { threshold: 0.5 });
-      theatreObserver.observe(termTheatre)
+      theatreObserver.observe(termTheatre);
       async function runTerminalTheatre() {
         lines.forEach(l => l?.classList.remove('active'));
-        if(lines[0]) lines[0].classList.add('active');
-        if(termTyping) termTyping.textContent = ''
+        if (lines[0]) lines[0].classList.add('active');
+        if (termTyping) termTyping.textContent = '';
         for (let i = 0; i < command.length; i++) {
-          if(termTyping) termTyping.textContent += command[i];
+          if (termTyping) termTyping.textContent += command[i];
           await new Promise(r => setTimeout(r, 20 + Math.random() * 30));
         }
-        
         await new Promise(r => setTimeout(r, 400));
-        if(lines[1]) lines[1].classList.add('active');
+        if (lines[1]) lines[1].classList.add('active');
         await new Promise(r => setTimeout(r, 150));
-        if(lines[2]) lines[2].classList.add('active');
+        if (lines[2]) lines[2].classList.add('active');
         await new Promise(r => setTimeout(r, 100));
-        if(lines[3]) lines[3].classList.add('active');
+        if (lines[3]) lines[3].classList.add('active');
       }
     }
-
   });
 })()
-

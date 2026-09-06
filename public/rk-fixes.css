@@ -1,0 +1,389 @@
+/* ================================================================
+   Reality Kernel — UI patch: missing class definitions + upgrades
+   Fixes visual glitches and missing styles across the landing page.
+   ================================================================ */
+
+/* ── Scroll progress bar ──────────────────────────────────────── */
+#scrollProgress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #14b8a6, #7c6aff, #0f766e);
+  width: 0%;
+  z-index: 10000;
+  transition: width 0.1s ease-out;
+  pointer-events: none;
+  border-radius: 0 1px 1px 0;
+}
+
+/* ── Blueprint grid overlay ───────────────────────────────────── */
+.blueprint {
+  background-image:
+    linear-gradient(rgba(15,23,42,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15,23,42,0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.blueprint-fade {
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 80%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 80%);
+}
+
+/* ── Elite hero canvas ────────────────────────────────────────── */
+.elite-canvas {
+  background: radial-gradient(55% 55% at 50% 0%, rgba(20,184,166,0.08) 0%, transparent 100%);
+}
+
+/* ── Eyebrow label ────────────────────────────────────────────── */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10.5px;
+  color: var(--accent, #14b8a6);
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* ── Primary / Secondary buttons (public pages) ───────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 22px;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 13.5px;
+  font-weight: 500;
+  background: #0f172a;
+  color: #fff;
+  border: 1px solid #0f172a;
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.2s ease;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  line-height: 1;
+}
+.btn-primary:hover {
+  background: #1e293b;
+  border-color: #1e293b;
+  color: #fff;
+  border-bottom-color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(15,23,42,0.2);
+}
+.btn-primary:active { transform: translateY(0); box-shadow: none; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 13.5px;
+  font-weight: 500;
+  background: rgba(255,255,255,0.7);
+  color: #334155;
+  border: 1px solid rgba(15,23,42,0.16);
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+}
+.btn-secondary:hover {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(15,23,42,0.26);
+  color: #0f172a;
+  border-bottom-color: rgba(15,23,42,0.26);
+  transform: translateY(-1px);
+}
+.btn-secondary:active { transform: translateY(0); }
+
+/* ── Hero heading premium styles ──────────────────────────────── */
+.hero-premium {
+  font-family: 'Inter Tight', system-ui, sans-serif;
+  line-height: 1.08;
+}
+.hero-premium-contrast {
+  display: block;
+  margin-top: 2px;
+}
+
+/* ── Step numbers (How it works section) ──────────────────────── */
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(20,184,166,0.10);
+  border: 1px solid rgba(20,184,166,0.28);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f766e;
+  flex-shrink: 0;
+}
+
+/* ── Verdict badges ───────────────────────────────────────────── */
+.verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.verdict-badge.allow {
+  background: rgba(16,185,129,0.10);
+  color: #065f46;
+  border: 1px solid rgba(16,185,129,0.28);
+}
+.verdict-badge.warn {
+  background: rgba(217,119,6,0.10);
+  color: #92400e;
+  border: 1px solid rgba(217,119,6,0.28);
+}
+.verdict-badge.block {
+  background: rgba(220,38,38,0.08);
+  color: #991b1b;
+  border: 1px solid rgba(220,38,38,0.24);
+}
+
+/* ── Chip inline tags ─────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: rgba(15,23,42,0.06);
+  border: 1px solid rgba(15,23,42,0.10);
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: #334155;
+  font-weight: 500;
+  text-decoration: none;
+  letter-spacing: -0.005em;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+a.chip { border-bottom: none; }
+a.chip:hover {
+  background: rgba(15,23,42,0.10);
+  border-color: rgba(15,23,42,0.18);
+  color: #0f172a;
+}
+
+/* ── Window dot decoration ────────────────────────────────────── */
+.window-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* ── Nav link (used inside .rk-nav) ───────────────────────────── */
+a.nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 13px;
+  font-size: 13px;
+  color: #64748b;
+  border-radius: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+  text-decoration: none;
+  border-bottom: none !important;
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+a.nav-link:hover {
+  color: #0f172a;
+  background: rgba(255,255,255,0.82);
+  border-bottom: none !important;
+}
+a.nav-link.active {
+  color: #0f766e;
+  background: rgba(20,184,166,0.10);
+}
+
+/* ── Sim buttons (hero threat console) ───────────────────────── */
+.sim-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(148,163,184,0.20);
+  color: #94a3b8;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  line-height: 1.35;
+  margin-top: 0;
+  box-shadow: none;
+  transform: none;
+}
+.sim-btn:hover {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(148,163,184,0.35);
+  color: #cbd5e1;
+  box-shadow: none;
+  transform: none;
+}
+.sim-btn.is-active {
+  background: rgba(20,184,166,0.15);
+  border-color: rgba(20,184,166,0.45);
+  color: #14b8a6;
+  font-weight: 600;
+}
+.sim-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Terminal lines (hero console output) ─────────────────────── */
+#ts-console-output .terminal-line {
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.7;
+  margin: 0;
+  display: block;
+}
+#ts-console-output .terminal-line.error { color: #f87171; }
+#ts-console-output .terminal-line.attack { color: #fb923c; }
+
+/* ── SVG trace path animations (hero sandbox diagram) ─────────── */
+@keyframes rk-svg-dash {
+  to { stroke-dashoffset: -24; }
+}
+
+#ts-trace-safe,
+#ts-trace-agent,
+#ts-trace-attack {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 0;
+  opacity: 0.2;
+  transition: opacity 0.3s ease;
+}
+#ts-trace-safe { opacity: 0.35; }
+
+#ts-trace-safe.run { opacity: 1; animation: rk-svg-dash 1.2s linear infinite; }
+#ts-trace-agent.run { opacity: 1; animation: rk-svg-dash 1.2s linear infinite; }
+#ts-trace-attack.run { opacity: 1; animation: rk-svg-dash 0.9s linear infinite; }
+
+#ts-trace-safe.shattered,
+#ts-trace-agent.shattered,
+#ts-trace-attack.shattered {
+  opacity: 0.1;
+  animation: none;
+  stroke-dasharray: 4 8;
+}
+
+/* ── Tabular numbers ──────────────────────────────────────────── */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ── Comparison section responsive fix ───────────────────────── */
+.rk-compare-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+.rk-compare-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+.rk-compare-header .eyebrow {
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+.rk-compare-header h2 {
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
+  font-weight: 700;
+  margin-top: 0;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  line-height: 1.2;
+}
+
+/* ── Dark mode adjustments ────────────────────────────────────── */
+html[data-theme="dark"] .rk-header {
+  background: rgba(7,12,23,0.88);
+  border-bottom-color: rgba(148,163,184,0.14);
+}
+html[data-theme="dark"] .rk-header nav.rk-nav {
+  background: #070c17;
+}
+html[data-theme="dark"] a.nav-link:hover {
+  background: rgba(255,255,255,0.06);
+  color: #e2e8f0;
+}
+html[data-theme="dark"] .btn-secondary {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(148,163,184,0.22);
+  color: #cbd5e1;
+}
+html[data-theme="dark"] .btn-secondary:hover {
+  background: rgba(255,255,255,0.10);
+  color: #e2e8f0;
+  border-color: rgba(148,163,184,0.35);
+}
+html[data-theme="dark"] .chip {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(148,163,184,0.18);
+  color: #94a3b8;
+}
+html[data-theme="dark"] .step-num {
+  background: rgba(20,184,166,0.15);
+  color: #14b8a6;
+}
+html[data-theme="dark"] #themeToggle {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(148,163,184,0.22);
+  color: #94a3b8;
+}
+
+/* ── Theme toggle button base styles ─────────────────────────── */
+#themeToggle {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(15,23,42,0.16);
+  background: rgba(255,255,255,0.7);
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  margin-top: 0;
+  box-shadow: none;
+  transform: none;
+}
+#themeToggle:hover {
+  background: rgba(255,255,255,0.92);
+  color: #0f172a;
+  border-color: rgba(15,23,42,0.26);
+  box-shadow: none;
+  transform: none;
+}
+@media (max-width: 640px) {
+  #themeToggle { display: none !important; }
+}
+
+/* ── Mobile nav open state ────────────────────────────────────── */
+@media (max-width: 900px) {
+  .rk-header nav.rk-nav.open {
+    display: flex !important;
+  }
+}
