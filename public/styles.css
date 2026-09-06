@@ -2105,7 +2105,11 @@ button.rk-nav-link.external:hover, a.rk-nav-link.external:hover { color: var(--t
 .rk-tabs .rk-tab .tk-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .6; }
 .rk-tabs .rk-tabpanel { display: none; }
 .rk-tabs .rk-tabpanel.active { display: block; animation: fadeIn .18s ease; }
-.rk-tabs .rk-tabpanel .rk-code { margin: 0; border-top-left-radius: 0; }
+.rk-tabs .rk-tabpanel .rk-code {
+  margin: 0;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
 
 /* ── Section shells ────────────────────────────────────────────────────── */
 .rk-section { padding: 104px 32px; position: relative; }
@@ -2466,11 +2470,23 @@ form label.check { display: flex; align-items: center; gap: 8px; text-transform:
 
 /* Agent auto-config section */
 .rk-agent-config {
-  border-left: 4px solid #14b8a6;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(20,184,166,0.22);
   background: rgba(20,184,166,0.03);
-  border-radius: 0 12px 12px 0;
+  border-radius: 14px;
   padding: 2rem;
   margin: 2rem 0;
+}
+.rk-agent-config::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #22d3ee, #14b8a6);
 }
 .rk-new-badge {
   display: inline-flex;
@@ -2588,6 +2604,62 @@ html[data-theme="dark"] body::after {
   opacity: .32;
 }
 
+html[data-theme="dark"] .rk-header {
+  background: linear-gradient(180deg, rgba(2, 10, 20, 0.96), rgba(3, 12, 24, 0.9)) !important;
+  border-bottom-color: rgba(34, 211, 238, 0.34) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.52);
+}
+
+html[data-theme="dark"] .rk-header nav.rk-nav,
+html[data-theme="dark"] .rk-header:has(nav.rk-nav.open) {
+  background: rgba(3, 12, 24, 0.96) !important;
+}
+
+html[data-theme="dark"] .rk-header nav.rk-nav a {
+  color: #a8d5f7;
+}
+
+html[data-theme="dark"] .rk-header nav.rk-nav a:hover {
+  color: #eff8ff;
+  background: rgba(34, 211, 238, 0.18);
+}
+
+html[data-theme="dark"] .rk-header nav.rk-nav a.active {
+  color: #04111b;
+  background: linear-gradient(135deg, #67e8f9, #22d3ee);
+  box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.18) inset;
+}
+
+html[data-theme="dark"] .rk-header .rk-brand strong {
+  color: #eff8ff;
+}
+
+html[data-theme="dark"] .rk-header .brand-sub {
+  color: #7fb2d8;
+}
+
+html[data-theme="dark"] .rk-header .rk-header-cta .btn {
+  border-color: rgba(34, 211, 238, 0.42);
+  background: rgba(8, 26, 42, 0.88);
+  color: #d7eeff;
+}
+
+html[data-theme="dark"] .rk-header .rk-header-cta .btn:hover {
+  background: rgba(34, 211, 238, 0.2);
+  color: #f4fcff;
+}
+
+html[data-theme="dark"] .rk-menu-toggle {
+  border-color: rgba(34, 211, 238, 0.34);
+  color: #a8d5f7;
+  background: rgba(8, 24, 40, 0.9);
+}
+
+html[data-theme="dark"] .rk-menu-toggle:hover {
+  background: rgba(34, 211, 238, 0.16);
+  color: #eff8ff;
+}
+
 html.theme-ready body,
 html.theme-ready .rk-header,
 html.theme-ready .docs-block,
@@ -2643,8 +2715,7 @@ html.theme-ready .callout {
 
 .rk-agent-config {
   border: 1px solid rgba(20,184,166,0.22);
-  border-left: 4px solid #14b8a6;
-  border-radius: 0 14px 14px 0;
+  border-radius: 14px;
   background: rgba(20,184,166,0.03);
   padding: 2rem;
   margin: 2rem 0;
