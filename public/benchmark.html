@@ -527,7 +527,7 @@
     <!-- HOW THE ENGINE DECIDES -->
     <div class="card">
       <h3>How the engine makes each decision</h3>
-      <p>Every <code>command + prime_intent</code> pair submitted to <code>POST /v1/check</code> passes through a deterministic 5-stage pipeline. All stages run synchronously before the agent is permitted to execute anything.</p>
+      <p>Every <code>command + prime_intent</code> pair submitted to <code>POST /v1/check</code> passes through a deterministic 5-stage pipeline. All stages run synchronously before your integration wrapper should permit execution.</p>
 
       <div style="margin-top: 20px;">
         <div class="pipeline-step">

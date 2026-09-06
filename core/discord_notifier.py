@@ -21,7 +21,8 @@ import hashlib
 import logging
 import os
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+import secrets
 
 import httpx
 
@@ -31,6 +32,7 @@ NOTIFY_BLOCK     = os.environ.get("DISCORD_NOTIFY_BLOCK", "false").lower() == "t
 DASHBOARD_URL    = os.environ.get("RK_DASHBOARD_URL", "https://www.realitykernel.dev").rstrip("/")
 GLOBAL_WEBHOOK   = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 SERVER_SECRET    = os.environ.get("RK_SECRET_KEY", "").encode()
+DIRECT_OVERRIDE_TTL_SEC = max(60, min(86400, int(os.environ.get("RK_DIRECT_OVERRIDE_TTL_SEC", "600"))))
 
 # Colour codes (Discord uses decimal)
 _COLOUR_WARN  = 0xF4A429   # amber
@@ -54,18 +56,19 @@ def _truncate(s: str, n: int) -> str:
     return s if len(s) <= n else s[:n] + "…"
 
 
-def _generate_action_token(action_id: str, decision: str) -> tuple[str, str]:
-    """Generates a 24h HMAC-SHA256 token for direct Discord actions."""
+def _generate_action_token(action_id: str, decision: str, key_hash: str) -> tuple[str, str, str]:
+    """Generates a short-lived HMAC token with nonce for direct Discord actions."""
     if not SERVER_SECRET:
         # Fallback for dev if secret not set, though api/index.py generates one
         secret = b"dev-fallback-secret-12345"
     else:
         secret = SERVER_SECRET
         
-    expires_at = str(int((datetime.now(timezone.utc) + timedelta(hours=24)).timestamp()))
-    payload = f"{action_id}:{decision}:{expires_at}".encode()
+    expires_at = str(int(time.time()) + DIRECT_OVERRIDE_TTL_SEC)
+    nonce = secrets.token_hex(8)
+    payload = f"{action_id}:{decision}:{key_hash}:{expires_at}:{nonce}".encode()
     sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
-    return sig, expires_at
+    return sig, expires_at, nonce
 
 
 def _build_payload(
@@ -79,6 +82,7 @@ def _build_payload(
     evidence: list[str],
     session_id: str = "",
     agent_id: str = "",
+    key_hash: str = "",
 ) -> dict:
     """Build the Discord embed payload."""
 
@@ -155,17 +159,18 @@ def _build_payload(
     # Dashboard link — goes straight to audit log / direct action
     dashboard_link = f"{DASHBOARD_URL}/dashboard"
     
-    app_sig, app_exp = _generate_action_token(action_id, "approved")
-    rej_sig, rej_exp = _generate_action_token(action_id, "rejected")
-    
-    app_url = f"{dashboard_link}?action=approve&action_id={action_id}&token={app_sig}&expires={app_exp}"
-    rej_url = f"{dashboard_link}?action=reject&action_id={action_id}&token={rej_sig}&expires={rej_exp}"
+    if key_hash:
+        app_sig, app_exp, app_nonce = _generate_action_token(action_id, "approved", key_hash)
+        rej_sig, rej_exp, rej_nonce = _generate_action_token(action_id, "rejected", key_hash)
 
-    fields.append({
-        "name":   "Review on Dashboard",
-        "value":  f"[✅ Approve Action]({app_url}) • [❌ Block Action]({rej_url})",
-        "inline": False,
-    })
+        app_url = f"{dashboard_link}?action=approve&action_id={action_id}&token={app_sig}&expires={app_exp}&nonce={app_nonce}"
+        rej_url = f"{dashboard_link}?action=reject&action_id={action_id}&token={rej_sig}&expires={rej_exp}&nonce={rej_nonce}"
+
+        fields.append({
+            "name":   "Review on Dashboard",
+            "value":  f"[✅ Approve Action]({app_url}) • [❌ Block Action]({rej_url})",
+            "inline": False,
+        })
 
     embed = {
         "title":       verdict_display,
@@ -197,6 +202,7 @@ def notify(
     webhook_url: str,
     session_id: str = "",
     agent_id: str = "",
+    key_hash: str = "",
 ) -> None:
     """
     Fire a Discord webhook notification to a specific user's webhook URL.
@@ -219,6 +225,7 @@ def notify(
         evidence=evidence,
         session_id=session_id,
         agent_id=agent_id,
+        key_hash=key_hash,
     )
 
     try:
