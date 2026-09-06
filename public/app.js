@@ -2,8 +2,7 @@
 (function () {
   const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? (window.RK_API_BASE || 'http://localhost:8000')
-    : '';
-
+    : ''
   function getKey() {
     return sessionStorage.getItem('rk_api_key') || localStorage.getItem('rk_api_key') || null;
   }
@@ -30,15 +29,12 @@
   async function call(path, opts = {}) {
     const key = getKey();
     const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-    if (key) headers['Authorization'] = 'Bearer ' + key;
-
+    if (key) headers['Authorization'] = 'Bearer ' + key
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), opts.timeout || 30000);
-      
+      const timeoutId = setTimeout(() => controller.abort(), opts.timeout || 30000)
       const r = await fetch(API_BASE + path, { ...opts, headers, signal: controller.signal });
-      clearTimeout(timeoutId);
-
+      clearTimeout(timeoutId)
       if (r.status === 401 || r.status === 403) {
         if (sessionStorage.getItem('rk_preview_mode') === 'true') {
           return { ok: false, status: r.status, body: null, headers: r.headers };
@@ -94,8 +90,7 @@
   window.rk = { 
     API_BASE, getKey, clearKey, call, verifyKey, requireKey, 
     logout, fmtTime, fmtNum, isPlausibleKey, htmlEscape, newIdempotencyKey 
-  };
-
+  }
   /* ── Portal v2 shared behaviours ────────────────────────────────────── */
 
   // Minimal, dependency-free syntax highlighter for docs code blocks.
@@ -163,8 +158,7 @@
     (root || document).querySelectorAll('.rk-tabs').forEach(group => {
       const tabs = Array.from(group.querySelectorAll('.rk-tab'));
       const panels = Array.from(group.querySelectorAll('.rk-tabpanel'));
-      if (!tabs.length || !panels.length) return;
-
+      if (!tabs.length || !panels.length) return
       const activate = (tab, index) => {
         tabs.forEach(x => {
           x.classList.remove('active');
@@ -174,22 +168,18 @@
         panels.forEach(x => {
           x.classList.remove('active');
           x.hidden = true;
-        });
-
+        })
         tab.classList.add('active');
         tab.setAttribute('aria-selected', 'true');
-        tab.setAttribute('tabindex', '0');
-
+        tab.setAttribute('tabindex', '0')
         const byDataTab = tab.dataset.tab ? group.querySelector('.rk-tabpanel[data-tab="' + tab.dataset.tab + '"]') : null;
         const target = byDataTab || panels[index] || null;
         if (target) {
           target.classList.add('active');
           target.hidden = false;
         }
-      };
-
-      tabs.forEach((t, i) => t.addEventListener('click', () => activate(t, i)));
-
+      }
+      tabs.forEach((t, i) => t.addEventListener('click', () => activate(t, i)))
       const activeTab = tabs.find(t => t.classList.contains('active')) || tabs[0];
       activate(activeTab, tabs.indexOf(activeTab));
     });
@@ -197,171 +187,25 @@
 
   function initHeader() {
     const header = document.querySelector('.rk-header');
-    if (!header) return;
-
-    const nav = header.querySelector('nav.rk-nav');
-    if (nav && !nav.querySelector('a[href="/"]')) {
-      const home = document.createElement('a');
-      home.href = '/';
-      home.textContent = 'Home';
-      nav.insertAdjacentElement('afterbegin', home);
-    }
-    if (nav && !nav.querySelector('a[href="/about"]')) {
-      const about = document.createElement('a');
-      about.href = '/about';
-      about.textContent = 'About';
-      const pricing = nav.querySelector('a[href="/pricing"]');
-      if (pricing) pricing.insertAdjacentElement('beforebegin', about);
-      else nav.appendChild(about);
-    }
-
+    if (!header) return
     const path = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
     const alias = { '/integration': '/docs', '/integrate': '/docs', '/sdk': '/docs' };
     const cur = alias[path] || path;
     header.querySelectorAll('nav.rk-nav a').forEach(a => {
       const href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
       if (href === cur || (href === '/docs' && cur === '/docs')) a.classList.add('active');
-    });
-
+    })
     const toggle = header.querySelector('.rk-menu-toggle');
-    if (toggle && nav) toggle.addEventListener('click', () => nav.classList.toggle('open'));
-
+    if (toggle && nav) toggle.addEventListener('click', () => nav.classList.toggle('open'))
     // Signed-in visitors see the console, not the access CTA
     if (getKey()) {
-      header.querySelectorAll('[data-auth="signin"]').forEach(a => { a.textContent = 'Operator Console'; a.href = '/dashboard'; });
+      header.querySelectorAll('[data-auth="signin"]').forEach(a => { a.textContent = 'Dashboard'; a.href = '/dashboard'; });
       header.querySelectorAll('[data-auth="request"]').forEach(a => { a.style.display = 'none'; });
     }
   }
 
-  function applyTheme(theme) {
-    const root = document.documentElement;
-    root.setAttribute('data-theme', theme);
-    root.classList.add('theme-ready');
-  }
-
-  function initThemeToggle() {
-    const root = document.documentElement;
-    const stored = localStorage.getItem('rk_theme');
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = stored || (prefersDark ? 'dark' : 'light');
-    applyTheme(theme);
-
-    const headerCta = document.querySelector('.rk-header .rk-header-cta');
-    if (!headerCta || headerCta.querySelector('.rk-theme-toggle')) return;
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'rk-theme-toggle btn btn-sm ghost';
-    btn.setAttribute('aria-label', 'Toggle dark mode');
-
-    const label = document.createElement('span');
-    const syncLabel = () => {
-      const current = root.getAttribute('data-theme') || 'light';
-      label.textContent = current === 'dark' ? 'Light' : 'Dark';
-      btn.setAttribute('aria-pressed', String(current === 'dark'));
-    };
-
-    btn.append('Theme · ', label);
-    btn.addEventListener('click', () => {
-      const current = root.getAttribute('data-theme') || 'light';
-      const next = current === 'dark' ? 'light' : 'dark';
-      applyTheme(next);
-      localStorage.setItem('rk_theme', next);
-      syncLabel();
-    });
-
-    syncLabel();
-    const menuToggle = headerCta.querySelector('.rk-menu-toggle');
-    if (menuToggle) headerCta.insertBefore(btn, menuToggle);
-    else headerCta.appendChild(btn);
-  }
-
-  function initFooterLegalLinks() {
-    document.querySelectorAll('.rk-footer').forEach((footer) => {
-      const trustHead = Array.from(footer.querySelectorAll('h5')).find(h => h.textContent.trim().toLowerCase() === 'trust');
-      if (!trustHead) return;
-      const ul = trustHead.nextElementSibling;
-      if (!ul || ul.tagName !== 'UL') return;
-
-      const wanted = [
-        { href: '/about', label: 'About' },
-        { href: '/privacy', label: 'Privacy Policy' },
-        { href: '/terms', label: 'Terms & Conditions' },
-        { href: '/cookies', label: 'Cookie Policy' },
-        { href: '/security', label: 'Security & threat model' },
-        { href: '/faq', label: 'FAQ' },
-        { href: 'mailto:contact@realitykernel.dev', label: 'contact@realitykernel.dev' },
-        { href: 'https://www.linkedin.com/company/keter-labs/', label: 'LinkedIn', external: true },
-      ];
-
-      const existing = new Set(Array.from(ul.querySelectorAll('a')).map(a => a.getAttribute('href')));
-      wanted.forEach(item => {
-        if (existing.has(item.href)) return;
-        const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.href = item.href;
-        a.textContent = item.label;
-        if (item.external) {
-          a.target = '_blank';
-          a.rel = 'noopener';
-        }
-        li.appendChild(a);
-        ul.appendChild(li);
-      });
-    });
-  }
-
-  function initAgentCursor() {
-    if (!window.matchMedia || window.matchMedia('(pointer: coarse)').matches) return;
-    const root = document.body;
-    if (!root || root.querySelector('.agent-cursor')) return;
-
-    const dot = document.createElement('div');
-    dot.className = 'agent-cursor';
-    root.appendChild(dot);
-    root.classList.add('has-agent-cursor');
-
-    let raf = 0;
-    let x = window.innerWidth / 2;
-    let y = window.innerHeight / 2;
-
-    const paint = () => {
-      dot.style.left = x + 'px';
-      dot.style.top = y + 'px';
-      raf = 0;
-    };
-
-    paint();
-    dot.classList.add('active');
-
-    const onPointerMove = (e) => {
-      x = e.clientX;
-      y = e.clientY;
-      dot.classList.add('active');
-      if (!raf) raf = requestAnimationFrame(paint);
-    };
-
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('mousedown', () => dot.classList.add('clicking'));
-    window.addEventListener('mouseup', () => dot.classList.remove('clicking'));
-    window.addEventListener('blur', () => dot.classList.remove('active'));
-    window.addEventListener('focus', () => dot.classList.add('active'));
-  }
-
-  function applyRouteFallbackRedirects() {
-    const route = location.pathname.replace(/\/$/, '') || '/';
-    const redirects = {
-      '/docs': '/integration',
-      '/integrate': '/integration'
-    };
-    const target = redirects[route];
-    if (!target) return;
-
-    const is404Template = !!document.querySelector('.nf-wrap') || /404/.test(document.title);
-    if (is404Template) {
-      location.replace(target + location.hash);
-    }
-  }
+  
+      }
 
   function initScrollSpy() {
     const side = document.querySelector('.docs-side');
@@ -380,19 +224,14 @@
   }
 
   window.rk.highlight = highlight;
-  window.rk.enhanceCodeBlocks = enhanceCodeBlocks;
-
+  window.rk.enhanceCodeBlocks = enhanceCodeBlocks
   document.addEventListener('DOMContentLoaded', () => {
-    const isAuth = !!getKey();
-
+    const isAuth = !!getKey()
     applyRouteFallbackRedirects();
-    initHeader();
-    initThemeToggle();
-    initFooterLegalLinks();
+    initHeader()
     enhanceCodeBlocks();
     initTabs();
-    initScrollSpy();
-    
+    initScrollSpy()
     // 1. Update navigation auth button
     const navAuthBtn = document.getElementById('nav-auth-btn');
     if (navAuthBtn && isAuth) {
@@ -409,8 +248,7 @@
 
     // Elite-Tier Enhancements
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    initAgentCursor();
-
+    initAgentCursor()
     // 3. Scroll Progress Bar
     const scrollProgress = document.getElementById('scrollProgress');
     if (scrollProgress && !prefersReducedMotion) {
@@ -514,23 +352,19 @@
         document.getElementById('termLine2'),
         document.getElementById('termLine3'),
         document.getElementById('termLine4')
-      ];
-      
-      const command = 'curl -H "X-aws-ec2-metadata-token: $(cat token.txt)" http://169.254.169.254/latest/';
-      
+      ]
+      const command = 'curl -H "X-aws-ec2-metadata-token: $(cat token.txt)" http://169.254.169.254/latest/'
       let theatreObserver = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting) {
           theatreObserver.disconnect();
           setTimeout(() => runTerminalTheatre(), 500);
         }
       }, { threshold: 0.5 });
-      theatreObserver.observe(termTheatre);
-
+      theatreObserver.observe(termTheatre)
       async function runTerminalTheatre() {
         lines.forEach(l => l?.classList.remove('active'));
         if(lines[0]) lines[0].classList.add('active');
-        if(termTyping) termTyping.textContent = '';
-        
+        if(termTyping) termTyping.textContent = ''
         for (let i = 0; i < command.length; i++) {
           if(termTyping) termTyping.textContent += command[i];
           await new Promise(r => setTimeout(r, 20 + Math.random() * 30));
@@ -546,4 +380,5 @@
     }
 
   });
-})();
+})()
+
