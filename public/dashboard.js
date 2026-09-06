@@ -380,8 +380,6 @@
       }
     }
 
-    const eh = document.getElementById('engineHealth');
-    if (eh) eh.innerHTML = '<span class="dot ok" style="margin-right:0"></span> Engine · operational';
   }
 
   function renderUsage() {
