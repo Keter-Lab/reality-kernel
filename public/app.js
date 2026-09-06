@@ -259,13 +259,13 @@
 
   function initThemeToggle() {
     const root = document.documentElement;
-    const stored = localStorage.getItem('rk_theme');
+    const stored = localStorage.getItem('rk_theme') || localStorage.getItem('rk-theme');
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const theme = stored || (prefersDark ? 'dark' : 'light');
     applyTheme(theme);
 
-    const headerCta = document.querySelector('.rk-header .rk-header-cta');
-    if (!headerCta || headerCta.querySelector('.rk-theme-toggle')) return;
+    const toggleHost = document.querySelector('.rk-header .rk-header-cta, .operator-header .op-actions');
+    if (!toggleHost || toggleHost.querySelector('.rk-theme-toggle')) return;
 
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -292,13 +292,14 @@
       const next = current === 'dark' ? 'light' : 'dark';
       applyTheme(next);
       localStorage.setItem('rk_theme', next);
+      localStorage.setItem('rk-theme', next);
       syncIcon();
     });
 
     syncIcon();
-    const menuToggle = headerCta.querySelector('.rk-menu-toggle');
-    if (menuToggle) headerCta.insertBefore(btn, menuToggle);
-    else headerCta.appendChild(btn);
+    const menuToggle = toggleHost.querySelector('.rk-menu-toggle');
+    if (menuToggle) toggleHost.insertBefore(btn, menuToggle);
+    else toggleHost.appendChild(btn);
   }
 
   function buildList(ul, items, linkClass = '') {
