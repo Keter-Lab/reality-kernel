@@ -87,6 +87,8 @@
       <a href="#ci">CI / CD scan gate</a>
       <a href="#verify">Offline verification</a>
       <a href="#pin">Key pinning</a>
+      <h5>Agent Setup</h5>
+      <a href="#agent-config">Agent auto-configuration ✦</a>
       <h5>See also</h5>
       <a href="/docs">Integration guide →</a>
       <a href="/docs#api">API reference →</a>
@@ -473,6 +475,95 @@ openssl pkeyutl -verify -pubin -inkey rk_pub.pem -rawin -in msg.txt -sigfile sig
           <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">.env · pinned</div><span class="lang">shell</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
 <pre><code>RK_PUBKEY="$(curl -sS https://www.realitykernel.dev/v1/pubkey | jq -r .public_key)"   # capture once, commit to config
 # Rotation is announced via the /security page and the console; the old key remains valid for verifying historical rows.</code></pre>
+        </div>
+      </section>
+
+      <section class="docs-block" id="agent-config">
+        <h2>
+          <span class="rk-new-badge">✦ NEW · Agent-Native</span><br>
+          Agent auto-configuration
+        </h2>
+        <p>Drop a single file into your project. Your AI coding agent reads it, self-instruments Reality Kernel into its workflow, and starts enforcing at the kernel boundary — without you writing a single line of integration code.</p>
+
+        <div class="rk-agent-config">
+          <div class="rk-tabs" data-tabs="agent-tabs">
+            <div class="rk-tabbar" role="tablist">
+              <button class="rk-tab active" role="tab" data-target="tab-claude">CLAUDE.md / .cursorrules</button>
+              <button class="rk-tab" role="tab" data-target="tab-mcp">MCP Config</button>
+              <button class="rk-tab" role="tab" data-target="tab-bootstrap">Auto-Bootstrap</button>
+            </div>
+
+            <div class="rk-tabpanel active" id="tab-claude">
+              <div class="rk-code">
+                <div class="rk-code-head">
+                  <span>CLAUDE.md</span>
+                  <button class="rk-copy" data-copy="claude">Copy</button>
+                </div>
+                <pre><code class="lang-markdown"># Reality Kernel — Agent Security Policy
+
+You are operating under Reality Kernel runtime governance.
+
+Rules (non-negotiable):
+1. Before executing ANY bash command, shell script, file write,
+   external API call, or subprocess — call rk.check(command, intent).
+2. If verdict is "BLOCK" — halt immediately and explain the
+   intent-divergence reason. Do NOT retry the blocked command.
+3. If verdict is "ALLOW" — proceed and store the proof signature
+   in your session log.
+4. NEVER modify or remove the Reality Kernel client code.
+5. Commands involving rm -rf, raw socket writes, credential files,
+   or kill signals require explicit human approval first.
+
+Setup (run once if not already done):
+pip install realitykernel
+export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
+              </div>
+              <p class="callout" style="margin-top:1rem;">Drop this file in your repo root. Claude Code, Cursor, and Windsurf pick it up automatically on next agent session.</p>
+            </div>
+
+            <div class="rk-tabpanel" id="tab-mcp" hidden>
+              <div class="rk-code">
+                <div class="rk-code-head">
+                  <span>claude_desktop_config.json</span>
+                  <button class="rk-copy" data-copy="mcp">Copy</button>
+                </div>
+                <pre><code class="lang-json">{
+  "mcpServers": {
+    "realitykernel": {
+      "command": "python",
+      "args": ["-m", "realitykernel.mcp"],
+      "env": {
+        "RK_API_KEY": "rk_live_your_key_here"
+      }
+    }
+  }
+}</code></pre>
+              </div>
+              <p class="callout" style="margin-top:1rem;">Works with claude_desktop_config.json, Cursor MCP settings, and any MCP-compatible agent runtime. Reality Kernel intercepts all tool calls before execution.</p>
+            </div>
+
+            <div class="rk-tabpanel" id="tab-bootstrap" hidden>
+              <div class="rk-code">
+                <div class="rk-code-head">
+                  <span>Paste into any coding agent</span>
+                  <button class="rk-copy" data-copy="bootstrap">Copy</button>
+                </div>
+                <pre><code class="lang-text">Please set up Reality Kernel in this repo:
+
+1. Run: pip install realitykernel
+2. Add RK_API_KEY to .env (get key from realitykernel.dev/login)
+3. Find every place we call subprocess, os.system, exec,
+   shell=True, or make external HTTP requests in agent tools
+4. Wrap each with:
+   result = rk.check(command=&lt;cmd&gt;, intent=&lt;what this step does&gt;)
+5. Add verdict handling:
+   if result["verdict"] == "BLOCK":
+       raise RuntimeError(f"Blocked: {result['reason']}")
+6. Run dry-run test and show me the output.</code></pre>
+              </div>
+              <p class="callout" style="margin-top:1rem;">Paste this into Claude Code, Cursor, Copilot, or any coding agent. It will instrument your entire codebase automatically.</p>
+            </div>
+          </div>
         </div>
       </section>
 

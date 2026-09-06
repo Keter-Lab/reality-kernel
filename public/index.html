@@ -83,7 +83,7 @@
           <span class="eyebrow justify-center animate-fade-up border border-slate-200/50 bg-white/70 px-3 py-1.5 rounded-full">Execution-layer security · API v0.4.2 live</span>
           <h1 class="hero-premium mt-6 font-extrabold tracking-tighter leading-[1.08] text-[2.75rem] lg:text-[4rem] text-balance animate-fade-up [animation-delay:60ms]">
             <span class="text-slate-900">Your AI agent can run commands.</span><br class="hidden sm:block" />
-            <span class="hero-premium-contrast text-slate-500">We decide which ones actually happen.</span>
+            <span class="hero-premium-contrast text-slate-500"><span class="rk-gradient-text">We decide which ones actually execute.</span></span>
           </h1>
           <p class="mt-6 text-slate-600 text-base lg:text-[1.1rem] leading-relaxed max-w-2xl mx-auto animate-fade-up [animation-delay:120ms]">
             Reality Kernel simulates every autonomous agent system call against its intended goal. We return sub-millisecond, cryptographically signed verdicts before wrapped host actions are approved for execution.
@@ -158,6 +158,33 @@
           <div><dt class="text-xs text-slate-500">Proof chain</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">SHA-256</dd></div>
           <div><dt class="text-xs text-slate-500">Integration</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">3 lines</dd></div>
         </dl>
+      </div>
+    </section>
+
+    <section style="padding: 4rem 0; background: var(--bg);">
+      <div style="max-width: 900px; margin: 0 auto; padding: 0 1.5rem;">
+        <div style="text-align: center; margin-bottom: 2.5rem;">
+          <span class="rk-eyebrow">Why existing tools fail</span>
+          <h2 style="font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-top: 0.5rem; letter-spacing: -0.02em;">
+            The attack changed.<br><span class="rk-gradient-text">The defense has to change with it.</span>
+          </h2>
+        </div>
+        <div class="rk-contrast-grid">
+          <div class="rk-contrast-col problem">
+            <h3>The old playbook fails</h3>
+            <div class="rk-contrast-item">Prompt guardrails get jailbroken or bypassed via tool calls</div>
+            <div class="rk-contrast-item">Userspace logs get tampered with before alerts fire</div>
+            <div class="rk-contrast-item">Machine-speed attacks outpace human-speed runbooks</div>
+            <div class="rk-contrast-item">5 benign tool calls chain into 1 catastrophic outcome</div>
+          </div>
+          <div class="rk-contrast-col solution">
+            <h3>Reality Kernel</h3>
+            <div class="rk-contrast-item">Syscall-level interception before execution — not after</div>
+            <div class="rk-contrast-item">Ed25519-sealed proof chain, offline-verifiable by auditors</div>
+            <div class="rk-contrast-item">0.31ms enforcement — same speed as the attack</div>
+            <div class="rk-contrast-item">Causal trajectory simulation across multi-turn session chains</div>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -2364,3 +2364,158 @@ form label.check { display: flex; align-items: center; gap: 8px; text-transform:
   .rk-cta { padding: 90px 18px; }
   .auth-tabs { grid-template-columns: 1fr; }
 }
+
+/* === RK UPGRADE ADDITIONS === */
+
+/* Animated gradient text */
+.rk-gradient-text {
+  background: linear-gradient(135deg, #14b8a6, #7c6aff, #0f766e, #14b8a6);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: rk-gradient-shift 5s ease infinite;
+}
+@keyframes rk-gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Glow card enhancement — attach to existing .card or .sdk-card */
+.rk-glow-card {
+  border: 1px solid rgba(20,184,166,0.18);
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(14px) saturate(1.4);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+}
+.rk-glow-card:hover {
+  border-color: rgba(20,184,166,0.45);
+  box-shadow: 0 0 32px rgba(20,184,166,0.12), 0 8px 32px rgba(15,118,110,0.08);
+  transform: translateY(-2px);
+}
+
+/* Problem/Solution two-column contrast section */
+.rk-contrast-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin: 3rem 0;
+}
+@media (max-width: 768px) {
+  .rk-contrast-grid { grid-template-columns: 1fr; }
+}
+.rk-contrast-col {
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.rk-contrast-col.problem {
+  background: rgba(220,38,38,0.04);
+  border: 1px solid rgba(220,38,38,0.12);
+}
+.rk-contrast-col.solution {
+  background: rgba(20,184,166,0.04);
+  border: 1px solid rgba(20,184,166,0.15);
+}
+.rk-contrast-col h3 {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+.rk-contrast-col.problem h3 { color: #dc2626; }
+.rk-contrast-col.solution h3 { color: #14b8a6; }
+.rk-contrast-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.rk-contrast-item::before {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 0.8rem;
+}
+.problem .rk-contrast-item::before { content: "✗"; color: #dc2626; }
+.solution .rk-contrast-item::before { content: "✓"; color: #14b8a6; }
+
+/* Agent auto-config section */
+.rk-agent-config {
+  border-left: 4px solid #14b8a6;
+  background: rgba(20,184,166,0.03);
+  border-radius: 0 12px 12px 0;
+  padding: 2rem;
+  margin: 2rem 0;
+}
+.rk-new-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #14b8a6;
+  background: rgba(20,184,166,0.1);
+  border: 1px solid rgba(20,184,166,0.25);
+  border-radius: 100px;
+  padding: 3px 10px;
+  margin-bottom: 1rem;
+}
+
+/* Data ribbon pill upgrade */
+.data-ribbon span {
+  background: rgba(20,184,166,0.06);
+  border: 1px solid rgba(20,184,166,0.18);
+  border-radius: 6px;
+  padding: 6px 14px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.data-ribbon span:hover {
+  background: rgba(20,184,166,0.1);
+  border-color: rgba(20,184,166,0.35);
+}
+
+/* Metric glow cards for hero stats */
+.rk-metric-card {
+  text-align: center;
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(20,184,166,0.15);
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(10px);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.rk-metric-card:hover {
+  border-color: rgba(20,184,166,0.4);
+  box-shadow: 0 0 24px rgba(20,184,166,0.1);
+}
+.rk-metric-card .rk-metric-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+.rk-metric-card .rk-metric-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+.rk-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 2rem;
+}
+@media (max-width: 640px) {
+  .rk-metrics-row { grid-template-columns: 1fr; }
+}
