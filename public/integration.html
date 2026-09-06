@@ -859,12 +859,12 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
         <div class="rk-agent-config">
           <div class="rk-tabs" data-tabs="agent-tabs">
             <div class="rk-tabbar" role="tablist">
-              <button class="rk-tab active" role="tab" data-target="tab-claude">CLAUDE.md / .cursorrules</button>
-              <button class="rk-tab" role="tab" data-target="tab-mcp">MCP Config</button>
-              <button class="rk-tab" role="tab" data-target="tab-bootstrap">Auto-Bootstrap</button>
+              <button class="rk-tab active" role="tab" data-tab="agent-claude">CLAUDE.md / .cursorrules</button>
+              <button class="rk-tab" role="tab" data-tab="agent-mcp">MCP Config</button>
+              <button class="rk-tab" role="tab" data-tab="agent-bootstrap">Auto-Bootstrap</button>
             </div>
 
-            <div class="rk-tabpanel active" id="tab-claude">
+            <div class="rk-tabpanel active" data-tab="agent-claude">
               <div class="rk-code">
                 <div class="rk-code-head">
                   <span>CLAUDE.md</span>
@@ -889,10 +889,13 @@ Setup (run once if not already done):
 pip install realitykernel
 export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
               </div>
-              <p class="callout" style="margin-top:1rem;">Drop this file in your repo root. Claude Code, Cursor, and Windsurf pick it up automatically on next agent session.</p>
+              <div class="callout rk-agent-note" style="margin-top:1rem;">
+                <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/></svg>
+                <div><strong>Drop this file in your repo root.</strong> Claude Code, Cursor, and Windsurf pick it up automatically on next agent session.</div>
+              </div>
             </div>
 
-            <div class="rk-tabpanel" id="tab-mcp" hidden>
+            <div class="rk-tabpanel" data-tab="agent-mcp">
               <div class="rk-code">
                 <div class="rk-code-head">
                   <span>claude_desktop_config.json</span>
@@ -910,10 +913,13 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
   }
 }</code></pre>
               </div>
-              <p class="callout" style="margin-top:1rem;">Works with claude_desktop_config.json, Cursor MCP settings, and any MCP-compatible agent runtime. Reality Kernel intercepts all tool calls before execution.</p>
+              <div class="callout rk-agent-note" style="margin-top:1rem;">
+                <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <div><strong>Works with claude_desktop_config.json and Cursor MCP settings.</strong> Any MCP-compatible agent runtime can be instrumented; Reality Kernel intercepts tool calls before execution.</div>
+              </div>
             </div>
 
-            <div class="rk-tabpanel" id="tab-bootstrap" hidden>
+            <div class="rk-tabpanel" data-tab="agent-bootstrap">
               <div class="rk-code">
                 <div class="rk-code-head">
                   <span>Paste into any coding agent</span>
@@ -932,7 +938,10 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
        raise RuntimeError(f"Blocked: {result['reason']}")
 6. Run dry-run test and show me the output.</code></pre>
               </div>
-              <p class="callout" style="margin-top:1rem;">Paste this into Claude Code, Cursor, Copilot, or any coding agent. It will instrument your entire codebase automatically.</p>
+              <div class="callout rk-agent-note" style="margin-top:1rem;">
+                <svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></svg>
+                <div><strong>Paste this into any coding agent.</strong> Claude Code, Cursor, and Copilot can auto-instrument the repository with RK guardrails.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -985,10 +994,14 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
       <div>
         <h5>Trust</h5>
         <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/privacy">Privacy policy</a></li>
+          <li><a href="/terms">Terms &amp; conditions</a></li>
+          <li><a href="/cookies">Cookie policy</a></li>
           <li><a href="/security">Security &amp; threat model</a></li>
           <li><a href="/faq">FAQ</a></li>
           <li><a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></li>
-          <li><a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">Keter Labs</a></li>
+          <li><a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener">LinkedIn</a></li>
         </ul>
       </div>
     </div>

@@ -49,6 +49,26 @@
     {
       "source": "/benchmark",
       "destination": "/benchmark.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/about.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/cookies",
+      "destination": "/cookies.html"
+    },
+    {
+      "source": "/cookie-policy",
+      "destination": "/cookies.html"
     }
   ],
   "headers": [

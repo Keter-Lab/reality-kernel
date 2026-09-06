@@ -46,6 +46,26 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.realitykernel.dev/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.realitykernel.dev/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.realitykernel.dev/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.realitykernel.dev/cookies</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://www.realitykernel.dev/login</loc>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>

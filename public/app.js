@@ -161,15 +161,37 @@
 
   function initTabs(root) {
     (root || document).querySelectorAll('.rk-tabs').forEach(group => {
-      const tabs = group.querySelectorAll('.rk-tab');
-      const panels = group.querySelectorAll('.rk-tabpanel');
-      tabs.forEach((t, i) => t.addEventListener('click', () => {
-        tabs.forEach(x => x.classList.remove('active'));
-        panels.forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
-        const target = t.dataset.tab ? group.querySelector('.rk-tabpanel[data-tab="' + t.dataset.tab + '"]') : panels[i];
-        if (target) target.classList.add('active');
-      }));
+      const tabs = Array.from(group.querySelectorAll('.rk-tab'));
+      const panels = Array.from(group.querySelectorAll('.rk-tabpanel'));
+      if (!tabs.length || !panels.length) return;
+
+      const activate = (tab, index) => {
+        tabs.forEach(x => {
+          x.classList.remove('active');
+          x.setAttribute('aria-selected', 'false');
+          x.setAttribute('tabindex', '-1');
+        });
+        panels.forEach(x => {
+          x.classList.remove('active');
+          x.hidden = true;
+        });
+
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        tab.setAttribute('tabindex', '0');
+
+        const byDataTab = tab.dataset.tab ? group.querySelector('.rk-tabpanel[data-tab="' + tab.dataset.tab + '"]') : null;
+        const target = byDataTab || panels[index] || null;
+        if (target) {
+          target.classList.add('active');
+          target.hidden = false;
+        }
+      };
+
+      tabs.forEach((t, i) => t.addEventListener('click', () => activate(t, i)));
+
+      const activeTab = tabs.find(t => t.classList.contains('active')) || tabs[0];
+      activate(activeTab, tabs.indexOf(activeTab));
     });
   }
 
@@ -183,6 +205,14 @@
       home.href = '/';
       home.textContent = 'Home';
       nav.insertAdjacentElement('afterbegin', home);
+    }
+    if (nav && !nav.querySelector('a[href="/about"]')) {
+      const about = document.createElement('a');
+      about.href = '/about';
+      about.textContent = 'About';
+      const pricing = nav.querySelector('a[href="/pricing"]');
+      if (pricing) pricing.insertAdjacentElement('beforebegin', about);
+      else nav.appendChild(about);
     }
 
     const path = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
@@ -201,6 +231,84 @@
       header.querySelectorAll('[data-auth="signin"]').forEach(a => { a.textContent = 'Operator Console'; a.href = '/dashboard'; });
       header.querySelectorAll('[data-auth="request"]').forEach(a => { a.style.display = 'none'; });
     }
+  }
+
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', theme);
+    root.classList.add('theme-ready');
+  }
+
+  function initThemeToggle() {
+    const root = document.documentElement;
+    const stored = localStorage.getItem('rk_theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = stored || (prefersDark ? 'dark' : 'light');
+    applyTheme(theme);
+
+    const headerCta = document.querySelector('.rk-header .rk-header-cta');
+    if (!headerCta || headerCta.querySelector('.rk-theme-toggle')) return;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'rk-theme-toggle btn btn-sm ghost';
+    btn.setAttribute('aria-label', 'Toggle dark mode');
+
+    const label = document.createElement('span');
+    const syncLabel = () => {
+      const current = root.getAttribute('data-theme') || 'light';
+      label.textContent = current === 'dark' ? 'Light' : 'Dark';
+      btn.setAttribute('aria-pressed', String(current === 'dark'));
+    };
+
+    btn.append('Theme · ', label);
+    btn.addEventListener('click', () => {
+      const current = root.getAttribute('data-theme') || 'light';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      localStorage.setItem('rk_theme', next);
+      syncLabel();
+    });
+
+    syncLabel();
+    const menuToggle = headerCta.querySelector('.rk-menu-toggle');
+    if (menuToggle) headerCta.insertBefore(btn, menuToggle);
+    else headerCta.appendChild(btn);
+  }
+
+  function initFooterLegalLinks() {
+    document.querySelectorAll('.rk-footer').forEach((footer) => {
+      const trustHead = Array.from(footer.querySelectorAll('h5')).find(h => h.textContent.trim().toLowerCase() === 'trust');
+      if (!trustHead) return;
+      const ul = trustHead.nextElementSibling;
+      if (!ul || ul.tagName !== 'UL') return;
+
+      const wanted = [
+        { href: '/about', label: 'About' },
+        { href: '/privacy', label: 'Privacy Policy' },
+        { href: '/terms', label: 'Terms & Conditions' },
+        { href: '/cookies', label: 'Cookie Policy' },
+        { href: '/security', label: 'Security & threat model' },
+        { href: '/faq', label: 'FAQ' },
+        { href: 'mailto:contact@realitykernel.dev', label: 'contact@realitykernel.dev' },
+        { href: 'https://www.linkedin.com/company/keter-labs/', label: 'LinkedIn', external: true },
+      ];
+
+      const existing = new Set(Array.from(ul.querySelectorAll('a')).map(a => a.getAttribute('href')));
+      wanted.forEach(item => {
+        if (existing.has(item.href)) return;
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = item.href;
+        a.textContent = item.label;
+        if (item.external) {
+          a.target = '_blank';
+          a.rel = 'noopener';
+        }
+        li.appendChild(a);
+        ul.appendChild(li);
+      });
+    });
   }
 
   function initAgentCursor() {
@@ -279,6 +387,8 @@
 
     applyRouteFallbackRedirects();
     initHeader();
+    initThemeToggle();
+    initFooterLegalLinks();
     enhanceCodeBlocks();
     initTabs();
     initScrollSpy();
