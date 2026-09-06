@@ -2519,3 +2519,121 @@ form label.check { display: flex; align-items: center; gap: 8px; text-transform:
 @media (max-width: 640px) {
   .rk-metrics-row { grid-template-columns: 1fr; }
 }
+
+/* === RK DEPTH + DARK MODE EXTENSIONS === */
+:root {
+  --rk-depth-1: 0 18px 45px rgba(15, 23, 42, 0.08);
+  --rk-depth-2: 0 28px 72px rgba(15, 23, 42, 0.12);
+  --rk-glass-hi: rgba(255, 255, 255, 0.74);
+  --rk-glass-lo: rgba(255, 255, 255, 0.42);
+}
+
+html[data-theme="dark"] {
+  --bg: #070c17;
+  --bg-elev-0: rgba(15, 23, 42, 0.58);
+  --bg-elev-1: rgba(15, 23, 42, 0.72);
+  --bg-elev-2: rgba(15, 23, 42, 0.85);
+  --bg-elev-3: rgba(30, 41, 59, 0.92);
+  --panel: rgba(15, 23, 42, 0.62);
+  --panel-hover: rgba(30, 41, 59, 0.8);
+  --border: rgba(148, 163, 184, 0.2);
+  --border-strong: rgba(148, 163, 184, 0.28);
+  --border-bright: rgba(148, 163, 184, 0.36);
+  --text: #e2e8f0;
+  --text-2: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+  --text-bright: #f8fafc;
+  --accent-soft: rgba(20, 184, 166, 0.2);
+  --shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 18px 46px rgba(2, 6, 23, 0.45);
+  --shadow-lg: 0 1px 0 rgba(255,255,255,0.08) inset, 0 30px 74px rgba(2, 6, 23, 0.56);
+}
+
+html.theme-ready body,
+html.theme-ready .rk-header,
+html.theme-ready .docs-block,
+html.theme-ready .rk-footer,
+html.theme-ready .card,
+html.theme-ready .sdk-card,
+html.theme-ready .rk-code,
+html.theme-ready .callout {
+  transition: background-color .22s ease, border-color .22s ease, color .22s ease, box-shadow .22s ease;
+}
+
+.rk-theme-toggle {
+  margin-top: 0;
+  white-space: nowrap;
+  min-width: 82px;
+  padding: 8px 12px;
+}
+
+.docs-block,
+.sdk-card,
+.verdict-card,
+.pillar,
+.plane,
+.cta-banner,
+.rk-agent-config {
+  background-image: linear-gradient(180deg, var(--rk-glass-hi), var(--rk-glass-lo));
+  box-shadow: var(--rk-depth-1);
+}
+
+.docs-block:hover,
+.sdk-card:hover,
+.verdict-card:hover {
+  box-shadow: var(--rk-depth-2);
+}
+
+.rk-agent-config {
+  border: 1px solid rgba(20,184,166,0.22);
+  border-left-width: 4px;
+  border-radius: 14px;
+}
+
+.rk-agent-config .rk-tabbar {
+  margin-bottom: 10px;
+  gap: 8px;
+  border-bottom: 1px solid rgba(20,184,166,0.2);
+  padding: 0 0 10px;
+}
+
+.rk-agent-config .rk-tab {
+  border-radius: 999px;
+  border: 1px solid rgba(20,184,166,0.24);
+  background: rgba(20,184,166,0.06);
+  font-size: 12px;
+}
+
+.rk-agent-config .rk-tab.active {
+  background: rgba(20,184,166,0.16);
+  border-color: rgba(20,184,166,0.44);
+}
+
+.rk-agent-note {
+  grid-template-columns: 18px 1fr;
+}
+
+.rk-agent-note > div {
+  min-width: 0;
+}
+
+.rk-agent-note strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.rk-agent-config .rk-code-head {
+  justify-content: space-between;
+}
+
+.rk-agent-config .rk-code-head .rk-copy {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .rk-theme-toggle { padding: 8px 10px; min-width: 74px; font-size: 12px; }
+  .rk-header .rk-header-cta { gap: 6px; }
+}
+@media (max-width: 640px) {
+  .rk-theme-toggle { display: none !important; }
+}
