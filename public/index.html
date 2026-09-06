@@ -161,28 +161,33 @@
       </div>
     </section>
 
-    <section style="padding: 4rem 0; background: var(--bg);">
+    <section style="padding: 4rem 0; background: #f8fafc;">
       <div style="max-width: 900px; margin: 0 auto; padding: 0 1.5rem;">
         <div style="text-align: center; margin-bottom: 2.5rem;">
-          <span class="rk-eyebrow">Why existing tools fail</span>
-          <h2 style="font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-top: 0.5rem; letter-spacing: -0.02em;">
-            The attack changed.<br><span class="rk-gradient-text">The defense has to change with it.</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #14b8a6; text-transform: uppercase; letter-spacing: 0.18em; font-weight: 600;">Why existing tools fail</span>
+          <h2 style="font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-top: 0.75rem; letter-spacing: -0.02em; color: #0f172a;">
+            The attack changed.<br>
+            <span style="background: linear-gradient(135deg, #14b8a6, #7c6aff, #0f766e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">The defense has to change with it.</span>
           </h2>
         </div>
-        <div class="rk-contrast-grid">
-          <div class="rk-contrast-col problem">
-            <h3>The old playbook fails</h3>
-            <div class="rk-contrast-item">Prompt guardrails get jailbroken or bypassed via tool calls</div>
-            <div class="rk-contrast-item">Userspace logs get tampered with before alerts fire</div>
-            <div class="rk-contrast-item">Machine-speed attacks outpace human-speed runbooks</div>
-            <div class="rk-contrast-item">5 benign tool calls chain into 1 catastrophic outcome</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; border-radius: 16px; overflow: hidden;">
+          <div style="padding: 2.5rem; background: rgba(220,38,38,0.04); border: 1px solid rgba(220,38,38,0.12); border-radius: 12px 0 0 12px;">
+            <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #dc2626; margin-bottom: 1.25rem;">The old playbook fails</p>
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>Prompt guardrails get jailbroken or bypassed via tool calls</div>
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>Userspace logs get tampered with before alerts fire</div>
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>Machine-speed attacks outpace human-speed runbooks</div>
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>5 benign tool calls chain into 1 catastrophic outcome</div>
+            </div>
           </div>
-          <div class="rk-contrast-col solution">
-            <h3>Reality Kernel</h3>
-            <div class="rk-contrast-item">Syscall-level interception before execution — not after</div>
-            <div class="rk-contrast-item">Ed25519-sealed proof chain, offline-verifiable by auditors</div>
-            <div class="rk-contrast-item">0.31ms enforcement — same speed as the attack</div>
-            <div class="rk-contrast-item">Causal trajectory simulation across multi-turn session chains</div>
+          <div style="padding: 2.5rem; background: rgba(20,184,166,0.04); border: 1px solid rgba(20,184,166,0.15); border-radius: 0 12px 12px 0;">
+            <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #14b8a6; margin-bottom: 1.25rem;">Reality Kernel</p>
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>Syscall-level interception before execution &#8212; not after</div>
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>Ed25519-sealed proof chain, offline-verifiable by auditors</div>
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>0.31ms enforcement &#8212; same speed as the attack</div>
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>Causal trajectory simulation across multi-turn session chains</div>
+            </div>
           </div>
         </div>
       </div>
@@ -194,7 +199,7 @@
     <section id="how" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
       <div class="max-w-2xl">
         <span class="eyebrow">How the loop works</span>
-        <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Four steps between “the agent wants to” and “it happened”.</h2>
+        <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Four steps between &#8220;the agent wants to&#8221; and &#8220;it happened&#8221;.</h2>
         <p class="mt-4 text-base leading-7 text-slate-600">No model fine-tuning, no prompt guards to bypass. Reality Kernel judges the <em class="not-italic font-semibold text-slate-800">action</em>, not the conversation.</p>
       </div>
 

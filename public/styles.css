@@ -2442,8 +2442,8 @@ form label.check { display: flex; align-items: center; gap: 8px; text-transform:
   margin-top: 2px;
   font-size: 0.8rem;
 }
-.problem .rk-contrast-item::before { content: "✗"; color: #dc2626; }
-.solution .rk-contrast-item::before { content: "✓"; color: #14b8a6; }
+.problem .rk-contrast-item::before { content: "\2717"; color: #dc2626; }
+.solution .rk-contrast-item::before { content: "\2713"; color: #14b8a6; }
 
 /* Agent auto-config section */
 .rk-agent-config {
@@ -2572,8 +2572,7 @@ html.theme-ready .callout {
 .verdict-card,
 .pillar,
 .plane,
-.cta-banner,
-.rk-agent-config {
+.cta-banner {
   background-image: linear-gradient(180deg, var(--rk-glass-hi), var(--rk-glass-lo));
   box-shadow: var(--rk-depth-1);
 }
@@ -2586,8 +2585,11 @@ html.theme-ready .callout {
 
 .rk-agent-config {
   border: 1px solid rgba(20,184,166,0.22);
-  border-left-width: 4px;
-  border-radius: 14px;
+  border-left: 4px solid #14b8a6;
+  border-radius: 0 14px 14px 0;
+  background: rgba(20,184,166,0.03);
+  padding: 2rem;
+  margin: 2rem 0;
 }
 
 .rk-agent-config .rk-tabbar {
