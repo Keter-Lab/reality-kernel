@@ -42,7 +42,7 @@ thiserror = "2"
 regex = "1"
 shell-words = "1"
 unicode-normalization = "0.1"
-lru = "0.12"
+lru = "0.16"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 ipnet = "2"
