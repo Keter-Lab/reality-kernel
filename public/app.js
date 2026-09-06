@@ -3,6 +3,54 @@
   const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? (window.RK_API_BASE || 'http://localhost:8000')
     : ''
+
+  /* ── Theme (light default, optional dark) ───────────────────────────────
+     Applied as early as this script runs so the painted theme matches the
+     stored preference. Only an explicit saved value flips to dark — the
+     default is always the light interface. */
+  const THEME_KEY = 'rk-theme';
+  function storedTheme() {
+    try { return localStorage.getItem(THEME_KEY); } catch { return null; }
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#070c17' : '#f2f6fc');
+  }
+  applyTheme(storedTheme() === 'dark' ? 'dark' : 'light');
+
+  const SUN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const MOON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+  function setTheme(theme, persist) {
+    applyTheme(theme);
+    if (persist) { try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ } }
+    document.querySelectorAll('.rk-theme-toggle').forEach(syncToggle);
+  }
+  function syncToggle(btn) {
+    const dark = currentTheme() === 'dark';
+    btn.innerHTML = dark ? SUN_SVG : MOON_SVG;
+    btn.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+    btn.setAttribute('aria-pressed', String(dark));
+    btn.title = dark ? 'Light mode' : 'Dark mode';
+  }
+  function initThemeToggle() {
+    document.querySelectorAll('.rk-header .rk-header-cta').forEach(cta => {
+      if (cta.querySelector('.rk-theme-toggle')) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'rk-theme-toggle';
+      syncToggle(btn);
+      btn.addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark', true));
+      cta.insertBefore(btn, cta.firstChild);
+    });
+    // Enable colour transitions only after the initial paint so first load
+    // never animates from light → stored dark.
+    requestAnimationFrame(() => document.documentElement.classList.add('theme-ready'));
+  }
+
   function getKey() {
     return sessionStorage.getItem('rk_api_key') || localStorage.getItem('rk_api_key') || null;
   }

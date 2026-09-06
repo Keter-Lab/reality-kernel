@@ -2384,15 +2384,31 @@ form label.check { display: flex; align-items: center; gap: 8px; text-transform:
 
 /* Glow card enhancement — attach to existing .card or .sdk-card */
 .rk-glow-card {
-  border: 1px solid rgba(20,184,166,0.18);
-  background: rgba(255,255,255,0.6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev-1);
   backdrop-filter: blur(14px) saturate(1.4);
+  padding: 30px 32px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
 }
+.rk-glow-card:last-child { margin-bottom: 0; }
+.rk-glow-card > :first-child { margin-top: 0; }
+.rk-glow-card > :last-child { margin-bottom: 0; }
 .rk-glow-card:hover {
-  border-color: rgba(20,184,166,0.45);
+  border-color: var(--accent-line);
   box-shadow: 0 0 32px rgba(20,184,166,0.12), 0 8px 32px rgba(15,118,110,0.08);
   transform: translateY(-2px);
+}
+
+/* When a glow card is also a docs-block, drop the full-width top-border seam
+   (which otherwise fuses stacked blocks into one hard-edged white slab) and
+   use the card's own padding instead of the block's vertical-only padding. */
+.docs-block.rk-glow-card,
+.docs-block.rk-glow-card:first-child {
+  border-top: none;
+  padding: 30px 32px;
 }
 
 /* Problem/Solution two-column contrast section */
@@ -2544,7 +2560,11 @@ html[data-theme="dark"] {
   --text-muted: #94a3b8;
   --text-faint: #64748b;
   --text-bright: #f8fafc;
-  --accent-soft: rgba(20, 184, 166, 0.2);
+  --accent: #2dd4bf;
+  --accent-bright: #5eead4;
+  --accent-soft: rgba(45, 212, 191, 0.14);
+  --accent-line: rgba(45, 212, 191, 0.42);
+  --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.5);
   --shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 18px 46px rgba(2, 6, 23, 0.45);
   --shadow-lg: 0 1px 0 rgba(255,255,255,0.08) inset, 0 30px 74px rgba(2, 6, 23, 0.56);
   --rk-glass-hi: rgba(15, 23, 42, 0.85);
@@ -2563,10 +2583,35 @@ html.theme-ready .callout {
 }
 
 .rk-theme-toggle {
-  margin-top: 0;
-  white-space: nowrap;
-  min-width: 82px;
-  padding: 8px 12px;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev-1);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.rk-theme-toggle:hover {
+  color: var(--accent-bright);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  transform: none;
+  box-shadow: none;
+}
+.rk-theme-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .docs-block,

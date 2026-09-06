@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   theme.css — dark-mode layer for the Tailwind-compiled homepage (index.html)
+   ───────────────────────────────────────────────────────────────────────
+   The homepage ships compiled utilities in tw.css and never loads styles.css,
+   so its dark theme lives here. Everything visual is scoped under
+   html[data-theme="dark"]; light mode is left exactly as authored. The only
+   always-on rules are the theme-toggle button and colour transitions.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Theme toggle button (shared header, injected by app.js) ───────────── */
+.rk-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgb(148 163 184 / 0.4);
+  background: rgb(255 255 255 / 0.7);
+  color: rgb(51 65 85);
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.rk-theme-toggle:hover {
+  color: #0f766e;
+  border-color: rgb(20 184 166 / 0.5);
+  background: rgb(20 184 166 / 0.1);
+}
+.rk-theme-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Smooth cross-fade once the first paint has happened. */
+html.theme-ready body,
+html.theme-ready .rk-header,
+html.theme-ready .card,
+html.theme-ready .rk-theme-toggle,
+html.theme-ready footer {
+  transition: background-color .22s ease, border-color .22s ease, color .22s ease;
+}
+
+/* ═══════════════════════════ DARK THEME ════════════════════════════════ */
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body {
+  background-color: #070c17;
+  color: #cbd5e1;
+}
+
+/* Blueprint grid backdrop */
+html[data-theme="dark"] .blueprint {
+  background-color: #070c17;
+  background-image:
+    linear-gradient(to right, rgb(148 163 184 / 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(148 163 184 / 0.09) 1px, transparent 1px);
+}
+
+/* Header + surfaces */
+html[data-theme="dark"] .rk-theme-toggle {
+  border-color: rgb(148 163 184 / 0.28);
+  background: rgb(15 23 42 / 0.72);
+  color: #cbd5e1;
+}
+html[data-theme="dark"] .rk-theme-toggle:hover {
+  color: #5eead4;
+  border-color: rgb(45 212 191 / 0.45);
+  background: rgb(45 212 191 / 0.14);
+}
+
+html[data-theme="dark"] .rk-header {
+  background-color: rgb(7 12 23 / 0.82) !important;
+  border-color: rgb(148 163 184 / 0.14) !important;
+}
+
+/* ── Background utilities ─────────────────────────────────────────────── */
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-white\/95,
+html[data-theme="dark"] .bg-white\/90,
+html[data-theme="dark"] .bg-white\/80,
+html[data-theme="dark"] .bg-white\/70,
+html[data-theme="dark"] .bg-white\/60 {
+  background-color: rgb(15 23 42 / 0.72) !important;
+}
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-50\/90,
+html[data-theme="dark"] .bg-slate-50\/70,
+html[data-theme="dark"] .bg-slate-100 {
+  background-color: rgb(30 41 59 / 0.6) !important;
+}
+
+/* Cards + custom components */
+html[data-theme="dark"] .card {
+  background-color: rgb(15 23 42 / 0.66) !important;
+  border-color: rgb(148 163 184 / 0.16) !important;
+  box-shadow: 0 18px 46px rgb(2 6 23 / 0.5) !important;
+}
+html[data-theme="dark"] .chip {
+  background-color: rgb(45 212 191 / 0.1) !important;
+  color: #99f6e4 !important;
+}
+html[data-theme="dark"] .eyebrow {
+  color: #5eead4 !important;
+}
+html[data-theme="dark"] .btn-secondary {
+  background-color: rgb(15 23 42 / 0.7) !important;
+  border-color: rgb(148 163 184 / 0.2) !important;
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .btn-secondary:hover {
+  background-color: rgb(30 41 59 / 0.85) !important;
+  border-color: rgb(45 212 191 / 0.4) !important;
+}
+html[data-theme="dark"] .nav-link {
+  color: #cbd5e1 !important;
+}
+html[data-theme="dark"] .nav-link:hover,
+html[data-theme="dark"] .nav-link.active {
+  color: #f8fafc !important;
+  background-color: rgb(45 212 191 / 0.12) !important;
+}
+
+/* ── Text utilities ───────────────────────────────────────────────────── */
+html[data-theme="dark"] .text-slate-900 { color: #f1f5f9 !important; }
+html[data-theme="dark"] .text-slate-800 { color: #e2e8f0 !important; }
+html[data-theme="dark"] .text-slate-700 { color: #cbd5e1 !important; }
+html[data-theme="dark"] .text-slate-600 { color: #b6c2d4 !important; }
+html[data-theme="dark"] .text-slate-500 { color: #94a3b8 !important; }
+html[data-theme="dark"] .text-slate-400 { color: #7688a0 !important; }
+
+/* ── Border utilities ─────────────────────────────────────────────────── */
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-200\/80,
+html[data-theme="dark"] .border-slate-200\/70,
+html[data-theme="dark"] .border-slate-200\/60 {
+  border-color: rgb(148 163 184 / 0.16) !important;
+}
+
+/* Footer */
+html[data-theme="dark"] footer.bg-white,
+html[data-theme="dark"] footer {
+  background-color: #05080f !important;
+}
+
+/* Keep intentionally-dark showcase panels readable (hero console, CTA) —
+   they already use slate-900 backgrounds, so only lift their accents. */
+html[data-theme="dark"] #threat-sandbox .bg-slate-900 {
+  background-color: #05080f !important;
+  border-color: rgb(148 163 184 / 0.16) !important;
+}
+
+/* Accent gradient text stays vivid on dark */
+html[data-theme="dark"] .rk-gradient-text {
+  background: linear-gradient(135deg, #5eead4, #2dd4bf 55%, #14b8a6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Compare section (refactored to classes so it themes cleanly) ─────── */
+.rk-compare {
+  padding: 4rem 0;
+  background: #f8fafc;
+}
+.rk-compare-inner { max-width: 900px; margin: 0 auto; padding: 0 1.5rem; }
+.rk-compare-head { text-align: center; margin-bottom: 2.5rem; }
+.rk-compare-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: #14b8a6;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+}
+.rk-compare-title {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  margin-top: 0.75rem;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+.rk-compare-title .grad {
+  background: linear-gradient(135deg, #14b8a6, #7c6aff, #0f766e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.rk-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 640px) { .rk-compare-grid { grid-template-columns: 1fr; } }
+.rk-compare-col {
+  padding: 2.5rem;
+  border-radius: 14px;
+}
+.rk-compare-col.bad {
+  background: rgba(220, 38, 38, 0.04);
+  border: 1px solid rgba(220, 38, 38, 0.14);
+}
+.rk-compare-col.good {
+  background: rgba(20, 184, 166, 0.05);
+  border: 1px solid rgba(20, 184, 166, 0.18);
+}
+.rk-compare-col .label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+.rk-compare-col.bad .label { color: #dc2626; }
+.rk-compare-col.good .label { color: #0d9488; }
+.rk-compare-list { display: flex; flex-direction: column; gap: 0.85rem; }
+.rk-compare-list .row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: #334155;
+  line-height: 1.5;
+}
+.rk-compare-list .row .mark { flex-shrink: 0; margin-top: 2px; }
+.rk-compare-col.bad .mark { color: #dc2626; }
+.rk-compare-col.good .mark { color: #0d9488; }
+
+html[data-theme="dark"] .rk-compare { background: #070c17; }
+html[data-theme="dark"] .rk-compare-title { color: #f1f5f9; }
+html[data-theme="dark"] .rk-compare-col.bad {
+  background: rgba(248, 113, 113, 0.07);
+  border-color: rgba(248, 113, 113, 0.22);
+}
+html[data-theme="dark"] .rk-compare-col.good {
+  background: rgba(45, 212, 191, 0.08);
+  border-color: rgba(45, 212, 191, 0.26);
+}
+html[data-theme="dark"] .rk-compare-col.bad .label,
+html[data-theme="dark"] .rk-compare-col.bad .mark { color: #fca5a5; }
+html[data-theme="dark"] .rk-compare-col.good .label,
+html[data-theme="dark"] .rk-compare-col.good .mark { color: #5eead4; }
+html[data-theme="dark"] .rk-compare-list .row { color: #cbd5e1; }

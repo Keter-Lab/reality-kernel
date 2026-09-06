@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>try{if(localStorage.getItem('rk-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
   <title>Reality Kernel · Causal verification for the autonomous era</title>
   <meta name="description" content="Reality Kernel is an execution-layer security engine and cryptographic audit ledger for autonomous AI agents. Deterministic execution boundaries, kernel-level eBPF attestation, and Ed25519-signed verdicts." />
   <meta property="og:type" content="website" />
@@ -29,6 +30,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="/tw.css" />
+  <link rel="stylesheet" href="/theme.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <meta name="theme-color" content="#f8fafc" />
@@ -77,7 +79,8 @@
     <section class="relative overflow-hidden elite-canvas">
       <div aria-hidden="true" class="pointer-events-none absolute -left-20 top-8 h-72 w-72 rounded-full bg-slate-200/50 blur-3xl"></div>
       <div aria-hidden="true" class="pointer-events-none absolute -right-24 top-24 h-80 w-80 rounded-full bg-sky-100/45 blur-3xl"></div>
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 pb-14 sm:pt-20">
+      <canvas id="rk-kernel-3d" aria-hidden="true" class="pointer-events-none absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 opacity-60"></canvas>
+      <div class="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 pb-14 sm:pt-20">
 
         <div class="mx-auto max-w-4xl text-center">
           <span class="eyebrow justify-center animate-fade-up border border-slate-200/50 bg-white/70 px-3 py-1.5 rounded-full">Execution-layer security · API v0.4.2 live</span>
@@ -161,32 +164,32 @@
       </div>
     </section>
 
-    <section style="padding: 4rem 0; background: #f8fafc;">
-      <div style="max-width: 900px; margin: 0 auto; padding: 0 1.5rem;">
-        <div style="text-align: center; margin-bottom: 2.5rem;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #14b8a6; text-transform: uppercase; letter-spacing: 0.18em; font-weight: 600;">Why existing tools fail</span>
-          <h2 style="font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-top: 0.75rem; letter-spacing: -0.02em; color: #0f172a;">
+    <section class="rk-compare">
+      <div class="rk-compare-inner">
+        <div class="rk-compare-head">
+          <span class="rk-compare-eyebrow">Why existing tools fail</span>
+          <h2 class="rk-compare-title">
             The attack changed.<br>
-            <span style="background: linear-gradient(135deg, #14b8a6, #7c6aff, #0f766e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">The defense has to change with it.</span>
+            <span class="grad">The defense has to change with it.</span>
           </h2>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; border-radius: 16px; overflow: hidden;">
-          <div style="padding: 2.5rem; background: rgba(220,38,38,0.04); border: 1px solid rgba(220,38,38,0.12); border-radius: 12px 0 0 12px;">
-            <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #dc2626; margin-bottom: 1.25rem;">The old playbook fails</p>
-            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>Prompt guardrails get jailbroken or bypassed via tool calls</div>
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>Userspace logs get tampered with before alerts fire</div>
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>Machine-speed attacks outpace human-speed runbooks</div>
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#dc2626; flex-shrink:0; margin-top:2px;">&#10007;</span>5 benign tool calls chain into 1 catastrophic outcome</div>
+        <div class="rk-compare-grid">
+          <div class="rk-compare-col bad">
+            <p class="label">The old playbook fails</p>
+            <div class="rk-compare-list">
+              <div class="row"><span class="mark">&#10007;</span>Prompt guardrails get jailbroken or bypassed via tool calls</div>
+              <div class="row"><span class="mark">&#10007;</span>Userspace logs get tampered with before alerts fire</div>
+              <div class="row"><span class="mark">&#10007;</span>Machine-speed attacks outpace human-speed runbooks</div>
+              <div class="row"><span class="mark">&#10007;</span>5 benign tool calls chain into 1 catastrophic outcome</div>
             </div>
           </div>
-          <div style="padding: 2.5rem; background: rgba(20,184,166,0.04); border: 1px solid rgba(20,184,166,0.15); border-radius: 0 12px 12px 0;">
-            <p style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #14b8a6; margin-bottom: 1.25rem;">Reality Kernel</p>
-            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>Syscall-level interception before execution &#8212; not after</div>
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>Ed25519-sealed proof chain, offline-verifiable by auditors</div>
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>0.31ms enforcement &#8212; same speed as the attack</div>
-              <div style="display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #334155; line-height: 1.5;"><span style="color:#14b8a6; flex-shrink:0; margin-top:2px;">&#10003;</span>Causal trajectory simulation across multi-turn session chains</div>
+          <div class="rk-compare-col good">
+            <p class="label">Reality Kernel</p>
+            <div class="rk-compare-list">
+              <div class="row"><span class="mark">&#10003;</span>Syscall-level interception before execution &#8212; not after</div>
+              <div class="row"><span class="mark">&#10003;</span>Ed25519-sealed proof chain, offline-verifiable by auditors</div>
+              <div class="row"><span class="mark">&#10003;</span>0.31ms enforcement &#8212; same speed as the attack</div>
+              <div class="row"><span class="mark">&#10003;</span>Causal trajectory simulation across multi-turn session chains</div>
             </div>
           </div>
         </div>
