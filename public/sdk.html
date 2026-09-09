@@ -191,7 +191,7 @@ try {
 # usage: rk.sh "&lt;command&gt;" "&lt;prime_intent&gt;" [session_id]
 # exit:  0 ALLOW · 2 WARN · 3 BLOCK · 4 bad signature · 1 transport/auth
 set -euo pipefail
-: "${RK_API_KEY:?RK_API_KEY not set}"
+: "${RK_API_KEY:&bull;RK_API_KEY not set}"
 BASE="${RK_BASE_URL:-https://www.realitykernel.dev}"
 CMD="$1"; INTENT="$2"; SESSION="${3:-$(hostname)-$$}"
 
@@ -228,7 +228,7 @@ esac</code></pre>
 if ./rk.sh "$CMD" "publish the built frontend to web-01"; then
   eval "$CMD"
 else
-  rc=$?; [ $rc -eq 2 ] &amp;&amp; echo "held for operator review" || echo "refused (rc=$rc)"; exit $rc
+  rc=$&bull;; [ $rc -eq 2 ] &amp;&amp; echo "held for operator review" || echo "refused (rc=$rc)"; exit $rc
 fi</code></pre>
         </div>
       </section>
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     print(f"{len(rows) - len(bad)}/{len(rows)} signatures valid", "· BAD:", bad if bad else "none")
     sys.exit(1 if bad else 0)
 
-# usage: curl -sS -H "Authorization: Bearer $RK_API_KEY" https://www.realitykernel.dev/v1/audit?limit=200 | python3 verify.py</code></pre>
+# usage: curl -sS -H "Authorization: Bearer $RK_API_KEY" https://www.realitykernel.dev/v1/audit&bull;limit=200 | python3 verify.py</code></pre>
             </div>
           </div>
           <div class="rk-tabpanel" data-tab="v-js">
@@ -440,7 +440,7 @@ if __name__ == "__main__":
               <div class="rk-code-head"><div class="dots"><span></span><span></span><span></span></div><div class="file">verify.browser.js</div><span class="lang">javascript</span><button class="rk-copy" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button></div>
 <pre><code>// Runs in any modern browser (Chrome 113+, Firefox 130+, Safari 17+) and Node 20+ via globalThis.crypto.
 const b64 = (s) =&gt; Uint8Array.from(atob(s), (c) =&gt; c.charCodeAt(0));
-const canon = (c) =&gt; (Number.isInteger(c) ? c.toFixed(1) : String(c));   // canonical confidence encoding
+const canon = (c) =&gt; (Number.isInteger(c) &bull; c.toFixed(1) : String(c));   // canonical confidence encoding
 
 export async function verifyRow(row, pubkeyB64) {
   const key = await crypto.subtle.importKey("raw", b64(pubkeyB64), { name: "Ed25519" }, false, ["verify"]);
@@ -561,7 +561,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
       <section class="docs-block" style="border-bottom: none;">
         <div class="cta-banner">
           <div class="cta-text">
-            <strong>Ready to wire it in?</strong>
+            <strong>Ready to wire it in&bull;</strong>
             <span>The integration guide walks through LangGraph, CrewAI, OpenAI Agents SDK, and raw HTTP step by step.</span>
           </div>
           <a class="btn" href="/docs" style="text-decoration:none; border-bottom:none;">Open integration guide &#8594;</a>
@@ -577,7 +577,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
       <div class="rk-footer-brand">
         <div class="brand small">
           <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
-          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs · Cryptographic Security Division</span></div>
+          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs &bull; Cryptographic Security Division</span></div>
         </div>
         <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents.</p>
       </div>
@@ -612,7 +612,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
       </div>
     </div>
     <div class="rk-footer-bottom">
-      <span>© 2026 Reality Kernel · All rights reserved</span>
+&copy; 2026 Reality Kernel &bull; All rights reserved</span>
       <span class="rk-footer-social">
         <a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>

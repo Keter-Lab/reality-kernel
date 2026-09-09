@@ -102,7 +102,7 @@
           </div>
         </div>
 
-        <div id="threat-sandbox" class="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto mt-12 animate-fade-up [animation-delay:260ms]">
+        <div id="threat-sandbox" class="grid grid-cols-1 lg:grid-cols-2 gap-10 max-w-6xl mx-auto mt-12 animate-fade-up [animation-delay:260ms]">
           <section class="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs shadow-xl border border-slate-700/70">
             <div class="flex items-center justify-between gap-2">
               <span class="text-slate-400 uppercase tracking-[0.2em] text-[10px]">Threat Matrix Console</span>
@@ -143,7 +143,7 @@
               <span class="font-mono text-[11px] tracking-[0.18em] text-slate-500 uppercase">agent_pid: 4188</span>
             </div>
 
-            <div id="ts-host-core" class="absolute right-8 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500">core_host.sys</div>
+            <div id="ts-host-core" class="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500">core_host.sys</div>
 
             <div id="ts-verdict" class="absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-red-600 whitespace-nowrap">[ VERDICT: BLOCK &bull; ORIGIN: EXTERNAL EXPLOIT &bull; sig: ed25519:7a9f ]</div>
           </section>
@@ -341,30 +341,18 @@ rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
     </section>
   </main>
 
-  
-  <section class="py-24 bg-slate-50 border-t border-slate-200">
-    <div class="mx-auto max-w-4xl px-5 sm:px-8">
-      <div class="flex flex-col md:flex-row items-center md:items-start gap-8 md:gap-12">
-        <div class="shrink-0 relative">
-          <div class="absolute inset-0 bg-gradient-to-tr from-emerald-400/20 to-sky-400/20 rounded-full blur-xl"></div>
-          <img src="/founder.jpg" alt="Tabrez Mukadam" class="relative w-32 h-32 md:w-40 md:h-40 rounded-full object-cover shadow-lg border border-slate-200/60" />
-        </div>
-        <div class="flex-1 text-center md:text-left">
-          <h2 class="text-2xl font-bold tracking-tight text-slate-900" style="font-family: var(--font-display);">A note on building Reality Kernel</h2>
-          <div class="mt-5 space-y-4 text-slate-600 leading-relaxed text-[15px]">
-            <p>The industry is racing to build autonomous systems, but trying to secure them with language models and prompt engineering is mathematically flawed. We recognized that true agent security had to happen at the only layer that matters: the execution layer.</p>
-            <p><strong>Keter Labs</strong> (founded 2026) is a deliberately small deep-tech research outfit. We assemble math and people to attack unsolved intelligence problems&#8212;specializing in reflexive intelligence, adversarial systems, and complex systems.</p>
-            <p>Reality Kernel is our early founding nucleus. We are focused on proofs and early code rather than marketing. If you believe agent boundaries must be deterministic and enforced offline, you're in the right place.</p>
-          </div>
-          <div class="mt-6 flex flex-col items-center md:items-start">
-            <div class="font-semibold text-slate-900">Tabrez Mukadam</div>
-            <div class="text-[13px] font-mono text-slate-500 mt-0.5">Founder, Keter Labs</div>
-          </div>
-        </div>
+  <div class="mx-auto max-w-4xl px-5 py-12">
+    <div class="rounded-xl border border-slate-200 bg-white p-6 sm:p-8 flex flex-col sm:flex-row items-center gap-6 shadow-sm">
+      <img src="/founder.jpg" alt="Tabrez Mukadam" class="w-20 h-20 rounded-full object-cover border border-slate-100 shadow-sm shrink-0" />
+      <div>
+        <p class="text-sm text-slate-600 leading-relaxed">"The industry is racing to build autonomous systems, but trying to secure them with language models is mathematically flawed. We believe agent boundaries must be deterministic, built in Rust, and enforced offline. That's why we built Reality Kernel."</p>
+        <div class="mt-3 text-sm font-semibold text-slate-900">Tabrez Mukadam <span class="font-normal text-slate-500 font-mono text-xs ml-1">Founder, Keter Labs</span></div>
       </div>
     </div>
-  </section>
+  </div>
 
+
+  
   <!-- @rk:footer-light -->
   <footer class="border-t border-slate-200/80 bg-white">
     <div class="mx-auto grid max-w-7xl gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
@@ -373,7 +361,7 @@ rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
           <span class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 shadow-sm"><img src="/logo.png" alt="Reality Kernel" class="h-[26px] w-[26px] rounded-full object-cover" /></span>
           <span class="leading-none">
             <span class="block text-[13px] font-bold tracking-[0.12em] text-slate-900">REALITY KERNEL</span>
-            <span class="mt-1 block font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">Keter Labs · Cryptographic Security Division</span>
+            <span class="mt-1 block font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">Keter Labs &bull; Cryptographic Security Division</span>
           </span>
         </div>
         <p class="mt-5 max-w-sm text-sm leading-6 text-slate-500">Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
@@ -410,15 +398,15 @@ rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
     </div>
     <div class="border-t border-slate-200/80">
       <div class="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-5 font-mono text-[11px] text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <span>© 2026 Reality Kernel · All rights reserved</span>
+        <span>&copy; 2026 Reality Kernel &bull; All rights reserved</span>
         <span class="rk-footer-social">
           <a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>
           </a>
           <a href="https://github.com/Keter-Lab" target="_blank" rel="noopener" aria-label="Reality Kernel on GitHub" title="GitHub">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path></svg>
-            </a>
-            <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" aria-label="Reality Kernel on LinkedIn" title="LinkedIn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path></svg>
+          </a>
+          <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" aria-label="Reality Kernel on LinkedIn" title="LinkedIn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.94 8.5A1.56 1.56 0 1 1 6.93 5.4a1.56 1.56 0 0 1 .01 3.1zM5.5 9.75h2.88V19H5.5V9.75zm5.07 0h2.76v1.26h.04c.38-.72 1.33-1.48 2.74-1.48 2.93 0 3.47 1.93 3.47 4.45V19h-2.88v-4.44c0-1.06-.02-2.42-1.47-2.42-1.47 0-1.69 1.15-1.69 2.34V19h-2.88V9.75z"></path></svg>
           </a>
         </span>

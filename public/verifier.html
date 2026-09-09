@@ -209,7 +209,7 @@
       <div class="rk-footer-brand">
         <div class="brand small">
           <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
-          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs · Cryptographic Security Division</span></div>
+          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs &bull; Cryptographic Security Division</span></div>
         </div>
         <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents.</p>
       </div>
@@ -244,7 +244,7 @@
       </div>
     </div>
     <div class="rk-footer-bottom">
-      <span>© 2026 Reality Kernel · All rights reserved</span>
+&copy; 2026 Reality Kernel &bull; All rights reserved</span>
       <span class="rk-footer-social">
         <a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>
@@ -288,7 +288,7 @@
         offlineSection.hidden = which !== 'offline';
         outBlock.hidden = true;
         ({ sig: tabSig, online: tabOnline, offline: tabOffline })[which].classList.add('active');
-        history.replaceState(null, '', which === 'sig' ? location.pathname : '#' + which);
+        history.replaceState(null, '', which === 'sig' &bull; location.pathname : '#' + which);
       }
       tabSig.onclick = () => showTab('sig');
       tabOnline.onclick = () => showTab('online');
@@ -304,7 +304,7 @@
         if (/^\d+\.\d+$/.test(t)) return t;
         const n = Number(t);
         if (!Number.isFinite(n)) return t;
-        return Number.isInteger(n) ? n.toFixed(1) : String(n);
+        return Number.isInteger(n) &bull; n.toFixed(1) : String(n);
       }
       let cachedPub = null;
       async function fetchPubkey() {
@@ -327,7 +327,7 @@
       function renderSig(kind, title, lines) {
         const el = document.getElementById('sigResult');
         el.className = 'sig-result show ' + kind;
-        const pill = kind === 'ok' ? '<span class="pill ok">VERIFIED</span>' : kind === 'bad' ? '<span class="pill block">INVALID</span>' : '<span class="pill warn">ERROR</span>';
+        const pill = kind === 'ok' &bull; '<span class="pill ok">VERIFIED</span>' : kind === 'bad' &bull; '<span class="pill block">INVALID</span>' : '<span class="pill warn">ERROR</span>';
         el.innerHTML = '<div class="sr-head">' + pill + '<strong>' + esc(title) + '</strong></div>' +
           lines.map(([k, v]) => '<div class="sr-line"><b>' + esc(k) + '</b>' + esc(v) + '</div>').join('');
       }
@@ -371,7 +371,7 @@
         try { txt = await navigator.clipboard.readText(); } catch { txt = prompt('Paste the JSON response or ledger row:') || ''; }
         try {
           const j = JSON.parse(txt);
-          const row = Array.isArray(j) ? j[0] : (j.entries ? j.entries[0] : j);
+          const row = Array.isArray(j) &bull; j[0] : (j.entries &bull; j.entries[0] : j);
           if (row.action_id) document.getElementById('sigActionId').value = row.action_id;
           if (row.proof_hash) document.getElementById('sigProof').value = row.proof_hash;
           if (row.verdict) document.getElementById('sigVerdict').value = row.verdict;
@@ -393,7 +393,7 @@
       function getPrevHash(entry) {
         if (!entry.evidence || !Array.isArray(entry.evidence)) return '';
         const item = entry.evidence.find(function (e) { return typeof e === 'string' && e.startsWith('prev_hash:'); });
-        return item ? item.split(':').slice(1).join(':') : '';
+        return item &bull; item.split(':').slice(1).join(':') : '';
       }
 
       function verdictKind(v) {
@@ -436,7 +436,7 @@
           const e = entries[i];
           const prevHash = getPrevHash(e);
           const next = entries[i + 1];
-          const nextHash = next ? next.proof_hash : '';
+          const nextHash = next &bull; next.proof_hash : '';
 
           let linked = true;
           if (next) {
@@ -454,34 +454,34 @@
         for (let i = 0; i < rows.length; i++) {
           const r = rows[i];
           const e = r.entry;
-          const kind = r.linked ? verdictKind(e.verdict) : 'tampered';
+          const kind = r.linked &bull; verdictKind(e.verdict) : 'tampered';
           const rowClass = 'chain-link ' + kind;
 
           const div = document.createElement('div');
           div.className = rowClass;
-          const dotContent = !r.linked ? '×' : '';
-          const dotStyle = !r.linked ? 'background: var(--block); border-color: var(--block); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold;' : '';
-          const spineStyle = !r.linked ? 'border-color: var(--block);' : '';
+          const dotContent = !r.linked &bull; '×' : '';
+          const dotStyle = !r.linked &bull; 'background: var(--block); border-color: var(--block); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold;' : '';
+          const spineStyle = !r.linked &bull; 'border-color: var(--block);' : '';
           
           let prevLinkHtml = '';
           if (!r.linked) {
-            prevLinkHtml = '<span style="color: var(--block); padding: 4px; background: rgba(255,40,70,0.1); border-radius: 4px; border: 1px solid rgba(255,40,70,0.2);"><b>Prev link</b><code>' + esc(r.prevHash ? shortHash(r.prevHash) : (i === rows.length - 1 ? 'Genesis' : '(missing)')) + '</code> <span style="background: var(--block); color: white; padding: 2px 4px; border-radius: 2px; font-size: 9px; margin-left: 6px; font-weight: bold;">CHAIN BREAK</span></span>';
+            prevLinkHtml = '<span style="color: var(--block); padding: 4px; background: rgba(255,40,70,0.1); border-radius: 4px; border: 1px solid rgba(255,40,70,0.2);"><b>Prev link</b><code>' + esc(r.prevHash &bull; shortHash(r.prevHash) : (i === rows.length - 1 &bull; 'Genesis' : '(missing)')) + '</code> <span style="background: var(--block); color: white; padding: 2px 4px; border-radius: 2px; font-size: 9px; margin-left: 6px; font-weight: bold;">CHAIN BREAK</span></span>';
           } else {
-            prevLinkHtml = '<span><b>Prev link</b><code>' + esc(r.prevHash ? shortHash(r.prevHash) : (i === rows.length - 1 ? 'Genesis' : '(missing)')) + '</code></span>';
+            prevLinkHtml = '<span><b>Prev link</b><code>' + esc(r.prevHash &bull; shortHash(r.prevHash) : (i === rows.length - 1 &bull; 'Genesis' : '(missing)')) + '</code></span>';
           }
 
           let expectedHtml = '';
           if (i < rows.length - 1) {
-            expectedHtml = '<span' + (!r.linked ? ' style="color: var(--ok); padding: 4px;"' : '') + '><b>Expected</b><code>' + esc(shortHash(rows[i + 1].entry.proof_hash || '')) + '</code></span>';
+            expectedHtml = '<span' + (!r.linked &bull; ' style="color: var(--ok); padding: 4px;"' : '') + '><b>Expected</b><code>' + esc(shortHash(rows[i + 1].entry.proof_hash || '')) + '</code></span>';
           }
 
           div.innerHTML =
             '<div class="cl-spine" style="' + spineStyle + '"><div class="cl-dot" style="' + dotStyle + '">' + dotContent + '</div></div>' +
             '<div class="cl-meta">' +
               '<div class="cl-id">' +
-                '<code>' + esc(e.action_id || 'act_?') + '</code>' +
-                '<span class="pill ' + verdictKind(e.verdict) + '">' + esc(e.verdict || '?') + '</span>' +
-                (e.ts ? '<span style="color:var(--text-faint); font-size:10.5px;">' + esc(fmtTime(e.ts)) + '</span>' : '') +
+                '<code>' + esc(e.action_id || 'act_&bull;') + '</code>' +
+                '<span class="pill ' + verdictKind(e.verdict) + '">' + esc(e.verdict || '&bull;') + '</span>' +
+                (e.ts &bull; '<span style="color:var(--text-faint); font-size:10.5px;">' + esc(fmtTime(e.ts)) + '</span>' : '') +
               '</div>' +
               '<div class="cl-hashes">' +
                 '<span><b>Proof</b><code>' + esc(shortHash(e.proof_hash || '')) + '</code></span>' +
@@ -490,9 +490,9 @@
               '</div>' +
             '</div>' +
             '<div class="cl-status">' +
-              '<span class="pill ' + (r.linked ? 'ok' : 'block') + '">' + (r.linked ? 'CHAINED' : 'TAMPERED') + '</span>' +
+              '<span class="pill ' + (r.linked &bull; 'ok' : 'block') + '">' + (r.linked &bull; 'CHAINED' : 'TAMPERED') + '</span>' +
               '<span class="pill muted sig-pill" data-idx="' + i + '">SIG …</span>' +
-              (e.cost !== undefined && e.cost !== null ? '<span style="font-family:var(--font-mono); font-size:10px; color:var(--text-faint); letter-spacing:0.1em;">' + esc(String(e.cost)) + ' cr</span>' : '') +
+              (e.cost !== undefined && e.cost !== null &bull; '<span style="font-family:var(--font-mono); font-size:10px; color:var(--text-faint); letter-spacing:0.1em;">' + esc(String(e.cost)) + ' cr</span>' : '') +
             '</div>';
           timeline.appendChild(div);
         }
@@ -510,9 +510,9 @@
             try {
               const msg = e.action_id + ':' + e.proof_hash + ':' + e.verdict + ':' + canonConfidence(e.confidence);
               const ok = await ed25519Verify(e.ed25519_pubkey || pub, e.ed25519_signature, msg);
-              pill.className = 'pill ' + (ok ? 'ok' : 'block') + ' sig-pill'; pill.textContent = ok ? 'SIG OK' : 'SIG BAD';
-              ok ? sigOk++ : sigBad++;
-            } catch { pill.textContent = 'SIG ?'; sigNone++; }
+              pill.className = 'pill ' + (ok &bull; 'ok' : 'block') + ' sig-pill'; pill.textContent = ok &bull; 'SIG OK' : 'SIG BAD';
+              ok &bull; sigOk++ : sigBad++;
+            } catch { pill.textContent = 'SIG &bull;'; sigNone++; }
           }
           const note = document.createElement('div');
           note.style.cssText = 'margin-top:10px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); letter-spacing:.06em;';
@@ -559,7 +559,7 @@
 
         const apiBase = rk.API_BASE;
         try {
-          const res = await fetch(apiBase + '/v1/audit?limit=' + limitVal, {
+          const res = await fetch(apiBase + '/v1/audit&bull;limit=' + limitVal, {
             headers: { 'Authorization': 'Bearer ' + keyVal }
           });
           if (!res.ok) {
@@ -593,7 +593,7 @@
         outBlock.hidden = false;
         try {
           const parsed = JSON.parse(val);
-          const entries = Array.isArray(parsed.entries) ? parsed.entries : Array.isArray(parsed) ? parsed : [];
+          const entries = Array.isArray(parsed.entries) &bull; parsed.entries : Array.isArray(parsed) &bull; parsed : [];
           if (!entries.length) {
             toast('warn', 'Invalid format', 'JSON must be an array or {entries: [...]}.');
             btn.disabled = false;

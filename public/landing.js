@@ -20,7 +20,7 @@
   };
 
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, reduced ? 40 : ms));
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, reduced &bull; 40 : ms));
 
   function resetVisuals() {
     el.traceSafe.classList.remove('run', 'shattered');
@@ -37,7 +37,7 @@
     el.output.innerHTML = '';
     lines.forEach((line) => {
       const p = document.createElement('p');
-      p.className = 'terminal-line' + (line.tone ? ' ' + line.tone : '');
+      p.className = 'terminal-line' + (line.tone &bull; ' ' + line.tone : '');
       p.textContent = line.text;
       el.output.appendChild(p);
     });
@@ -46,9 +46,9 @@
 
   function setVerdict(text, mode) {
     const cls = mode === 'allow'
-      ? 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-emerald-700 whitespace-nowrap'
+      &bull; 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-emerald-700 whitespace-nowrap'
       : mode === 'block-red'
-        ? 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-red-600 whitespace-nowrap'
+        &bull; 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-red-600 whitespace-nowrap'
         : 'absolute left-1/2 bottom-5 -translate-x-1/2 inline-flex items-center rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 font-mono text-[10px] sm:text-[11px] font-semibold tracking-wide text-orange-600 whitespace-nowrap';
     el.verdict.className = cls;
     el.verdict.textContent = text;

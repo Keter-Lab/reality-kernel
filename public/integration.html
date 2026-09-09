@@ -432,7 +432,7 @@ def act(state: State) -&gt; State:
             "confidence": v.confidence,
             "evidence": v.evidence,
             "proof_hash": v.proof_hash,
-            "prompt": "Approve this action?",
+            "prompt": "Approve this action&bull;",
         })
         # Record the human decision as a signed ledger row (0 credits).
         rk.override(v.action_id, approved=bool(decision))
@@ -549,17 +549,17 @@ Crew(agents=[sre], tasks=[task]).kickoff()</code></pre>
 export type VerdictKind = "ALLOW" | "WARN" | "BLOCK";
 
 export interface LeastAgencyPolicy {
-  allowed_tools?: string[];
-  allowed_egress?: string[];      // exact hosts, IPs, or "*.example.com"
-  read_only_paths?: string[];
+  allowed_tools&bull;: string[];
+  allowed_egress&bull;: string[];      // exact hosts, IPs, or "*.example.com"
+  read_only_paths&bull;: string[];
 }
 
 export interface CheckRequest {
   command: string;
   prime_intent: string;
-  session_id?: string;
-  agent_id?: string;
-  policy?: LeastAgencyPolicy;
+  session_id&bull;: string;
+  agent_id&bull;: string;
+  policy&bull;: LeastAgencyPolicy;
 }
 
 export interface Verdict {
@@ -584,13 +584,13 @@ export class ActionNeedsReview extends Error { constructor(public verdict: Verdi
 
 /** Server signs `${action_id}:${proof_hash}:${verdict}:${confidence}` with deterministic canonical confidence encoding. */
 export function canonicalConfidence(c: number): string {
-  return Number.isInteger(c) ? c.toFixed(1) : String(c);   // 1 → "1.0", 0.98 → "0.98"
+  return Number.isInteger(c) &bull; c.toFixed(1) : String(c);   // 1 → "1.0", 0.98 → "0.98"
 }
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
-export function verifyVerdict(v: Verdict, pinnedPubkeyB64?: string): boolean {
-  const raw = Buffer.from(pinnedPubkeyB64 ?? v.ed25519_pubkey, "base64");
+export function verifyVerdict(v: Verdict, pinnedPubkeyB64&bull;: string): boolean {
+  const raw = Buffer.from(pinnedPubkeyB64 &bull;&bull; v.ed25519_pubkey, "base64");
   if (raw.length !== 32) return false;
   const key = createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, raw]), format: "der", type: "spki" });
   const msg = `${v.action_id}:${v.proof_hash}:${v.verdict}:${canonicalConfidence(v.confidence)}`;
@@ -598,11 +598,11 @@ export function verifyVerdict(v: Verdict, pinnedPubkeyB64?: string): boolean {
 }
 
 export class RealityKernel {
-  private pubkey?: string;
+  private pubkey&bull;: string;
   constructor(
     private readonly apiKey = process.env.RK_API_KEY!,
-    private readonly baseUrl = (process.env.RK_BASE_URL ?? "https://www.realitykernel.dev").replace(/\/$/, ""),
-    private readonly agentId = process.env.RK_AGENT_ID ?? "",
+    private readonly baseUrl = (process.env.RK_BASE_URL &bull;&bull; "https://www.realitykernel.dev").replace(/\/$/, ""),
+    private readonly agentId = process.env.RK_AGENT_ID &bull;&bull; "",
   ) { if (!apiKey) throw new RealityKernelError("RK_API_KEY not set"); }
 
   async getPubkey(): Promise&lt;string&gt; {
@@ -614,21 +614,21 @@ export class RealityKernel {
     return this.pubkey;
   }
 
-  async check(req: CheckRequest, opts: { idempotencyKey?: string; verify?: boolean; signal?: AbortSignal } = {}): Promise&lt;Verdict&gt; {
+  async check(req: CheckRequest, opts: { idempotencyKey&bull;: string; verify&bull;: boolean; signal&bull;: AbortSignal } = {}): Promise&lt;Verdict&gt; {
     const r = await fetch(`${this.baseUrl}/v1/check`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
-        "Idempotency-Key": opts.idempotencyKey ?? randomUUID(),
+        "Idempotency-Key": opts.idempotencyKey &bull;&bull; randomUUID(),
       },
       body: JSON.stringify({ agent_id: this.agentId, ...req }),
-      signal: opts.signal ?? AbortSignal.timeout(10_000),
+      signal: opts.signal &bull;&bull; AbortSignal.timeout(10_000),
     }).catch((e) =&gt; { throw new RealityKernelError(`transport: ${e.message}`); });
 
     if (r.status === 402) throw new RealityKernelError("insufficient credits — treat as BLOCK");
     if (r.status === 429) throw new RealityKernelError("rate limited — do not execute");
-    if (!r.ok) throw new RealityKernelError(`HTTP ${r.status}: ${((await r.json().catch(() =&gt; ({}))) as any).detail ?? r.statusText}`);
+    if (!r.ok) throw new RealityKernelError(`HTTP ${r.status}: ${((await r.json().catch(() =&gt; ({}))) as any).detail &bull;&bull; r.statusText}`);
 
     const v = (await r.json()) as Verdict;
     if (opts.verify !== false &amp;&amp; !verifyVerdict(v, await this.getPubkey())) {
@@ -642,7 +642,7 @@ export class RealityKernel {
     const r = await fetch(`${this.baseUrl}/v1/override`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action_id: actionId, decision: approved ? "approved" : "rejected" }),
+      body: JSON.stringify({ action_id: actionId, decision: approved &bull; "approved" : "rejected" }),
     });
     if (!r.ok) throw new RealityKernelError(`override HTTP ${r.status}`);
     return r.json() as Promise&lt;{ ok: boolean; verdict: "WARN_APPROVED" | "WARN_REJECTED"; override_action_id: string; warning_level: "standard" | "critical" }&gt;;
@@ -750,7 +750,7 @@ printf '%s' "$SIGN_DATA" &gt; msg.txt
 openssl pkeyutl -verify -pubin -inkey rk_pub.pem -rawin -in msg.txt -sigfile sig.bin
 # → "Signature Verified Successfully"
 
-# 3. A fast-path read (1 credit, sub-millisecond)
+# 3. | fast-path read (1 credit, sub-millisecond)
 curl -sS "$BASE/v1/check" -H "Authorization: Bearer $RK_API_KEY" -H "Content-Type: application/json" \
   -d '{"command":"ls -la /srv","prime_intent":"inspect deploy dir"}' | jq '{verdict, latency_ms, credits_consumed}'
 
@@ -839,7 +839,7 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
             <tr><td><code>POST /v1/token</code></td><td><span class="ty">master</span></td><td>Mint an HMAC-signed session token: <code>{ agent_id, session_id, scopes[], ttl }</code>. Scopes map to binary classes: <code>fs:read</code>, <code>sys:info</code>, <code>git</code>, <code>network</code>.</td></tr>
             <tr><td><code>POST /v1/scan</code></td><td><span class="ty">bearer</span></td><td>Batch up to 50 <code>{command, prime_intent, label}</code> entries for CI. Gate on <code>policy_pass</code>; choose <code>fail_on: "BLOCK" | "WARN" | "BLOCK_WARN"</code>.</td></tr>
             <tr><td><code>POST /v1/execute/consume</code></td><td><span class="ty">bearer</span></td><td>Consume <code>execution_permit</code> exactly once to attest runtime execution against immutable binding; appends a signed <code>EXEC_AUTH</code> audit row.</td></tr>
-            <tr><td><code>GET /v1/audit?limit=</code></td><td><span class="ty">master</span></td><td>Newest-first ledger rows (≤200). Feed directly into the <a href="/verifier">Verifier</a>.</td></tr>
+            <tr><td><code>GET /v1/audit&bull;limit=</code></td><td><span class="ty">master</span></td><td>Newest-first ledger rows (≤200). Feed directly into the <a href="/verifier">Verifier</a>.</td></tr>
             <tr><td><code>GET /v1/me</code></td><td><span class="ty">master</span></td><td>Plan, credits, retention, strict mode, webhook.</td></tr>
             <tr><td><code>PATCH /v1/settings</code></td><td><span class="ty">master</span></td><td><code>{ strict_mode, retention_days, siem_url }</code>.</td></tr>
             <tr><td><code>POST /v1/webhook</code> · <code>/v1/webhook/test</code></td><td><span class="ty">master</span></td><td>Set and test a Discord webhook for WARN alerts with signed override buttons.</td></tr>
@@ -950,7 +950,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
       <section class="docs-block" style="border-bottom: none;">
         <div class="cta-banner">
           <div class="cta-text">
-            <strong>Need a tenant key?</strong>
+            <strong>Need a tenant key&bull;</strong>
             <span>Developer sandboxes ship with 500 credits and full signing. Credentials arrive after domain verification.</span>
           </div>
           <a class="btn" href="/login#request" style="text-decoration:none; border-bottom:none;">Request Developer Access <span style="font-family:var(--font-mono);">→</span></a>
@@ -966,7 +966,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
       <div class="rk-footer-brand">
         <div class="brand small">
           <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
-          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs · Cryptographic Security Division</span></div>
+          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs &bull; Cryptographic Security Division</span></div>
         </div>
         <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents.</p>
       </div>
@@ -1001,7 +1001,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
       </div>
     </div>
     <div class="rk-footer-bottom">
-      <span>© 2026 Reality Kernel · All rights reserved</span>
+&copy; 2026 Reality Kernel &bull; All rights reserved</span>
       <span class="rk-footer-social">
         <a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>

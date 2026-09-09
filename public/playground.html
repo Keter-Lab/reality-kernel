@@ -167,7 +167,7 @@
       <div class="rk-footer-brand">
         <div class="brand small">
           <div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" /></div>
-          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs · Cryptographic Security Division</span></div>
+          <div><strong>REALITY KERNEL</strong><span class="brand-sub">Keter Labs &bull; Cryptographic Security Division</span></div>
         </div>
         <p>Execution-layer security and a cryptographic audit ledger for autonomous AI agents.</p>
       </div>
@@ -202,7 +202,7 @@
       </div>
     </div>
     <div class="rk-footer-bottom">
-      <span>© 2026 Reality Kernel · All rights reserved</span>
+&copy; 2026 Reality Kernel &bull; All rights reserved</span>
       <span class="rk-footer-social">
         <a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>
@@ -294,7 +294,7 @@
         if (!verdict) return;
 
         const map = {
-          ALLOW: { label: 'Basin A · action permitted',            cls: 'vb-allow', icon: '+' },
+          ALLOW: { label: 'Basin | · action permitted',            cls: 'vb-allow', icon: '+' },
           WARN:  { label: 'Suspicious trajectory · review needed', cls: 'vb-warn',  icon: '!' },
           BLOCK: { label: 'Reflexive collapse · action blocked',   cls: 'vb-block', icon: '×' },
         };
@@ -307,7 +307,7 @@
             <div>${m.label}</div>
           </div>
           <div style="font-family: var(--font-mono); font-size: 11px; opacity: .8; letter-spacing: .04em;">
-            ${Array.isArray(evidence) && evidence.length ? esc(evidence.slice(0,2).join(' · ')) : '—'}
+            ${Array.isArray(evidence) && evidence.length &bull; esc(evidence.slice(0,2).join(' · ')) : '—'}
           </div>
         `;
         if (verdict === 'WARN') actions.classList.add('show');
@@ -317,7 +317,7 @@
         if (typeof json !== 'string') json = JSON.stringify(json, null, 2);
         json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         return json.replace(
-          /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+          /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)&bull;|\b(true|false|null)\b|-&bull;\d+(&bull;:\.\d*)&bull;(&bull;:[eE][+\-]&bull;\d+)&bull;)/g,
           function (match) {
             var cls = 'json-number';
             if (/^"/.test(match)) {
@@ -333,7 +333,7 @@
       function renderStructuredResponse(container, body) {
         container.hidden = false;
         const evidenceHtml = Array.isArray(body.evidence) && body.evidence.length
-          ? `<ul class="pg-evidence-list">${body.evidence.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`
+          &bull; `<ul class="pg-evidence-list">${body.evidence.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`
           : `<ul class="pg-evidence-list empty"><li>No malicious divergence evidence found in system state.</li></ul>`;
 
         container.innerHTML = `
@@ -345,7 +345,7 @@
             </div>
             <div class="pg-metric">
               <div class="label">Latency</div>
-              <div class="value">${esc(body.latency_ms ?? '—')} ms</div>
+              <div class="value">${esc(body.latency_ms &bull;&bull; '—')} ms</div>
             </div>
             <div class="pg-metric">
               <div class="label">Confidence</div>
@@ -353,15 +353,15 @@
             </div>
             <div class="pg-metric">
               <div class="label">Worlds evaluated</div>
-              <div class="value">${esc(body.worlds_evaluated ?? '—')} / 5</div>
+              <div class="value">${esc(body.worlds_evaluated &bull;&bull; '—')} / 5</div>
             </div>
             <div class="pg-metric">
               <div class="label">Basin B count</div>
-              <div class="value">${esc(body.worlds_in_basin_b ?? '—')}</div>
+              <div class="value">${esc(body.worlds_in_basin_b &bull;&bull; '—')}</div>
             </div>
             <div class="pg-metric">
               <div class="label">Max divergence</div>
-              <div class="value">${esc(body.max_divergence ?? '—')}</div>
+              <div class="value">${esc(body.max_divergence &bull;&bull; '—')}</div>
             </div>
           </div>
           <div class="pg-metric" style="margin-top: 12px; border-left-color: var(--accent);">
@@ -407,8 +407,8 @@
         if (!r.ok) {
           pgRawContainer.hidden = false;
           pgOut.hidden = false;
-          pgOut.innerHTML = `<span class="json-null">Error: ${esc(r.body?.detail || 'Simulation failed')}</span>`;
-          toast('warn', 'Check failed', r.body?.detail || ('HTTP ' + r.status));
+          pgOut.innerHTML = `<span class="json-null">Error: ${esc(r.body&bull;.detail || 'Simulation failed')}</span>`;
+          toast('warn', 'Check failed', r.body&bull;.detail || ('HTTP ' + r.status));
           return;
         }
 

@@ -211,7 +211,7 @@
               </p>
             </div>
             <div class="card featured hover-lift">
-              <h4>Need more credits or a higher plan?</h4>
+              <h4>Need more credits or a higher plan&bull;</h4>
               <p style="font-size: 13.5px; line-height: 1.65; margin: 12px 0 14px;">
                 Top-ups and plan changes are handled manually. Message Keter Labs on LinkedIn — we respond inside 24 hours and can rotate, extend, or upgrade your key in minutes.
               </p>
@@ -414,11 +414,11 @@
             <div class="card hover-lift">
               <h4>Tip — prime intent matters</h4>
               <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
-                The engine compares the <strong>command</strong> against the <strong>operator's stated goal</strong>. A plausible intent that doesn't match the action raises divergence and trips Layer II simulation.
+                The engine compares the <strong>command</strong> against the <strong>operator's stated goal</strong>. | plausible intent that doesn't match the action raises divergence and trips Layer II simulation.
               </p>
             </div>
             <div class="card hover-lift">
-              <h4>What happens on approve / block?</h4>
+              <h4>What happens on approve / block&bull;</h4>
               <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
                 These buttons override on WARN verdicts. The override is logged as a fresh chain link — the original cryptographic verdict stays in your audit log untouched.
               </p>
@@ -549,7 +549,7 @@
             <div class="faq-list" id="faqList">
               <div class="faq-item open">
                 <button class="faq-q" type="button">
-                  How are credits consumed?
+                  How are credits consumed&bull;
                   <span class="caret">+</span>
                 </button>
                 <div class="faq-a">
@@ -557,42 +557,42 @@
                 </div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">What's the difference between WARN and BLOCK? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">What's the difference between WARN and BLOCK&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p><strong>WARN</strong> means a suspicious trajectory the engine is not certain about — human review is recommended. <strong>BLOCK</strong> means the simulation crossed into Basin B (irreversible damage, exfiltration, compromise) and cannot run.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">Can I override a WARN or BLOCK verdict? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">Can I override a WARN or BLOCK verdict&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p>Only WARN can be overridden — from the Playground or the Pending Review widget. Overrides are logged as fresh chain links so the audit trail stays clean. BLOCK is terminal.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">How do I integrate Reality Kernel? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">How do I integrate Reality Kernel&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p>Wrap every system-level action in a call to <code>POST /v1/check</code>. If ALLOW, run it. If WARN, escalate. If BLOCK, abort. See the <a href="/integration">integration docs</a> for full details.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">Is there a latency penalty? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">Is there a latency penalty&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p>Fast path returns in under 1 ms. Full engine runs in 50–500 ms. Read-heavy agents typically see ~95% fast-path hit rate, so the average overhead is negligible.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">What does the proof hash prove? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">What does the proof hash prove&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p>Each verdict is hashed with SHA-256 over the decision payload (command, intent, verdict, timestamp, evidence). The hash chain-links into a tamper-evident audit log — if any entry is altered, the chain breaks.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">Credits ran out — what happens? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">Credits ran out — what happens&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p>The API returns <code>HTTP 402</code> on every subsequent <code>/v1/check</code>. Agents pause, surface the error, and wait for a top-up. No silent bypasses.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">Where does my command data go? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">Where does my command data go&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p>Commands and intents are evaluated in-memory and hashed. Only cryptographic proof hashes and basic audit metadata (credits, timestamps, verdicts) are persisted. Self-hosted deployments are available for regulated buyers.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">Can I rotate my API key? <span class="caret">+</span></button>
+                <button class="faq-q" type="button">Can I rotate my API key&bull; <span class="caret">+</span></button>
                 <div class="faq-a"><p>Yes — contact Reality Kernel support. The old key is invalidated immediately, and the new key inherits your existing credit balance and history.</p></div>
               </div>
             </div>
 
             <div class="cta-banner mt-2">
               <div class="cta-text">
-                <strong>Still stuck?</strong>
+                <strong>Still stuck&bull;</strong>
                 <span>Reach out to our support team — ready to assist with any technical or billing inquiries.</span>
               </div>
               <a class="btn" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" style="text-decoration: none; border-bottom: none;">Contact support <span style="font-family: var(--font-mono);">→</span></a>
