@@ -12,7 +12,26 @@
   <div class="scroll-progress-bar" id="scrollProgress"></div>
   <header class="rk-header"><a href="/" class="rk-brand"><div class="brand"><div class="brand-mark"><img src="/logo.png" alt="Reality Kernel" width="38" height="38" /></div><div><strong>REALITY KERNEL <span class="badge-beta">BETA</span></strong><span class="brand-sub">Execution-layer security</span></div></div></a><nav class="rk-nav"><a href="/playground">Playground</a><a href="/verifier">Verifier</a><a href="/docs">Docs</a><a href="/security">Security</a><a href="/pricing">Pricing</a></nav><div class="rk-header-cta"><a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a><a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a><button class="rk-menu-toggle" type="button" aria-label="Toggle navigation"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div></header>
   <section class="rk-page-hero center"><div class="rk-inner narrow"><span class="rk-eyebrow">Legal</span><h1>Privacy <em>Policy</em></h1><p>How Reality Kernel handles account, telemetry, and support data.</p></div></section>
-  <main class="docs-shell" style="grid-template-columns:minmax(0,1fr);"><div class="docs-main" style="max-width:960px;margin:0 auto;"><section class="docs-block rk-glow-card"><h2>Summary</h2><p>We collect only data needed to run and secure the service, provide billing, and support customers.</p></section><section class="docs-block rk-glow-card"><h2>What we collect</h2><p>Account metadata, tenant settings, usage counters, and security audit records. We avoid storing sensitive command payloads whenever hashing/redaction can achieve the same objective.</p></section><section class="docs-block rk-glow-card"><h2>How we use data</h2><p>To authenticate users, enforce policy, generate signed verdict records, detect abuse, and provide support.</p></section><section class="docs-block rk-glow-card" style="border-bottom:none;"><h2>Contact</h2><p>Questions: <a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a></p></section></div></main>
+  <main class="docs-shell" style="grid-template-columns:minmax(0,1fr);"><div class="docs-main" style="max-width:960px;margin:0 auto;">
+<section class="docs-block rk-glow-card">
+  <h2>Zero-Training Data Retention</h2>
+  <p>Your proprietary agent logic, terminal traces, and tool payloads are strictly isolated. <strong>We never use your execution data, logs, or payload contents to train our internal models or any third-party AI models.</strong> Reality Kernel is security infrastructure, not an AI data broker.</p>
+</section>
+<section class="docs-block rk-glow-card">
+  <h2>What we collect</h2>
+  <p>We collect only the data needed to enforce cryptographic boundaries and provide auditability:</p>
+  <ul>
+    <li><strong>Verdict Logs:</strong> We store cryptographically hashed signatures of the commands your agent attempts to run, mapped to an ALLOW/BLOCK status. Sensitive payload contents are redacted or irreversibly hashed before touching our audit ledger.</li>
+    <li><strong>Tenant Configuration:</strong> Multi-tenant identifiers, API quotas, policy definitions, and access logs.</li>
+    <li><strong>Operational Telemetry:</strong> Standard performance metrics (latency, error rates) to maintain our 0.31ms p50 SLA.</li>
+  </ul>
+</section>
+<section class="docs-block rk-glow-card" style="border-bottom:none;">
+  <h2>Contact & Compliance</h2>
+  <p>For data deletion requests, GDPR/CCPA inquiries, or security disclosures, contact our compliance team at <a href="mailto:contact@realitykernel.dev">contact@realitykernel.dev</a>.</p>
+</section>
+</div>
+  </main>
     <footer class="rk-footer">
     <div class="rk-footer-inner">
       <div class="rk-footer-brand">
