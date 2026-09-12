@@ -2060,6 +2060,9 @@ button.rk-nav-link.external:hover, a.rk-nav-link.external:hover { color: var(--t
   overflow: hidden;
   box-shadow: var(--shadow);
   margin: 18px 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .rk-code .rk-code-head {
   display: flex; align-items: center; gap: 12px;
@@ -2291,8 +2294,8 @@ form label.check { display: flex; align-items: center; gap: 8px; text-transform:
 .verdict-card.allow { border-color: var(--ok-line); }
 .verdict-card.warn { border-color: var(--warn-line); }
 .verdict-card.block { border-color: var(--block-line); }
-.callout { display: grid; grid-template-columns: 20px 1fr; gap: 12px; padding: 16px 18px; background: var(--bg-elev-1); border: 1px solid var(--border-strong); border-left: 2px solid var(--accent); border-radius: 8px; margin: 18px 0; font-size: 13.5px; color: var(--text-2); line-height: 1.6; }
-.callout svg { width: 16px; height: 16px; stroke: var(--accent); fill: none; stroke-width: 1.6; margin-top: 3px; }
+.callout { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; background: var(--bg-elev-1); border: 1px solid var(--border-strong); border-left: 2px solid var(--accent); border-radius: 8px; margin: 18px 0; font-size: 13.5px; color: var(--text-2); line-height: 1.6; }
+.callout svg { flex-shrink: 0; width: 16px; height: 16px; stroke: var(--accent); fill: none; stroke-width: 1.6; margin-top: 3px; }
 .callout strong { color: var(--text); font-weight: 500; }
 .callout.warn { border-left-color: var(--warn); }
 .callout.warn svg { stroke: var(--warn); }

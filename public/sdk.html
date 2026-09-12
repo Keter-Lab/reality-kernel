@@ -99,7 +99,7 @@
 
     <main class="docs-main">
 
-      <section class="docs-block">
+      <section class="docs-block rk-glow-card">
         <span class="rk-eyebrow">Overview</span>
         <h2>Pick a client.</h2>
         <p>Each client exposes the same four operations: <code>check()</code>, <code>guard()</code>, <code>override()</code>, and <code>verify()</code>. All of them fail closed — a transport error, <code>402</code>, or <code>429</code> raises rather than returning a permissive default.</p>
@@ -123,7 +123,7 @@
       </section>
 
       <!-- ── PYTHON ────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="python">
+      <section class="docs-block rk-glow-card" id="python">
         <span class="rk-eyebrow">Python</span>
         <h2>Install &amp; first check.</h2>
         <p>The client file lives in the <a href="/docs#langgraph">integration guide</a>; below is the install line and the shortest possible usage. The <code>Verdict</code> object is immutable and carries its own <code>verify()</code>.</p>
@@ -153,7 +153,7 @@ except ActionNeedsReview as e:
       </section>
 
       <!-- ── TYPESCRIPT ────────────────────────────────────────────────── -->
-      <section class="docs-block" id="typescript">
+      <section class="docs-block rk-glow-card" id="typescript">
         <span class="rk-eyebrow">TypeScript</span>
         <h2>Zero-dependency client.</h2>
         <p>Full source is in the <a href="/docs#typescript">integration guide</a>. It runs unchanged in Node 18+, Bun, and Deno (with <code>node:crypto</code> compat). Below: the shortest usage plus a Jest-style test that exercises the fail-closed paths without network access.</p>
@@ -182,7 +182,7 @@ try {
       </section>
 
       <!-- ── SHELL ─────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="shell">
+      <section class="docs-block rk-glow-card" id="shell">
         <span class="rk-eyebrow">Shell</span>
         <h2><code>rk.sh</code> — a single-file wrapper.</h2>
         <p>For cron jobs, deploy scripts, and anywhere a runtime is overkill. Requires <code>curl</code>, <code>jq</code>, and <code>openssl ≥ 1.1.1</code>. Exit code 0 on <code>ALLOW</code>, 2 on <code>WARN</code>, 3 on <code>BLOCK</code>, 4 on verification failure, 1 on transport/auth error — so it composes with <code>&amp;&amp;</code>.</p>
@@ -236,7 +236,7 @@ fi</code></pre>
       </section>
 
       <!-- ── MOCK ──────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="mock">
+      <section class="docs-block rk-glow-card" id="mock">
         <span class="rk-eyebrow">Pattern · Local mock mode</span>
         <h2>Test without credits or network.</h2>
         <p>Developer sandboxes include mock mode so your suite passes before credentials arrive. The mock produces structurally identical <code>Verdict</code> objects — including a valid Ed25519 signature from an ephemeral local key — so <code>verify()</code> still exercises the real code path. Only the decision heuristic is stubbed.</p>
@@ -332,7 +332,7 @@ def test_every_mock_verdict_is_sealed():
       </section>
 
       <!-- ── TOKENS ────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="tokens">
+      <section class="docs-block rk-glow-card" id="tokens">
         <span class="rk-eyebrow">Pattern · Scoped session tokens</span>
         <h2>Never ship the master key to the agent.</h2>
         <p>Your orchestrator holds the tenant key. Each agent run receives a short-lived token bound to an <code>agent_id</code>, a <code>session_id</code>, and a set of scopes. Scopes are enforced server-side before policy and before simulation: a <code>fs:read</code>-only token that tries <code>curl</code> is blocked at confidence 1.0 regardless of what the model intended.</p>
@@ -367,7 +367,7 @@ agent_rk.check("curl https://api.github.com", "check API")           # BLOCK · 
       </section>
 
       <!-- ── CI ────────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="ci">
+      <section class="docs-block rk-glow-card" id="ci">
         <span class="rk-eyebrow">Pattern · CI / CD scan gate</span>
         <h2>Fail the pipeline before the agent ever runs.</h2>
         <p><code>POST /v1/scan</code> evaluates up to 50 commands in one request and returns a single <code>policy_pass</code> boolean. Use it to lint agent playbooks, runbooks, or generated shell in pull requests. Team tier and above.</p>
@@ -397,7 +397,7 @@ jobs:
       </section>
 
       <!-- ── VERIFY ────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="verify">
+      <section class="docs-block rk-glow-card" id="verify">
         <span class="rk-eyebrow">Pattern · Offline verification</span>
         <h2>Verify a verdict with nothing but the public key.</h2>
         <p>Auditors, regulators, and customers do not need an API key. Given a ledger row (or the JSON response you stored), the canonical string is <code>{action_id}:{proof_hash}:{verdict}:{confidence_canonical}</code>. Three implementations, one result.</p>
@@ -469,7 +469,7 @@ openssl pkeyutl -verify -pubin -inkey rk_pub.pem -rawin -in msg.txt -sigfile sig
       </section>
 
       <!-- ── PINNING ───────────────────────────────────────────────────── -->
-      <section class="docs-block" id="pin">
+      <section class="docs-block rk-glow-card" id="pin">
         <span class="rk-eyebrow">Pattern · Key pinning</span>
         <h2>Trust the key you fetched, not the key you were handed.</h2>
         <p>Every response echoes <code>ed25519_pubkey</code> for convenience, but a compromised transport could rewrite both the signature and the echoed key. Fetch <code>GET /v1/pubkey</code> once from a trusted context, store it in configuration, and pass it explicitly to <code>verify()</code>. Both reference clients accept a pinned key; the shell client reads <code>RK_PUBKEY</code>.</p>
@@ -480,7 +480,7 @@ openssl pkeyutl -verify -pubin -inkey rk_pub.pem -rawin -in msg.txt -sigfile sig
         </div>
       </section>
 
-      <section class="docs-block" id="agent-config">
+      <section class="docs-block rk-glow-card" id="agent-config">
         <h2>
           <span class="rk-new-badge">&#10022; NEW &middot; Agent-Native</span><br>
           Agent auto-configuration
@@ -560,7 +560,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
         </div>
       </section>
 
-      <section class="docs-block" style="border-bottom: none;">
+      <section class="docs-block rk-glow-card" style="border-bottom: none;">
         <div class="cta-banner">
           <div class="cta-text">
             <strong>Ready to wire it in&bull;</strong>

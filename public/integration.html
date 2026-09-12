@@ -102,7 +102,7 @@
     <main class="docs-main">
 
       <!-- ── STEP LIST ─────────────────────────────────────────────────── -->
-      <section class="docs-block">
+      <section class="docs-block rk-glow-card">
         <span class="rk-eyebrow">Walkthrough</span>
         <h2>Four steps to a verified fleet.</h2>
         <p>The contract is intentionally small. You send the compiled command and the operator's intent; you receive a verdict, its evidence, and a signature. Everything else — sessions, policies, scopes — is additive.</p>
@@ -182,7 +182,7 @@ export RK_AGENT_ID="billing-agent-prod"            # bound to every verdict + se
       </section>
 
       <!-- ── LANGGRAPH ─────────────────────────────────────────────────── -->
-      <section class="docs-block" id="langgraph">
+      <section class="docs-block rk-glow-card" id="langgraph">
         <span class="rk-eyebrow">Python · LangChain / LangGraph</span>
         <h2>Tool pre-check hook.</h2>
         <p>A thin client plus a decorator. Any <code>@tool</code> that compiles a shell command is wrapped; the tool body only runs on <code>ALLOW</code>. <code>WARN</code> raises a typed exception your graph can route to a human-in-the-loop node. Depends only on <code>httpx</code> and <code>cryptography</code>.</p>
@@ -463,7 +463,7 @@ print(out["result"])</code></pre>
       </section>
 
       <!-- ── CREWAI ────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="crewai">
+      <section class="docs-block rk-glow-card" id="crewai">
         <span class="rk-eyebrow">Python · CrewAI</span>
         <h2>Agent action guardrail.</h2>
         <p>CrewAI tools subclass <code>BaseTool</code>. The guardrail below checks the compiled command inside <code>_run</code> and derives the <code>prime_intent</code> from the task description. It reuses the same <code>rk_client.py</code> as the LangGraph example.</p>
@@ -533,7 +533,7 @@ Crew(agents=[sre], tasks=[task]).kickoff()</code></pre>
       </section>
 
       <!-- ── TYPESCRIPT ────────────────────────────────────────────────── -->
-      <section class="docs-block" id="typescript">
+      <section class="docs-block rk-glow-card" id="typescript">
         <span class="rk-eyebrow">Node.js · TypeScript</span>
         <h2>Native <code>fetch</code> wrapper.</h2>
         <p>Zero dependencies on Node 18+. Verification uses <code>node:crypto</code> and wraps the raw 32-byte key in a SPKI header. Note the confidence canonicalisation — this is the single most common cause of false verification failures in JS.</p>
@@ -715,7 +715,7 @@ declare function askOperator(v: import("./realityKernel").Verdict): Promise&lt;b
       </section>
 
       <!-- ── CURL ──────────────────────────────────────────────────────── -->
-      <section class="docs-block" id="curl">
+      <section class="docs-block rk-glow-card" id="curl">
         <span class="rk-eyebrow">cURL · Shell</span>
         <h2>Direct terminal testing.</h2>
         <p>Every route is plain JSON over HTTPS. The sequence below runs a check, extracts the signed fields with <code>jq</code>, and verifies the seal with OpenSSL — no SDK involved.</p>
@@ -767,7 +767,7 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
       </section>
 
       <!-- ── API REFERENCE ─────────────────────────────────────────────── -->
-      <section class="docs-block" id="api">
+      <section class="docs-block rk-glow-card" id="api">
         <span class="rk-eyebrow">API reference</span>
         <h2>Contract.</h2>
         <p>Base URL <code>https://www.realitykernel.dev</code>. Authenticated routes take <code>Authorization: Bearer &lt;key&gt;</code>. Bodies are capped at 64 KiB; strings at 4,096 characters for <code>command</code> and 1,024 for <code>prime_intent</code>.</p>
@@ -851,7 +851,7 @@ curl -sS "$BASE/v1/override" -H "Authorization: Bearer $RK_API_KEY" -H "Content-
         </table>
       </section>
 
-      <section class="docs-block" id="agent-config">
+      <section class="docs-block rk-glow-card" id="agent-config">
         <h2>
           <span class="rk-new-badge">&#10022; NEW &middot; Agent-Native</span><br>
           Agent auto-configuration
@@ -949,7 +949,7 @@ export RK_API_KEY=&lt;your-key-from-realitykernel.dev/login&gt;</code></pre>
         </div>
       </section>
 
-      <section class="docs-block" style="border-bottom: none;">
+      <section class="docs-block rk-glow-card" style="border-bottom: none;">
         <div class="cta-banner">
           <div class="cta-text">
             <strong>Need a tenant key&bull;</strong>
