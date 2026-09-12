@@ -1186,7 +1186,7 @@ button.rk-nav-link.external:hover, a.rk-nav-link.external:hover { color: var(--t
   justify-content: space-between;
   padding: 22px 36px;
   border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,0.72);
+  background: var(--bg-elev-0);
   backdrop-filter: saturate(145%) blur(16px);
   -webkit-backdrop-filter: saturate(145%) blur(16px);
   position: sticky; top: 0; z-index: 50;
