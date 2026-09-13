@@ -286,27 +286,24 @@
     bar.hidden = true;
   }
 
-    function renderOverview() {
+  function renderOverview() {
     if (!me) return;
-    document.getElementById('userBadge').textContent =
-      (me.name || 'client') + ' · ' + (me.key_masked || '');
+    const badge = document.getElementById('userBadge');
+    if (badge) {
+      badge.textContent = (me.name || 'client') + ' - ' + (me.key_masked || '');
+    }
 
     const tbody = document.getElementById('ov-recent');
     if (tbody) {
       tbody.innerHTML = '';
       audit.slice(0, 8).forEach(e => {
         const tr = document.createElement('tr');
-        tr.innerHTML = \
-          <td>\</td>
-          <td><span class="pill \">\</span></td>
-          <td><code>\</code></td>
-          <td>\</td>\;
+        tr.innerHTML = `<td>${esc(rk.fmtTime(e.ts))}</td><td><span class="pill ${verdictClass(e.verdict)}">${esc(formatVerdict(e.verdict))}</span></td><td><code>${esc(e.command || '')}</code></td><td>${esc(e.cost ?? '-')}</td>`;
         tbody.appendChild(tr);
       });
       if (!audit.length) tbody.innerHTML = '<tr><td colspan="4" class="muted">no activity yet</td></tr>';
     }
   }
-
   function renderAudit() {
     const v   = document.getElementById('auditVerdict').value;
     const q   = document.getElementById('auditSearch').value.toLowerCase();
