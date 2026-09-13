@@ -1120,6 +1120,8 @@
 
     // ── Draw ─────────────────────────────────────────────────────────────────
     function draw() {
+      if (typeof currentTF !== "undefined" && currentTF !== "live") return;
+
       var dpr  = window.devicePixelRatio || 1;
       var W    = canvas.width  / dpr;
       var H    = canvas.height / dpr;

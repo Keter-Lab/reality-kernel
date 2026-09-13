@@ -42,7 +42,28 @@
     }
     .operator-main .panel { opacity: 0; }
     .operator-main .panel.active { animation: revealUp 0.5s ease forwards !important; }
-  </style>
+  
+    .timeframe-group .tf-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .timeframe-group .tf-btn:hover {
+      color: var(--text);
+    }
+    .timeframe-group .tf-btn.active {
+      background: var(--bg-elev-2);
+      color: var(--text);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    </style>
 
   <div class="operator-shell">
 
@@ -158,6 +179,13 @@
                 <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);">Real-time verdict stream · last 60 seconds</p>
               </div>
               <div style="display:flex; align-items:center; gap:10px;">
+                
+                <div class="timeframe-group" style="display:flex; background:var(--bg-elev-1); border:1px solid var(--border); border-radius:8px; padding:2px; overflow:hidden;">
+                  <button class="tf-btn active" data-tf="live">Live</button>
+                  <button class="tf-btn" data-tf="1h">1H</button>
+                  <button class="tf-btn" data-tf="24h">24H</button>
+                  <button class="tf-btn" data-tf="7d">7D</button>
+                </div>
                 <select id="tlm-agent-select" class="rk-custom-select">
                   <option value="all">All agents</option>
                 </select>

@@ -1103,6 +1103,80 @@ def generate_token(body: TokenRequest, auth=Depends(get_api_key)):
     }
 
 
+
+@app.get("/v1/action/{action_id}/status")
+def get_action_status(action_id: str, auth=Depends(get_api_key)):
+    recent_logs = _sb_recent_audit_strict(auth["key_hash"], limit=100)
+    for log in recent_logs:
+        if log.get("action_id") == action_id:
+            verdict = log.get("verdict")
+            is_resolved = verdict in ["ALLOW", "BLOCK", "WARN_APPROVED", "WARN_REJECTED"]
+            return {
+                "action_id": action_id,
+                "verdict": verdict,
+                "status": "resolved" if is_resolved else "pending",
+                "max_divergence": log.get("max_divergence", 0.0)
+            }
+    raise HTTPException(404, "Action not found or no longer in recent audit buffer")
+
+
+
+@app.get("/v1/telemetry")
+def get_telemetry(tf: str = "1h", auth=Depends(get_api_key)):
+    key_hash = auth["key_hash"]
+    now = time.time()
+    if tf == "1h": cutoff = now - 3600
+    elif tf == "24h": cutoff = now - 86400
+    elif tf == "7d": cutoff = now - (7 * 86400)
+    else: cutoff = now - 3600
+        
+    cutoff_iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(cutoff))
+    
+    try:
+        resp = httpx.get(
+            f"{SUPABASE_REST}/audit_log",
+            headers=_sb_headers(),
+            params={
+                "key_hash": f"eq.{key_hash}",
+                "created_at": f"gte.{cutoff_iso}",
+                "select": "created_at,verdict,agent_id",
+                "order": "created_at.desc",
+                "limit": "5000"
+            }
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        
+        if tf in ["24h", "7d"]:
+            buckets = {}
+            bucket_sec = 600 if tf == "24h" else 3600
+            import datetime
+            for row in rows:
+                ts_str = row.get("created_at")
+                if not ts_str: continue
+                try:
+                    ts = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+                except: continue
+                    
+                b = int(ts // bucket_sec) * bucket_sec
+                agent = row.get("agent_id", "default")
+                k = (b, agent)
+                if k not in buckets:
+                    buckets[k] = {"ts": b, "agent_id": agent, "ALLOW": 0, "WARN": 0, "BLOCK": 0}
+                
+                v = row.get("verdict", "ALLOW")
+                if v.startswith("WARN"): v = "WARN"
+                if v in buckets[k]: buckets[k][v] += 1
+                    
+            return {"type": "bucketed", "data": list(buckets.values())}
+        else:
+            return {"type": "raw", "data": rows}
+            
+    except Exception as e:
+        logger.error(f"Telemetry error: {e}")
+        raise HTTPException(500, "Failed to fetch telemetry")
+
+
 @app.post("/v1/check")
 def check_command(
     body: CheckRequest,
