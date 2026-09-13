@@ -1415,4 +1415,243 @@
     });
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  LIVE TELEMETRY ENGINE
+  // ═══════════════════════════════════════════════════════════════════════════
+  (function initTelemetry() {
+    var canvas    = document.getElementById('tlm-canvas');
+    var emptyEl   = document.getElementById('tlm-empty');
+    var feedEl    = document.getElementById('tlm-feed');
+    var statusEl  = document.getElementById('tlm-status');
+    var selectEl  = document.getElementById('tlm-agent-select');
+    var counterEl = document.getElementById('tlm-counter');
+    var pulseEl   = document.getElementById('tlm-pulse');
+    if (!canvas) return;
+
+    var ctx = canvas.getContext('2d');
+
+    // ── State ────────────────────────────────────────────────────────────────
+    var WINDOW_SEC  = 60;
+    var TICK_MS     = 500;
+    var allEvents   = [];   // { ts, verdict, agent_id, command }
+    var agentSet    = new Set();
+    var activeAgent = 'all';
+    var totalCount  = 0;
+    var knownIds    = new Set();
+
+    // ── CSS variable helper ───────────────────────────────────────────────────
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#38bdf8';
+    }
+
+    // ── High-DPI canvas resize ───────────────────────────────────────────────
+    function resizeCanvas() {
+      var dpr  = window.devicePixelRatio || 1;
+      var rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width  = rect.width  * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvas.style.width  = rect.width  + 'px';
+      canvas.style.height = rect.height + 'px';
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // ── Draw ─────────────────────────────────────────────────────────────────
+    function draw() {
+      var dpr  = window.devicePixelRatio || 1;
+      var W    = canvas.width  / dpr;
+      var H    = canvas.height / dpr;
+      var now  = Date.now();
+      var cutoff = now - WINDOW_SEC * 1000;
+
+      allEvents = allEvents.filter(function(e) { return e.ts > cutoff; });
+      ctx.clearRect(0, 0, W, H);
+
+      // subtle grid
+      ctx.strokeStyle = 'rgba(56,189,248,0.06)';
+      ctx.lineWidth   = 1;
+      for (var i = 0; i <= 4; i++) {
+        var y = (H * i / 4) | 0;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      }
+
+      var visible = activeAgent === 'all'
+        ? allEvents
+        : allEvents.filter(function(e) { return e.agent_id === activeAgent; });
+
+      if (visible.length === 0) { emptyEl.style.display = 'flex'; return; }
+      emptyEl.style.display = 'none';
+
+      // bucket into 2s slots
+      var BUCKET    = 2000;
+      var nBuckets  = Math.ceil(WINDOW_SEC * 1000 / BUCKET);
+      var buckets   = [];
+      for (var b = 0; b < nBuckets; b++) buckets.push({ allow:0, warn:0, block:0 });
+
+      visible.forEach(function(ev) {
+        var bi = nBuckets - 1 - Math.floor((now - ev.ts) / BUCKET);
+        if (bi < 0 || bi >= nBuckets) return;
+        if      (ev.verdict === 'ALLOW') buckets[bi].allow++;
+        else if (ev.verdict === 'WARN')  buckets[bi].warn++;
+        else if (ev.verdict === 'BLOCK') buckets[bi].block++;
+      });
+
+      var maxVal = 1;
+      buckets.forEach(function(bk) { maxVal = Math.max(maxVal, bk.allow, bk.warn, bk.block); });
+
+      function plotLine(key, color, glow) {
+        // filled area first
+        ctx.save();
+        ctx.globalAlpha = 0.09;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        buckets.forEach(function(bk, i) {
+          var x = (i / (nBuckets - 1)) * W;
+          var y = H - (bk[key] / maxVal) * (H * 0.80) - H * 0.06;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // line
+        ctx.save();
+        if (glow) { ctx.shadowColor = color; ctx.shadowBlur = 12; }
+        ctx.strokeStyle = color;
+        ctx.lineWidth   = 2;
+        ctx.lineJoin    = 'round';
+        ctx.lineCap     = 'round';
+        ctx.beginPath();
+        buckets.forEach(function(bk, i) {
+          var x = (i / (nBuckets - 1)) * W;
+          var y = H - (bk[key] / maxVal) * (H * 0.80) - H * 0.06;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      plotLine('allow', cssVar('--ok'),     true);
+      plotLine('warn',  cssVar('--warn'),   false);
+      plotLine('block', cssVar('--danger'), true);
+    }
+
+    setInterval(draw, TICK_MS);
+
+    // ── Push an incoming event ────────────────────────────────────────────────
+    function pushEvent(ev) {
+      if (!ev) return;
+      // deduplicate
+      var uid = ev.action_id || (ev.proof_hash || '') + (ev.created_at || '');
+      if (uid && knownIds.has(uid)) return;
+      if (uid) knownIds.add(uid);
+
+      var ts  = ev.created_at ? new Date(ev.created_at).getTime() : Date.now();
+      var aid = ev.agent_id || 'unknown';
+      allEvents.push({ ts: ts, verdict: ev.verdict, agent_id: aid, command: ev.command || '' });
+      totalCount++;
+      counterEl.textContent = totalCount + (totalCount === 1 ? ' event' : ' events');
+
+      // populate agent dropdown dynamically
+      if (!agentSet.has(aid)) {
+        agentSet.add(aid);
+        var opt = document.createElement('option');
+        opt.value = aid; opt.textContent = aid;
+        selectEl.appendChild(opt);
+      }
+
+      // flash pulse colour
+      pulseEl.style.background = ev.verdict === 'BLOCK' ? 'var(--danger)' : ev.verdict === 'WARN' ? 'var(--warn)' : 'var(--ok)';
+      setTimeout(function() { pulseEl.style.background = ''; }, 900);
+
+      // micro feed row with cinematic flash-in
+      var vcolor = ev.verdict === 'BLOCK' ? 'var(--danger)' : ev.verdict === 'WARN' ? 'var(--warn)' : 'var(--ok)';
+      var row    = document.createElement('div');
+      row.style.cssText = [
+        'display:flex', 'align-items:center', 'gap:10px',
+        'padding:7px 12px', 'border-radius:7px',
+        'background:var(--bg-elev-1)',
+        'border-left:3px solid ' + vcolor,
+        'font-size:12px', 'font-family:var(--font-mono)',
+        'animation:tlm-flash-in 0.35s ease'
+      ].join(';');
+      row.innerHTML =
+        '<span style="color:' + vcolor + ';font-weight:600;min-width:44px;">' + (ev.verdict || '—') + '</span>' +
+        '<span style="color:var(--text-muted);min-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aid + '</span>' +
+        '<span style="color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (ev.command || '—').substring(0, 80) + '</span>' +
+        '<span style="color:var(--text-faint);white-space:nowrap;">' + new Date(ts).toLocaleTimeString() + '</span>';
+      feedEl.prepend(row);
+      while (feedEl.children.length > 5) feedEl.removeChild(feedEl.lastChild);
+    }
+
+    // ── Agent filter ─────────────────────────────────────────────────────────
+    selectEl.addEventListener('change', function() { activeAgent = selectEl.value; });
+
+    // ── Supabase Realtime ─────────────────────────────────────────────────────
+    function connectRealtime() {
+      var supaUrl = (window.RK_SUPABASE_URL  || '').trim();
+      var supaKey = (window.RK_SUPABASE_ANON_KEY || '').trim();
+
+      if (!supaUrl || !supaKey) {
+        statusEl.textContent = 'polling · 5s';
+        startPollFallback(); return;
+      }
+
+      var script  = document.createElement('script');
+      script.src  = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+      script.onload = function() {
+        try {
+          var client = window.supabase.createClient(supaUrl, supaKey);
+          client.channel('rk-telemetry')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_log' }, function(payload) {
+              if (payload.new) pushEvent(payload.new);
+            })
+            .subscribe(function(status) {
+              if (status === 'SUBSCRIBED') {
+                statusEl.textContent = 'live';
+              } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                statusEl.textContent = 'reconnecting…';
+                setTimeout(connectRealtime, 3000);
+              }
+            });
+        } catch(e) {
+          statusEl.textContent = 'polling · 5s';
+          startPollFallback();
+        }
+      };
+      script.onerror = function() { statusEl.textContent = 'polling · 5s'; startPollFallback(); };
+      document.head.appendChild(script);
+    }
+
+    // ── Poll fallback via /v1/audit ───────────────────────────────────────────
+    var _pollCursor = null;
+    function startPollFallback() {
+      function poll() {
+        if (typeof rk === 'undefined') return;
+        rk.call('/v1/audit?limit=20').then(function(res) {
+          return res.ok ? res.json() : null;
+        }).then(function(data) {
+          if (!data || !data.entries) return;
+          // entries come newest-first; reverse to push in chronological order
+          data.entries.slice().reverse().forEach(pushEvent);
+        }).catch(function() {});
+      }
+      poll();
+      setInterval(poll, 5000);
+    }
+
+    connectRealtime();
+
+    // inject keyframe once
+    if (!document.getElementById('tlm-styles')) {
+      var st = document.createElement('style');
+      st.id  = 'tlm-styles';
+      st.textContent =
+        '@keyframes tlm-flash-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}' +
+        '@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.4}}';
+      document.head.appendChild(st);
+    }
+  })();
+
 })();
