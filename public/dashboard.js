@@ -304,6 +304,43 @@
       if (!audit.length) tbody.innerHTML = '<tr><td colspan="4" class="muted">no activity yet</td></tr>';
     }
   }
+  function renderUsage() {
+    if (!me) return;
+    document.getElementById('us-used').textContent  = rk.fmtNum(me.credits_used);
+    document.getElementById('us-limit').textContent = ' / ' + rk.fmtNum(me.credits_limit);
+    document.getElementById('us-pct').textContent   = (me.pct_used || 0) + '%';
+    document.getElementById('us-plan').textContent  = me.plan || '—';
+    document.getElementById('us-status').textContent = me.status || '—';
+    const bar = document.getElementById('us-bar');
+    if (bar) {
+      bar.style.width = Math.min(100, me.pct_used || 0) + '%';
+      bar.className = 'fill ' + (me.pct_used > 90 ? 'block' : me.pct_used > 75 ? 'warn' : 'ok');
+    }
+
+    const tbody = document.getElementById('us-topups');
+    if (tbody) {
+      const log = me.top_up_log || [];
+      if (!log.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state" style="padding: 24px;"><span class="empty-ic">Empty</span><h4>No top-ups recorded</h4></td></tr>';
+      } else {
+        tbody.innerHTML = log.map(t => `<tr><td>${esc(rk.fmtTime(t.ts))}</td><td>+${esc(rk.fmtNum(t.amount))}</td><td>${esc(t.note || '')}</td></tr>`).join('');
+      }
+    }
+
+    const counts = { ALLOW: 0, WARN: 0, BLOCK: 0 };
+    audit.forEach(e => {
+      let v = e.verdict;
+      if (v === 'WARN_APPROVED' || v === 'WARN_REJECTED') v = 'WARN';
+      if (counts[v] !== undefined) counts[v]++;
+    });
+    const total = Math.max(1, counts.ALLOW + counts.WARN + counts.BLOCK);
+    if (document.getElementById('us-seg-ok')) {
+      document.getElementById('us-seg-ok').style.width    = (counts.ALLOW / total * 100) + '%';
+      document.getElementById('us-seg-warn').style.width  = (counts.WARN  / total * 100) + '%';
+      document.getElementById('us-seg-block').style.width = (counts.BLOCK / total * 100) + '%';
+    }
+  }
+
   function renderAudit() {
     const v   = document.getElementById('auditVerdict').value;
     const q   = document.getElementById('auditSearch').value.toLowerCase();
