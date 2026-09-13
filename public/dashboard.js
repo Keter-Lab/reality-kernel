@@ -286,138 +286,24 @@
     bar.hidden = true;
   }
 
-  function renderOverview() {
+    function renderOverview() {
     if (!me) return;
     document.getElementById('userBadge').textContent =
-      (me.name || 'client') + ' · ' + (me.key_masked || '');
-    document.getElementById('ov-plan').textContent  = me.plan || '—';
-    document.getElementById('ov-status').textContent = me.status || '—';
-    document.getElementById('ov-used').textContent  = rk.fmtNum(me.credits_used);
-    document.getElementById('ov-limit').textContent = ' / ' + rk.fmtNum(me.credits_limit);
-    document.getElementById('ov-rem').textContent   = rk.fmtNum(me.credits_remaining);
-    document.getElementById('ov-pct').textContent   = (me.pct_used || 0) + '% used';
-    document.getElementById('ov-bar').style.width   = Math.min(100, me.pct_used || 0) + '%';
-    document.getElementById('ov-bar').className     = 'fill ' +
-      (me.pct_used > 90 ? 'block' : me.pct_used > 75 ? 'warn' : 'ok');
-    document.getElementById('ov-rem-warn').textContent =
-      me.low_credits ? 'Low — top up soon' : 'Healthy';
-
-    const counts = { ALLOW: 0, WARN: 0, BLOCK: 0 };
-    audit.forEach(e => {
-      let v = e.verdict;
-      if (v === 'WARN_APPROVED' || v === 'WARN_REJECTED') v = 'WARN';
-      if (counts[v] !== undefined) counts[v]++;
-    });
-    document.getElementById('ov-calls').textContent = audit.length;
-    document.getElementById('ov-allow').textContent = counts.ALLOW + ' allow';
-    document.getElementById('ov-warn').textContent  = counts.WARN  + ' warn';
-    document.getElementById('ov-block').textContent = counts.BLOCK + ' block';
+      (me.name || 'client') + ' � ' + (me.key_masked || '');
 
     const tbody = document.getElementById('ov-recent');
     if (tbody) {
       tbody.innerHTML = '';
       audit.slice(0, 8).forEach(e => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${esc(rk.fmtTime(e.ts))}</td>
-          <td><span class="pill ${verdictClass(e.verdict)}">${esc(formatVerdict(e.verdict))}</span></td>
-          <td><code>${esc(e.command || '')}</code></td>
-          <td>${esc(e.cost ?? '—')}</td>`;
+        tr.innerHTML = \
+          <td>\</td>
+          <td><span class="pill \">\</span></td>
+          <td><code>\</code></td>
+          <td>\</td>\;
         tbody.appendChild(tr);
       });
       if (!audit.length) tbody.innerHTML = '<tr><td colspan="4" class="muted">no activity yet</td></tr>';
-    }
-
-    const pendingList = document.getElementById('ov-pending-list');
-    const pendingCard = document.getElementById('pendingAlertsCard');
-    if (pendingList && pendingCard) {
-      // FIX: Filter out locally-resolved WARNs immediately so card dismisses
-      // without waiting for the async API re-fetch to complete.
-      const pendingWarns = audit.filter(e => e.verdict === 'WARN' && !_resolvedWarns.has(e.action_id));
-      pendingCard.style.display = 'block';
-      if (pendingWarns.length > 0) {
-        pendingList.innerHTML = '';
-        pendingWarns.forEach(e => {
-          const div = document.createElement('div');
-          div.style.padding = '12px';
-          div.style.background = 'var(--bg-hover)';
-          div.style.border = '1px solid var(--border)';
-          div.style.borderRadius = '6px';
-          div.style.display = 'flex';
-          div.style.flexDirection = 'column';
-          div.style.gap = '8px';
-          
-          const urlParams = new URLSearchParams(window.location.search);
-          const isTargeted = urlParams.get('action_id') === e.action_id;
-          if (isTargeted) {
-            div.style.borderColor = 'var(--warn)';
-            div.style.boxShadow = '0 0 0 1px var(--warn)';
-          }
-
-          // Display actual command/intent; show hash as subtle proof annotation
-          const cmdDisplay = e.command && e.command.startsWith('[redacted]')
-            ? `<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);" title="Zero-retention: command stored as SHA-256 fingerprint">[zero-retention proof] <em>${esc(e.command.replace('[redacted] ',''))}</em></span>`
-            : `<code style="font-size:13px;color:var(--text);">${esc(e.command || '—')}</code>`;
-          const intentDisplay = e.prime_intent && e.prime_intent.startsWith('[redacted]')
-            ? `<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);" title="Zero-retention: intent stored as SHA-256 fingerprint">[proof] ${esc(e.prime_intent.replace('[redacted] ',''))}</span>`
-            : esc(e.prime_intent || '—');
-
-          div.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-              ${cmdDisplay}
-              <span class="muted" style="font-size: 11px;">${esc(rk.fmtTime(e.ts))}</span>
-            </div>
-            <div style="font-size: 13px;" class="muted">Intent: <em>${intentDisplay}</em></div>
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <button class="primary btn-sm" onclick="handleOverride('${e.action_id}', 'approved')">Approve Action</button>
-              <button class="danger btn-sm" onclick="handleOverride('${e.action_id}', 'rejected')">Block Action</button>
-            </div>
-          `;
-          pendingList.appendChild(div);
-        });
-      } else {
-        pendingList.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 14px; background: var(--bg-hover); border: 1px dashed var(--border); border-radius: 6px;">No pending actions. You\'re all caught up! ✓</div>';
-      }
-    }
-
-  }
-
-  function renderUsage() {
-    if (!me) return;
-    document.getElementById('us-used').textContent  = rk.fmtNum(me.credits_used);
-    document.getElementById('us-limit').textContent = ' / ' + rk.fmtNum(me.credits_limit);
-    document.getElementById('us-pct').textContent   = (me.pct_used || 0) + '%';
-    document.getElementById('us-plan').textContent  = me.plan || '—';
-    document.getElementById('us-status').textContent = me.status || '—';
-    const bar = document.getElementById('us-bar');
-    if (bar) {
-      bar.style.width = Math.min(100, me.pct_used || 0) + '%';
-      bar.className = 'fill ' + (me.pct_used > 90 ? 'block' : me.pct_used > 75 ? 'warn' : 'ok');
-    }
-
-    const tbody = document.getElementById('us-topups');
-    if (tbody) {
-      const log = me.top_up_log || [];
-      if (!log.length) {
-        tbody.innerHTML = '<tr><td colspan="3" class="empty-state" style="padding: 24px;"><span class="empty-ic">Empty</span><h4>No top-ups recorded</h4></td></tr>';
-      } else {
-        tbody.innerHTML = log.map(t => `
-          <tr><td>${esc(rk.fmtTime(t.ts))}</td><td>+${esc(rk.fmtNum(t.amount))}</td><td>${esc(t.note || '')}</td></tr>
-        `).join('');
-      }
-    }
-
-    const counts = { ALLOW: 0, WARN: 0, BLOCK: 0 };
-    audit.forEach(e => {
-      let v = e.verdict;
-      if (v === 'WARN_APPROVED' || v === 'WARN_REJECTED') v = 'WARN';
-      if (counts[v] !== undefined) counts[v]++;
-    });
-    const total = Math.max(1, counts.ALLOW + counts.WARN + counts.BLOCK);
-    if (document.getElementById('us-seg-ok')) {
-      document.getElementById('us-seg-ok').style.width    = (counts.ALLOW / total * 100) + '%';
-      document.getElementById('us-seg-warn').style.width  = (counts.WARN  / total * 100) + '%';
-      document.getElementById('us-seg-block').style.width = (counts.BLOCK / total * 100) + '%';
     }
   }
 
