@@ -940,6 +940,7 @@
           return '<div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;align-items:center;">' +
             '<span style="color:var(--text-muted);white-space:nowrap;">' + esc(rk.fmtTime(e.ts)) + '</span>' +
             '<span class="pill ' + verdictClass(e.verdict) + '" style="font-size:10px;">' + esc(formatVerdict(e.verdict)) + '</span>' +
+            '<span style="font-family:var(--font-mono);color:var(--text-soft);font-size:11px;margin-left:8px;">' + esc(e.agent_id || 'default') + '</span>' +
             '<span style="font-family:var(--font-mono);color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
               (e.command && e.command.startsWith('[redacted]') ? '[redacted] ' + esc(e.command.replace('[redacted] ','').slice(0,40)) : esc((e.command||'').slice(0,40))) +
             '</span></div>';
@@ -951,6 +952,7 @@
               return '<div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;align-items:center;">' +
                 '<span style="color:var(--text-muted);white-space:nowrap;">' + esc(rk.fmtTime(e.ts)) + '</span>' +
                 '<span class="pill ' + verdictClass(e.verdict) + '" style="font-size:10px;">' + esc(formatVerdict(e.verdict)) + '</span>' +
+            '<span style="font-family:var(--font-mono);color:var(--text-soft);font-size:11px;margin-left:8px;">' + esc(e.agent_id || 'default') + '</span>' +
                 '<span style="font-family:var(--font-mono);color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
                   (e.command && e.command.startsWith('[redacted]') ? '[redacted] ' + esc(e.command.replace('[redacted] ','').slice(0,40)) : esc((e.command||'').slice(0,40))) +
                 '</span></div>';
@@ -1120,6 +1122,8 @@
 
     // ── Draw ─────────────────────────────────────────────────────────────────
     function draw() {
+      if (typeof currentTF !== "undefined" && currentTF !== "live") return;
+
       if (typeof currentTF !== "undefined" && currentTF !== "live") return;
 
       var dpr  = window.devicePixelRatio || 1;
@@ -1293,7 +1297,7 @@
       function poll() {
         if (typeof rk === 'undefined') return;
         rk.call('/v1/audit?limit=20').then(function(res) {
-          return res.ok ? res.json() : null;
+          return res.ok ? res.body : null;
         }).then(function(data) {
           if (!data || !data.entries) return;
           // entries come newest-first; reverse to push in chronological order
