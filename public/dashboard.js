@@ -1079,7 +1079,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  LIVE TELEMETRY ENGINE
+  //  LIVE TELEMETRY ENGINE — Force-directed node-edge graph
   // ═══════════════════════════════════════════════════════════════════════════
   (function initTelemetry() {
     var canvas    = document.getElementById('tlm-canvas');
@@ -1092,61 +1092,21 @@
     if (!canvas) return;
 
     var ctx = canvas.getContext('2d');
-
-    // ── State ────────────────────────────────────────────────────────────────
-    var WINDOW_SEC  = 60;
-    var TICK_MS     = 500;
-    var allEvents   = [];   // { ts, verdict, agent_id, command }
-    var agentSet    = new Set();
+    var currentTF  = 'live';
+    var totalCount = 0;
+    var knownIds   = new Set();
+    var agentSet   = new Set();
     var activeAgent = 'all';
-    var totalCount  = 0;
-    var knownIds    = new Set();
-    var isDrawing = true;
 
-    var currentTF = 'live';
-    var bucketedData = [];
-    
-    async function fetchTelemetry() {
-      if (currentTF === 'live') {
-        WINDOW_SEC = 60;
-        return;
-      }
-      if (currentTF === '1h') WINDOW_SEC = 3600;
-      if (currentTF === '24h') WINDOW_SEC = 86400;
-      if (currentTF === '7d') WINDOW_SEC = 7 * 86400;
-      
-      try {
-        var res = await window.rk.call('/v1/telemetry?tf=' + currentTF);
-        if (res && res.body) {
-           if (res.body.type === 'bucketed') {
-               bucketedData = res.body.data;
-               allEvents = [];
-               if (bucketedData.length > 0) {
-                 counterEl.textContent = bucketedData.reduce(function(s,b){ return s+(b.allow||0)+(b.warn||0)+(b.block||0); }, 0) + ' events';
-               }
-           } else if (Array.isArray(res.body.data)) {
-               allEvents = [];
-               bucketedData = [];
-               res.body.data.forEach(function(d) { pushEvent(d, true); });
-           }
-        }
-        draw(); // re-render immediately after data load
-      } catch(e) { console.error("Telemetry fetch failed", e); }
-    }
+    // ── Node graph state ────────────────────────────────────────────────────
+    // Hub = Reality Kernel engine (center)
+    // Agents = satellite nodes
+    // Particles = in-flight verdict events traveling hub<->agent
+    var nodes     = {};   // agent_id → { x, y, vx, vy, r, allow, warn, block, label, pulseT }
+    var particles = [];   // { x, y, tx, ty, color, alpha, t, speed, verdict }
+    var HUB = { x: 0, y: 0, r: 28 };
 
-    document.getElementById('tlm-tf-select').addEventListener('change', function(e) {
-      currentTF = e.target.value;
-      fetchTelemetry();
-      if (!isDrawing) { isDrawing = true; requestAnimationFrame(draw); }
-    });
-
-
-    // ── CSS variable helper ───────────────────────────────────────────────────
-    function cssVar(name) {
-      return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#38bdf8';
-    }
-
-    // ── High-DPI canvas resize ───────────────────────────────────────────────
+    // ── High-DPI resize ─────────────────────────────────────────────────────
     function resizeCanvas() {
       var dpr  = window.devicePixelRatio || 1;
       var rect = canvas.parentElement.getBoundingClientRect();
@@ -1155,254 +1115,380 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       canvas.style.width  = rect.width  + 'px';
       canvas.style.height = rect.height + 'px';
+      HUB.x = rect.width  / 2;
+      HUB.y = rect.height / 2;
     }
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // ── Draw ─────────────────────────────────────────────────────────────────
-    function draw() {
-      var dpr  = window.devicePixelRatio || 1;
-      var W    = canvas.width  / dpr;
-      var H    = canvas.height / dpr;
-      var now  = Date.now();
-
-      ctx.clearRect(0, 0, W, H);
-
-      // subtle grid
-      ctx.strokeStyle = 'rgba(56,189,248,0.06)';
-      ctx.lineWidth   = 1;
-      for (var i = 0; i <= 4; i++) {
-        var y = (H * i / 4) | 0;
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      }
-
-      // ── HISTORICAL VIEW (1h / 24h / 7d) ──────────────────────────────────
-      if (currentTF !== 'live') {
-        var hData = activeAgent === 'all'
-          ? bucketedData
-          : bucketedData.filter(function(b) { return !b.agent_id || b.agent_id === activeAgent; });
-
-        if (!hData || hData.length === 0) {
-          emptyEl.style.display = 'flex';
-          return;
-        }
-        emptyEl.style.display = 'none';
-
-        var nBk = hData.length;
-        var maxHVal = 1;
-        hData.forEach(function(bk) {
-          maxHVal = Math.max(maxHVal, (bk.allow||0), (bk.warn||0), (bk.block||0));
-        });
-
-        function plotHistLine(key, color, glow) {
-          ctx.save();
-          ctx.globalAlpha = 0.10;
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          hData.forEach(function(bk, i) {
-            var x = (i / Math.max(nBk - 1, 1)) * W;
-            var y = H - ((bk[key]||0) / maxHVal) * (H * 0.80) - H * 0.06;
-            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-          });
-          ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
-          ctx.fill(); ctx.restore();
-
-          ctx.save();
-          if (glow) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
-          ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-          ctx.beginPath();
-          hData.forEach(function(bk, i) {
-            var x = (i / Math.max(nBk - 1, 1)) * W;
-            var y = H - ((bk[key]||0) / maxHVal) * (H * 0.80) - H * 0.06;
-            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-          });
-          ctx.stroke(); ctx.restore();
-        }
-        plotHistLine('allow', cssVar('--ok'),     true);
-        plotHistLine('warn',  cssVar('--warn'),   false);
-        plotHistLine('block', cssVar('--danger'), true);
-        return;
-      }
-
-      // ── LIVE VIEW ─────────────────────────────────────────────────────────
-      var cutoff = now - WINDOW_SEC * 1000;
-      allEvents = allEvents.filter(function(e) { return e.ts > cutoff; });
-
-      var visible = activeAgent === 'all'
-        ? allEvents
-        : allEvents.filter(function(e) { return e.agent_id === activeAgent; });
-
-      if (visible.length === 0) { emptyEl.style.display = 'flex'; return; }
-      emptyEl.style.display = 'none';
-
-      // bucket into 2s slots
-      var BUCKET    = 2000;
-      var nBuckets  = Math.ceil(WINDOW_SEC * 1000 / BUCKET);
-      var buckets   = [];
-      for (var b = 0; b < nBuckets; b++) buckets.push({ allow:0, warn:0, block:0 });
-
-      visible.forEach(function(ev) {
-        var bi = nBuckets - 1 - Math.floor((now - ev.ts) / BUCKET);
-        if (bi < 0 || bi >= nBuckets) return;
-        if      (ev.verdict === 'ALLOW') buckets[bi].allow++;
-        else if (ev.verdict === 'WARN' || ev.verdict === 'WARN_APPROVED' || ev.verdict === 'WARN_REJECTED')  buckets[bi].warn++;
-        else if (ev.verdict === 'BLOCK') buckets[bi].block++;
-      });
-
-      var maxVal = 1;
-      buckets.forEach(function(bk) { maxVal = Math.max(maxVal, bk.allow, bk.warn, bk.block); });
-
-      function plotLine(key, color, glow) {
-        // filled area first
-        ctx.save();
-        ctx.globalAlpha = 0.09;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        buckets.forEach(function(bk, i) {
-          var x = (i / (nBuckets - 1)) * W;
-          var y = H - (bk[key] / maxVal) * (H * 0.80) - H * 0.06;
-          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-        });
-        ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-
-        // line
-        ctx.save();
-        if (glow) { ctx.shadowColor = color; ctx.shadowBlur = 12; }
-        ctx.strokeStyle = color;
-        ctx.lineWidth   = 2;
-        ctx.lineJoin    = 'round';
-        ctx.lineCap     = 'round';
-        ctx.beginPath();
-        buckets.forEach(function(bk, i) {
-          var x = (i / (nBuckets - 1)) * W;
-          var y = H - (bk[key] / maxVal) * (H * 0.80) - H * 0.06;
-          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      plotLine('allow', cssVar('--ok'),     true);
-      plotLine('warn',  cssVar('--warn'),   false);
-      plotLine('block', cssVar('--danger'), true);
-    }
-
-    setInterval(draw, TICK_MS);
-
-    // ── Push an incoming event ────────────────────────────────────────────────
-    function pushEvent(ev, silent=false) {
-      if (!ev) return;
-      // deduplicate
-      var uid = ev.action_id || (ev.proof_hash || '') + (ev.ts || ev.created_at || '');
-      if (uid && knownIds.has(uid)) return;
-      if (uid) knownIds.add(uid);
-
-      var ts  = (ev.ts || ev.created_at) ? new Date(ev.ts || ev.created_at).getTime() : Date.now();
-      var aid = ev.agent_id || 'unknown';
-      allEvents.push({ ts: ts, verdict: ev.verdict, agent_id: aid, command: ev.command || '' });
-      if (!silent) { totalCount++;
-      counterEl.textContent = totalCount + (totalCount === 1 ? " event" : " events"); }
-      
-
-      // populate agent dropdown dynamically
+    // ── Ensure a node exists for an agent ────────────────────────────────────
+    function ensureNode(aid) {
+      if (nodes[aid]) return;
+      var angle = Math.random() * Math.PI * 2;
+      var dist  = 110 + Math.random() * 80;
+      nodes[aid] = {
+        x: HUB.x + Math.cos(angle) * dist,
+        y: HUB.y + Math.sin(angle) * dist,
+        vx: 0, vy: 0,
+        r: 14,
+        allow: 0, warn: 0, block: 0,
+        label: aid.replace(/^ag-/, '').slice(0, 14),
+        pulseT: 0,
+        angle: angle,
+        dist: dist
+      };
+      // add to dropdown
       if (!agentSet.has(aid)) {
         agentSet.add(aid);
         var opt = document.createElement('option');
         opt.value = aid; opt.textContent = aid;
         selectEl.appendChild(opt);
       }
+    }
 
-      // flash pulse colour
-      pulseEl.style.background = ev.verdict === 'BLOCK' ? 'var(--danger)' : ev.verdict === 'WARN' ? 'var(--warn)' : 'var(--ok)';
-      setTimeout(function() { pulseEl.style.background = ''; }, 900);
+    // ── Fire a particle from agent toward hub ────────────────────────────────
+    function fireParticle(aid, verdict) {
+      var n = nodes[aid];
+      if (!n) return;
+      var color = verdict === 'ALLOW' ? '#10b981'
+                : (verdict === 'WARN' || verdict === 'WARN_APPROVED' || verdict === 'WARN_REJECTED') ? '#f59e0b'
+                : '#ef4444';
+      particles.push({
+        x: n.x, y: n.y,
+        tx: HUB.x + (Math.random() * 10 - 5),
+        ty: HUB.y + (Math.random() * 10 - 5),
+        color: color, alpha: 1,
+        t: 0, speed: 0.016 + Math.random() * 0.012,
+        verdict: verdict
+      });
+      n.pulseT = 1.0;
+    }
 
-      // micro feed row with cinematic flash-in
-      var vcolor = ev.verdict === 'BLOCK' ? 'var(--danger)' : ev.verdict === 'WARN' ? 'var(--warn)' : 'var(--ok)';
-      var row    = document.createElement('div');
-      row.style.cssText = [
-        'display:flex', 'align-items:center', 'gap:10px',
-        'padding:7px 12px', 'border-radius:7px',
-        'background:var(--bg-elev-1)',
-        'border-left:3px solid ' + vcolor,
-        'font-size:12px', 'font-family:var(--font-mono)',
-        'animation:tlm-flash-in 0.35s ease'
-      ].join(';');
-      row.innerHTML =
-        '<span style="color:' + vcolor + ';font-weight:600;min-width:44px;">' + (ev.verdict || '—') + '</span>' +
-        '<span style="color:var(--text-muted);min-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aid + '</span>' +
-        '<span style="color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (ev.command || '—').substring(0, 80) + '</span>' +
-        '<span style="color:var(--text-faint);white-space:nowrap;">' + new Date(ts).toLocaleTimeString() + '</span>';
+    // ── Orbit layout (soft force) ─────────────────────────────────────────────
+    function stepPhysics() {
+      var agentIds = Object.keys(nodes);
+      var n = agentIds.length;
+      if (!n) return;
+
+      agentIds.forEach(function(aid, i) {
+        var nd = nodes[aid];
+        // Target angle evenly distributed
+        var targetAngle = (i / n) * Math.PI * 2;
+        var targetDist  = 130 + (n > 6 ? (n - 6) * 14 : 0);
+        var tx = HUB.x + Math.cos(targetAngle) * targetDist;
+        var ty = HUB.y + Math.sin(targetAngle) * targetDist;
+
+        // Spring toward target
+        nd.vx += (tx - nd.x) * 0.04;
+        nd.vy += (ty - nd.y) * 0.04;
+
+        // Damping
+        nd.vx *= 0.75;
+        nd.vy *= 0.75;
+
+        nd.x += nd.vx;
+        nd.y += nd.vy;
+
+        // Decay pulse
+        if (nd.pulseT > 0) nd.pulseT = Math.max(0, nd.pulseT - 0.025);
+
+        // Node radius = 12..22 based on total events
+        var total = nd.allow + nd.warn + nd.block;
+        nd.r = Math.min(22, 12 + total * 0.4);
+      });
+
+      // Step particles
+      particles = particles.filter(function(p) { return p.t < 1.0; });
+      particles.forEach(function(p) {
+        p.t = Math.min(1, p.t + p.speed);
+        p.x = p.x + (p.tx - p.x) * p.speed * 2.5;
+        p.y = p.y + (p.ty - p.y) * p.speed * 2.5;
+        p.alpha = Math.sin(p.t * Math.PI);
+      });
+    }
+
+    // ── Main draw ─────────────────────────────────────────────────────────────
+    function draw() {
+      var dpr = window.devicePixelRatio || 1;
+      var W   = canvas.width  / dpr;
+      var H   = canvas.height / dpr;
+
+      ctx.clearRect(0, 0, W, H);
+
+      var agentIds = Object.keys(nodes);
+      var hasData  = agentIds.length > 0;
+
+      if (!hasData) {
+        emptyEl.style.display = 'flex';
+        requestAnimationFrame(draw);
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      // ── Edges (agent → hub) ──────────────────────────────────────────────
+      agentIds.forEach(function(aid) {
+        var nd = nodes[aid];
+        if (activeAgent !== 'all' && activeAgent !== aid) return;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56,189,248,0.12)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 8]);
+        ctx.beginPath();
+        ctx.moveTo(nd.x, nd.y);
+        ctx.lineTo(HUB.x, HUB.y);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // ── Particles ────────────────────────────────────────────────────────
+      particles.forEach(function(p) {
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur  = 14;
+        ctx.fillStyle   = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // ── Hub node ─────────────────────────────────────────────────────────
+      ctx.save();
+      var hubGrad = ctx.createRadialGradient(HUB.x, HUB.y, 0, HUB.x, HUB.y, HUB.r + 10);
+      hubGrad.addColorStop(0, 'rgba(56,189,248,0.35)');
+      hubGrad.addColorStop(1, 'rgba(56,189,248,0)');
+      ctx.fillStyle = hubGrad;
+      ctx.beginPath(); ctx.arc(HUB.x, HUB.y, HUB.r + 10, 0, Math.PI * 2); ctx.fill();
+
+      ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 20;
+      ctx.strokeStyle = 'rgba(56,189,248,0.8)'; ctx.lineWidth = 2;
+      ctx.fillStyle   = '#0f1b2d';
+      ctx.beginPath(); ctx.arc(HUB.x, HUB.y, HUB.r, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.font      = 'bold 9px monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('RK', HUB.x, HUB.y - 4);
+      ctx.font = '7px monospace';
+      ctx.fillText('ENGINE', HUB.x, HUB.y + 5);
+      ctx.restore();
+
+      // ── Agent nodes ──────────────────────────────────────────────────────
+      agentIds.forEach(function(aid) {
+        var nd = nodes[aid];
+        var isActive = activeAgent === 'all' || activeAgent === aid;
+        var total = nd.allow + nd.warn + nd.block;
+
+        // dominant color
+        var nodeColor = nd.block > 0  ? '#ef4444'
+                      : nd.warn  > 0  ? '#f59e0b'
+                      : nd.allow > 0  ? '#10b981'
+                      : '#38bdf8';
+
+        ctx.save();
+        ctx.globalAlpha = isActive ? 1.0 : 0.25;
+
+        // Pulse ring
+        if (nd.pulseT > 0) {
+          var pr = nd.r + nd.pulseT * 22;
+          ctx.beginPath();
+          ctx.arc(nd.x, nd.y, pr, 0, Math.PI * 2);
+          ctx.strokeStyle = nodeColor;
+          ctx.globalAlpha = nd.pulseT * 0.5 * (isActive ? 1 : 0.3);
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.globalAlpha = isActive ? 1.0 : 0.25;
+        }
+
+        // Glow
+        ctx.shadowColor = nodeColor; ctx.shadowBlur = 16 + nd.pulseT * 10;
+
+        // Fill
+        ctx.fillStyle = '#0d1926';
+        ctx.beginPath(); ctx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2); ctx.fill();
+
+        // Border — pie-chart style split if multiple verdicts
+        var borderW = 2.5;
+        if (total > 0) {
+          var aFrac = nd.allow / total;
+          var wFrac = nd.warn  / total;
+          var bFrac = nd.block / total;
+          var start = -Math.PI / 2;
+
+          function arcSegment(frac, color) {
+            if (frac <= 0) return;
+            ctx.beginPath();
+            ctx.arc(nd.x, nd.y, nd.r, start, start + frac * Math.PI * 2);
+            ctx.strokeStyle = color; ctx.lineWidth = borderW; ctx.stroke();
+            start += frac * Math.PI * 2;
+          }
+          arcSegment(aFrac, '#10b981');
+          arcSegment(wFrac, '#f59e0b');
+          arcSegment(bFrac, '#ef4444');
+        } else {
+          ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = borderW;
+          ctx.beginPath(); ctx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2); ctx.stroke();
+        }
+
+        // Label
+        ctx.shadowBlur  = 0;
+        ctx.fillStyle   = isActive ? '#e2e8f0' : '#4a5568';
+        ctx.font        = '10px monospace';
+        ctx.textAlign   = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(nd.label, nd.x, nd.y + nd.r + 5);
+
+        // Count badge
+        if (total > 0 && isActive) {
+          ctx.fillStyle = nodeColor;
+          ctx.font      = 'bold 9px monospace';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(total, nd.x, nd.y);
+        }
+
+        ctx.restore();
+      });
+
+      stepPhysics();
+      requestAnimationFrame(draw);
+    }
+
+    // ── Push an incoming live event ──────────────────────────────────────────
+    function pushEvent(ev, silent) {
+      if (!ev) return;
+      var uid = ev.action_id || (ev.proof_hash || '') + (ev.ts || ev.created_at || '');
+      if (uid && knownIds.has(uid)) return;
+      if (uid) knownIds.add(uid);
+
+      var aid = ev.agent_id || 'unknown';
+      var verdict = ev.verdict || 'ALLOW';
+      var vNorm = verdict === 'WARN_APPROVED' || verdict === 'WARN_REJECTED' ? 'WARN' : verdict;
+
+      ensureNode(aid);
+      var nd = nodes[aid];
+      if (vNorm === 'ALLOW')      nd.allow++;
+      else if (vNorm === 'WARN')  nd.warn++;
+      else if (vNorm === 'BLOCK') nd.block++;
+      fireParticle(aid, vNorm);
+
+      if (!silent) {
+        totalCount++;
+        counterEl.textContent = totalCount + ' event' + (totalCount !== 1 ? 's' : '');
+      }
+
+      // flash hub pulse indicator
+      pulseEl.style.background = vNorm === 'BLOCK' ? 'var(--danger)' : vNorm === 'WARN' ? 'var(--warn)' : 'var(--ok)';
+      setTimeout(function() { pulseEl.style.background = ''; }, 700);
+
+      // micro feed
+      var ts  = (ev.ts || ev.created_at) ? new Date(ev.ts || ev.created_at).getTime() : Date.now();
+      var vc  = vNorm === 'BLOCK' ? 'var(--danger)' : vNorm === 'WARN' ? 'var(--warn)' : 'var(--ok)';
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:7px;background:var(--bg-elev-1);border-left:3px solid ' + vc + ';font-size:12px;font-family:var(--font-mono);animation:tlm-flash-in 0.3s ease';
+      row.innerHTML = '<span style="color:' + vc + ';font-weight:600;min-width:48px">' + verdict + '</span>' +
+        '<span style="color:var(--text-muted);min-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + aid + '</span>' +
+        '<span style="color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.command || '—').slice(0, 80) + '</span>' +
+        '<span style="color:var(--text-faint);white-space:nowrap">' + new Date(ts).toLocaleTimeString() + '</span>';
       feedEl.prepend(row);
       while (feedEl.children.length > 5) feedEl.removeChild(feedEl.lastChild);
     }
 
-    // ── Agent filter ─────────────────────────────────────────────────────────
+    // ── Timeframe: load historical snapshot ──────────────────────────────────
+    async function fetchTelemetry() {
+      if (currentTF === 'live') return;
+      try {
+        var res = await window.rk.call('/v1/telemetry?tf=' + currentTF);
+        if (!res || !res.body) return;
+        var data = res.body.data || [];
+
+        // Reset graph for historical view
+        nodes = {}; particles = []; knownIds = new Set();
+        agentSet.clear();
+        // Keep just the All agents option
+        while (selectEl.options.length > 1) selectEl.remove(1);
+
+        var tot = 0;
+        if (res.body.type === 'bucketed') {
+          // buckets don't have per-agent breakdown — create a synthetic node per bucket
+          data.forEach(function(b) {
+            var aid = b.agent_id || 'all-agents';
+            ensureNode(aid);
+            nodes[aid].allow += (b.allow || 0);
+            nodes[aid].warn  += (b.warn  || 0);
+            nodes[aid].block += (b.block || 0);
+            tot += (b.allow||0) + (b.warn||0) + (b.block||0);
+          });
+        } else {
+          data.forEach(function(e) { pushEvent(e, true); tot++; });
+        }
+        counterEl.textContent = tot + ' events';
+      } catch(e) { console.error('Telemetry fetch error', e); }
+    }
+
+    // ── Timeframe dropdown ────────────────────────────────────────────────────
+    var tfSel = document.getElementById('tlm-tf-select');
+    if (tfSel) {
+      tfSel.addEventListener('change', function() {
+        currentTF = tfSel.value;
+        if (currentTF === 'live') {
+          // clear historical, restart live
+          nodes = {}; particles = []; knownIds = new Set(); totalCount = 0;
+          agentSet.clear();
+          while (selectEl.options.length > 1) selectEl.remove(1);
+          counterEl.textContent = '0 events';
+        } else {
+          fetchTelemetry();
+        }
+      });
+    }
+
+    // ── Agent filter ──────────────────────────────────────────────────────────
     selectEl.addEventListener('change', function() { activeAgent = selectEl.value; });
 
     // ── Supabase Realtime ─────────────────────────────────────────────────────
     function connectRealtime() {
       var supaUrl = (window.RK_SUPABASE_URL  || '').trim();
       var supaKey = (window.RK_SUPABASE_ANON_KEY || '').trim();
+      if (!supaUrl || !supaKey) { statusEl.textContent = 'polling · 5s'; startPoll(); return; }
 
-      if (!supaUrl || !supaKey) {
-        statusEl.textContent = 'polling · 5s';
-        startPollFallback(); return;
-      }
-
-      var script  = document.createElement('script');
-      script.src  = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
       script.onload = function() {
         try {
           var client = window.supabase.createClient(supaUrl, supaKey);
           client.channel('rk-telemetry')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_log' }, function(payload) {
-              if (payload.new) pushEvent(payload.new);
+              if (payload.new && currentTF === 'live') pushEvent(payload.new);
             })
             .subscribe(function(status) {
-              if (status === 'SUBSCRIBED') {
-                statusEl.textContent = 'live';
-              } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                statusEl.textContent = 'reconnecting…';
-                setTimeout(connectRealtime, 3000);
-              }
+              statusEl.textContent = status === 'SUBSCRIBED' ? 'live' : 'reconnecting…';
+              if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setTimeout(connectRealtime, 3000);
             });
-        } catch(e) {
-          statusEl.textContent = 'polling · 5s';
-          startPollFallback();
-        }
+        } catch(e) { statusEl.textContent = 'polling · 5s'; startPoll(); }
       };
-      script.onerror = function() { statusEl.textContent = 'polling · 5s'; startPollFallback(); };
+      script.onerror = function() { statusEl.textContent = 'polling · 5s'; startPoll(); };
       document.head.appendChild(script);
     }
 
-    // ── Poll fallback via /v1/audit ───────────────────────────────────────────
-    var _pollCursor = null;
-    function startPollFallback() {
+    function startPoll() {
       function poll() {
-        if (typeof rk === 'undefined') return;
+        if (currentTF !== 'live' || typeof rk === 'undefined') return;
         rk.call('/v1/audit?limit=20').then(function(res) {
-          return res.ok ? res.body : null;
-        }).then(function(data) {
-          if (!data || !data.entries) return;
-          // entries come newest-first; reverse to push in chronological order
-          data.entries.slice().reverse().forEach(pushEvent);
-        }).catch(function() {});
+          if (!res.ok || !res.body || !res.body.entries) return;
+          res.body.entries.slice().reverse().forEach(function(e) { pushEvent(e); });
+        }).catch(function(){});
       }
-      poll();
-      setInterval(poll, 5000);
+      poll(); setInterval(poll, 5000);
     }
 
     connectRealtime();
+    requestAnimationFrame(draw);
 
-    // inject keyframe once
     if (!document.getElementById('tlm-styles')) {
       var st = document.createElement('style');
-      st.id  = 'tlm-styles';
-      st.textContent =
-        '@keyframes tlm-flash-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}' +
-        '@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.4}}';
+      st.id = 'tlm-styles';
+      st.textContent = '@keyframes tlm-flash-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.4}}';
       document.head.appendChild(st);
     }
   })();
