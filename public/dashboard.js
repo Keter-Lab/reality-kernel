@@ -1101,6 +1101,41 @@
     var activeAgent = 'all';
     var totalCount  = 0;
     var knownIds    = new Set();
+    var isDrawing = true;
+
+    var currentTF = 'live';
+    var bucketedData = [];
+    
+    async function fetchTelemetry() {
+      if (currentTF === 'live') {
+        WINDOW_SEC = 60;
+        return;
+      }
+      if (currentTF === '1h') WINDOW_SEC = 3600;
+      if (currentTF === '24h') WINDOW_SEC = 86400;
+      if (currentTF === '7d') WINDOW_SEC = 7 * 86400;
+      
+      try {
+        var res = await window.rk.call('/v1/telemetry?tf=' + currentTF);
+        if (res && res.body) {
+           if (res.body.type === 'bucketed') {
+               bucketedData = res.body.data;
+               allEvents = []; // clear raw events
+           } else {
+               allEvents = [];
+               bucketedData = [];
+               res.body.data.forEach(d => pushEvent(d, true));
+           }
+        }
+      } catch(e) { console.error("Telemetry fetch failed", e); }
+    }
+
+    document.getElementById('tlm-tf-select').addEventListener('change', function(e) {
+      currentTF = e.target.value;
+      fetchTelemetry();
+      if (!isDrawing) { isDrawing = true; requestAnimationFrame(draw); }
+    });
+
 
     // ── CSS variable helper ───────────────────────────────────────────────────
     function cssVar(name) {
@@ -1207,7 +1242,7 @@
     setInterval(draw, TICK_MS);
 
     // ── Push an incoming event ────────────────────────────────────────────────
-    function pushEvent(ev) {
+    function pushEvent(ev, silent=false) {
       if (!ev) return;
       // deduplicate
       var uid = ev.action_id || (ev.proof_hash || '') + (ev.ts || ev.created_at || '');
@@ -1217,8 +1252,9 @@
       var ts  = (ev.ts || ev.created_at) ? new Date(ev.ts || ev.created_at).getTime() : Date.now();
       var aid = ev.agent_id || 'unknown';
       allEvents.push({ ts: ts, verdict: ev.verdict, agent_id: aid, command: ev.command || '' });
-      totalCount++;
-      counterEl.textContent = totalCount + (totalCount === 1 ? ' event' : ' events');
+      if (!silent) { totalCount++;
+      counterEl.textContent = totalCount + (totalCount === 1 ? " event" : " events"); }
+      
 
       // populate agent dropdown dynamically
       if (!agentSet.has(aid)) {
