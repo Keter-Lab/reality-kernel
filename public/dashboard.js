@@ -1120,13 +1120,17 @@
         if (res && res.body) {
            if (res.body.type === 'bucketed') {
                bucketedData = res.body.data;
-               allEvents = []; // clear raw events
-           } else {
+               allEvents = [];
+               if (bucketedData.length > 0) {
+                 counterEl.textContent = bucketedData.reduce(function(s,b){ return s+(b.allow||0)+(b.warn||0)+(b.block||0); }, 0) + ' events';
+               }
+           } else if (Array.isArray(res.body.data)) {
                allEvents = [];
                bucketedData = [];
-               res.body.data.forEach(d => pushEvent(d, true));
+               res.body.data.forEach(function(d) { pushEvent(d, true); });
            }
         }
+        draw(); // re-render immediately after data load
       } catch(e) { console.error("Telemetry fetch failed", e); }
     }
 
@@ -1157,17 +1161,11 @@
 
     // ── Draw ─────────────────────────────────────────────────────────────────
     function draw() {
-      if (typeof currentTF !== "undefined" && currentTF !== "live") return;
-
-      if (typeof currentTF !== "undefined" && currentTF !== "live") return;
-
       var dpr  = window.devicePixelRatio || 1;
       var W    = canvas.width  / dpr;
       var H    = canvas.height / dpr;
       var now  = Date.now();
-      var cutoff = now - WINDOW_SEC * 1000;
 
-      allEvents = allEvents.filter(function(e) { return e.ts > cutoff; });
       ctx.clearRect(0, 0, W, H);
 
       // subtle grid
@@ -1177,6 +1175,58 @@
         var y = (H * i / 4) | 0;
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
       }
+
+      // ── HISTORICAL VIEW (1h / 24h / 7d) ──────────────────────────────────
+      if (currentTF !== 'live') {
+        var hData = activeAgent === 'all'
+          ? bucketedData
+          : bucketedData.filter(function(b) { return !b.agent_id || b.agent_id === activeAgent; });
+
+        if (!hData || hData.length === 0) {
+          emptyEl.style.display = 'flex';
+          return;
+        }
+        emptyEl.style.display = 'none';
+
+        var nBk = hData.length;
+        var maxHVal = 1;
+        hData.forEach(function(bk) {
+          maxHVal = Math.max(maxHVal, (bk.allow||0), (bk.warn||0), (bk.block||0));
+        });
+
+        function plotHistLine(key, color, glow) {
+          ctx.save();
+          ctx.globalAlpha = 0.10;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          hData.forEach(function(bk, i) {
+            var x = (i / Math.max(nBk - 1, 1)) * W;
+            var y = H - ((bk[key]||0) / maxHVal) * (H * 0.80) - H * 0.06;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          });
+          ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+          ctx.fill(); ctx.restore();
+
+          ctx.save();
+          if (glow) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
+          ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          ctx.beginPath();
+          hData.forEach(function(bk, i) {
+            var x = (i / Math.max(nBk - 1, 1)) * W;
+            var y = H - ((bk[key]||0) / maxHVal) * (H * 0.80) - H * 0.06;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          });
+          ctx.stroke(); ctx.restore();
+        }
+        plotHistLine('allow', cssVar('--ok'),     true);
+        plotHistLine('warn',  cssVar('--warn'),   false);
+        plotHistLine('block', cssVar('--danger'), true);
+        return;
+      }
+
+      // ── LIVE VIEW ─────────────────────────────────────────────────────────
+      var cutoff = now - WINDOW_SEC * 1000;
+      allEvents = allEvents.filter(function(e) { return e.ts > cutoff; });
 
       var visible = activeAgent === 'all'
         ? allEvents
@@ -1195,7 +1245,7 @@
         var bi = nBuckets - 1 - Math.floor((now - ev.ts) / BUCKET);
         if (bi < 0 || bi >= nBuckets) return;
         if      (ev.verdict === 'ALLOW') buckets[bi].allow++;
-        else if (ev.verdict === 'WARN')  buckets[bi].warn++;
+        else if (ev.verdict === 'WARN' || ev.verdict === 'WARN_APPROVED' || ev.verdict === 'WARN_REJECTED')  buckets[bi].warn++;
         else if (ev.verdict === 'BLOCK') buckets[bi].block++;
       });
 
