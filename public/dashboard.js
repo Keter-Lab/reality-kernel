@@ -1210,11 +1210,11 @@
     function pushEvent(ev) {
       if (!ev) return;
       // deduplicate
-      var uid = ev.action_id || (ev.proof_hash || '') + (ev.created_at || '');
+      var uid = ev.action_id || (ev.proof_hash || '') + (ev.ts || ev.created_at || '');
       if (uid && knownIds.has(uid)) return;
       if (uid) knownIds.add(uid);
 
-      var ts  = ev.created_at ? new Date(ev.created_at).getTime() : Date.now();
+      var ts  = (ev.ts || ev.created_at) ? new Date(ev.ts || ev.created_at).getTime() : Date.now();
       var aid = ev.agent_id || 'unknown';
       allEvents.push({ ts: ts, verdict: ev.verdict, agent_id: aid, command: ev.command || '' });
       totalCount++;

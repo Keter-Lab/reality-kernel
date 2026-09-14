@@ -1138,9 +1138,9 @@ def get_telemetry(tf: str = "1h", auth=Depends(get_api_key)):
             headers=_sb_headers(),
             params={
                 "key_hash": f"eq.{key_hash}",
-                "created_at": f"gte.{cutoff_iso}",
-                "select": "created_at,verdict,agent_id",
-                "order": "created_at.desc",
+                "ts": f"gte.{cutoff_iso}",
+                "select": "ts,verdict,agent_id",
+                "order": "ts.desc",
                 "limit": "5000"
             }
         )
@@ -1152,7 +1152,7 @@ def get_telemetry(tf: str = "1h", auth=Depends(get_api_key)):
             bucket_sec = 600 if tf == "24h" else 3600
             import datetime
             for row in rows:
-                ts_str = row.get("created_at")
+                ts_str = row.get("ts")
                 if not ts_str: continue
                 try:
                     ts = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()

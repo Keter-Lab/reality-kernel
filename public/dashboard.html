@@ -181,12 +181,12 @@
               </div>
               <div style="display:flex; align-items:center; gap:10px;">
                 
-                <div class="timeframe-group" style="display:flex; background:var(--bg-elev-1); border:1px solid var(--border); border-radius:8px; padding:2px; overflow:hidden;">
-                  <button class="tf-btn active" data-tf="live">Live</button>
-                  <button class="tf-btn" data-tf="1h">1H</button>
-                  <button class="tf-btn" data-tf="24h">24H</button>
-                  <button class="tf-btn" data-tf="7d">7D</button>
-                </div>
+                <select id="tlm-tf-select" class="rk-custom-select">
+                  <option value="live">Live</option>
+                  <option value="1h">1 Hour</option>
+                  <option value="24h">24 Hours</option>
+                  <option value="7d">7 Days</option>
+                </select>
                 <select id="tlm-agent-select" class="rk-custom-select">
                   <option value="all">All agents</option>
                 </select>
