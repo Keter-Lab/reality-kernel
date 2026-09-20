@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "realitykernel"
-version = "0.7.0"
+version = "0.7.1"
 authors = [
   { name="Reality Kernel Labs", email="founder@realitykernel.dev" },
 ]

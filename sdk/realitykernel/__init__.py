@@ -13,7 +13,7 @@ from realitykernel.exceptions import (
     SignatureVerificationError,
 )
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 __all__ = [
     "RealityKernel",
     "Verdict",
