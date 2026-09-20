@@ -1261,7 +1261,6 @@ def check_command(
             "client_ip": _client_ip(request),
             "ed25519_signature": ed25519_sig,
             "ed25519_pubkey": ed25519_pubkey,
-            "shadow_mode": bool(body.shadow_mode),
         }
         _sb_insert_audit(audit_row)
 
@@ -1391,7 +1390,6 @@ def check_command(
         "client_ip": _client_ip(request),
         "ed25519_signature": ed25519_sig,
         "ed25519_pubkey": ed25519_pubkey,
-        "shadow_mode": bool(body.shadow_mode),
     }
     _sb_insert_audit(audit_row)
 

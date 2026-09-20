@@ -713,22 +713,6 @@
           if (crumb && labels[k]) crumb.textContent = labels[k];
         });
       });
-
-      // Populate avatar initials from user badge as it fills in
-      const badge = document.getElementById('userBadge');
-      const avatar = document.getElementById('userAvatar');
-      const statusTiny = document.getElementById('userStatusTiny');
-      const obs = new MutationObserver(function () {
-        const t = (badge.textContent || '').trim();
-        if (!t || t === 'loading…') return;
-        // Extract name part before separator
-        const namePart = t.split('·')[0].trim();
-        const keyPart  = (t.split('·')[1] || '').trim();
-        const initials = namePart.split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase() || 'RK';
-        avatar.textContent = initials.slice(0, 2);
-        if (statusTiny && keyPart) statusTiny.textContent = keyPart;
-      });
-      obs.observe(badge, { childList: true, characterData: true, subtree: true });
     })();
   </script>
 </body>

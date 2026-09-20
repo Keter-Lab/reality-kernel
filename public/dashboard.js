@@ -307,10 +307,24 @@
   function renderOverview() {
     if (!me) return;
     const badge = document.getElementById('userBadge');
+    const avatar = document.getElementById('userAvatar');
+    const statusTiny = document.getElementById('userStatusTiny');
+    const rawPlan = (me.plan || 'developer').toLowerCase();
+    const planName = rawPlan === 'pro' ? 'professional' : rawPlan;
+    const planLabel = planName === 'enterprise' ? 'Enterprise' : planName === 'professional' ? 'Pro' : 'Developer';
+
     if (badge) {
-      const planName = (me.plan || 'developer').toLowerCase();
-      const planLabel = planName === 'enterprise' ? 'Enterprise' : planName === 'professional' ? 'Professional' : 'Developer';
-      badge.innerHTML = `${esc(me.name || 'client')} <span style="color:var(--text-muted);">&middot;</span> <code>${esc(me.key_masked || '')}</code> <span class="tier-badge ${planName}" onclick="window.openUpgradeModal && window.openUpgradeModal()" title="Click to view subscription plan">${esc(planLabel)}</span>`;
+      badge.textContent = me.name || me.company || 'Operator';
+      badge.title = `${me.name || 'Client'} (${planLabel} Plan)`;
+    }
+    if (avatar) {
+      const nameStr = (me.name || me.company || 'RK').trim();
+      const parts = nameStr.split(/\s+/);
+      const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : nameStr.slice(0, 2).toUpperCase();
+      avatar.textContent = initials || 'RK';
+    }
+    if (statusTiny) {
+      statusTiny.innerHTML = `<code>${esc(me.key_masked || '')}</code> <span class="tier-badge ${planName}" onclick="window.openUpgradeModal && window.openUpgradeModal()" title="Click to view subscription plan details" style="cursor:pointer; margin-left:4px;">${esc(planLabel)}</span>`;
     }
 
     const tbody = document.getElementById('ov-recent');
