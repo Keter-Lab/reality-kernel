@@ -4,3 +4,9 @@ __pycache__/
 rk_audit.jsonl
 .env
 .vercel
+dist/
+build/
+*.egg-info/
+sdk/dist/
+sdk/build/
+sdk/*.egg-info/
