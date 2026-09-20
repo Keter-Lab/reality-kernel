@@ -51,7 +51,17 @@ class Verdict:
 
     @property
     def sign_data(self) -> str:
-        return f"{self.action_id}:{self.proof_hash}:{self.verdict}:{self.confidence:.2f}"
+        from decimal import Decimal
+        try:
+            dec = Decimal(str(self.confidence).strip())
+            if dec == dec.to_integral_value():
+                conf_str = f"{dec.to_integral_value()}.0"
+            else:
+                norm = format(dec.normalize(), "f")
+                conf_str = norm.rstrip("0").rstrip(".") if "." in norm else norm
+        except Exception:
+            conf_str = str(self.confidence)
+        return f"{self.action_id}:{self.proof_hash}:{self.verdict}:{conf_str}"
 
     def verify(self, pinned_pubkey_b64: Optional[str] = None) -> bool:
         """Verify the Ed25519 cryptographic signature returned by the Reality Kernel."""
