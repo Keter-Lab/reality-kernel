@@ -263,10 +263,12 @@ class RealityKernel:
         base_url: str | None = None,
         agent_id: str | None = None,
         timeout: float = 10.0,
+        shadow_mode: bool = False,
     ):
         self.api_key  = api_key  or os.environ["RK_API_KEY"]
         self.base_url = (base_url or os.environ.get("RK_BASE_URL", "https://www.realitykernel.dev")).rstrip("/")
         self.agent_id = agent_id or os.environ.get("RK_AGENT_ID", "")
+        self.shadow_mode = shadow_mode
         self._http = httpx.Client(
             base_url=self.base_url,
             timeout=timeout,
@@ -292,12 +294,15 @@ class RealityKernel:
         policy: dict | None = None,
         idempotency_key: str | None = None,
         verify_signature: bool = True,
+        shadow_mode: bool | None = None,
     ) -> Verdict:
+        is_shadow = self.shadow_mode if shadow_mode is None else shadow_mode
         body = {
             "command": command,
             "prime_intent": prime_intent,
             "session_id": session_id,
             "agent_id": self.agent_id,
+            "shadow_mode": is_shadow,
         }
         if policy:
             body["policy"] = policy               # {"allowed_tools": [...], "allowed_egress": [...]}
@@ -312,7 +317,7 @@ class RealityKernel:
             raise RealityKernelError("insufficient credits — treat as BLOCK")
         if r.status_code == 429:
             raise RealityKernelError("rate limited — back off and retry, do not execute")
-        if r.status_code &gt;= 400:
+        if r.status_code >= 400:
             raise RealityKernelError(f"HTTP {r.status_code}: {r.json().get('detail', r.text)}")
 
         j = r.json()
@@ -341,6 +346,10 @@ class RealityKernel:
     # ── Guard: raise on WARN/BLOCK, return Verdict on ALLOW ────────────
     def guard(self, command: str, prime_intent: str, **kw) -> Verdict:
         v = self.check(command, prime_intent, **kw)
+        if kw.get("shadow_mode", self.shadow_mode) or v.raw.get("shadow_mode"):
+            if v.verdict in ("BLOCK", "WARN"):
+                print(f"[reality-kernel:shadow] action {v.action_id} flagged as {v.verdict} (non-blocking audit)")
+            return v
         if v.verdict == "BLOCK":
             raise ActionBlocked(v)
         if v.verdict == "WARN":

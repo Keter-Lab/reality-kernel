@@ -890,6 +890,7 @@ class CheckRequest(BaseModel):
     agent_id:     str = Field(default="", max_length=120)
     policy:       LeastAgencyPolicy | None = None
     execution_binding: ExecutionBinding | None = None
+    shadow_mode:  bool = Field(default=False)
 
 
 class OverrideRequest(BaseModel):
@@ -1039,12 +1040,17 @@ class SettingsUpdate(BaseModel):
 def update_settings(body: SettingsUpdate, auth=Depends(get_api_key)):
     if auth.get("is_session_token"):
         raise HTTPException(403, "Session tokens cannot access configuration endpoints.")
+    plan = str(auth.get("row", {}).get("plan") or "developer").lower()
     payload = {}
     if body.strict_mode is not None:
         payload["strict_mode"] = body.strict_mode
     if body.retention_days is not None:
+        if body.retention_days > 7 and plan == "developer":
+            raise HTTPException(403, "Extended audit retention (>7 days) requires Professional or Enterprise plan. Upgrade at /pricing")
         payload["retention_days"] = body.retention_days
     if body.siem_url is not None:
+        if body.siem_url.strip() and plan not in ("enterprise", "professional"):
+            raise HTTPException(403, "SIEM live audit streaming requires Professional or Enterprise plan. Upgrade at /pricing")
         payload["siem_url"] = body.siem_url
         
     if payload:
@@ -1226,6 +1232,8 @@ def check_command(
         proof_hash = hashlib.sha256(payload_str.encode()).hexdigest()
 
         evidence_list = [policy_violation]
+        if body.shadow_mode:
+            evidence_list.insert(0, "mode:shadow")
         if prev_hash:
             evidence_list.append(f"prev_hash:{prev_hash}")
 
@@ -1253,6 +1261,7 @@ def check_command(
             "client_ip": _client_ip(request),
             "ed25519_signature": ed25519_sig,
             "ed25519_pubkey": ed25519_pubkey,
+            "shadow_mode": bool(body.shadow_mode),
         }
         _sb_insert_audit(audit_row)
 
@@ -1260,6 +1269,8 @@ def check_command(
         for k, v in headers.items():
             response.headers[k] = v
         response.headers["X-RK-Enforcement-Mode"] = "fail-closed"
+        if body.shadow_mode:
+            response.headers["X-RK-Shadow-Mode"] = "active"
 
         out = {
             "action_id": action_id,
@@ -1268,7 +1279,7 @@ def check_command(
             "worlds_evaluated": 0,
             "worlds_in_basin_b": 0,
             "max_divergence": 1.0,
-            "evidence": [policy_violation],
+            "evidence": evidence_list,
             "proof_hash": proof_hash,
             "execution_binding_required": True,
             "execution_binding_present": binding_has_argv,
@@ -1278,6 +1289,7 @@ def check_command(
             "credits_remaining": remaining,
             "ed25519_signature": ed25519_sig,
             "ed25519_pubkey": ed25519_pubkey,
+            "shadow_mode": bool(body.shadow_mode),
         }
 
         if idempotency_key:
@@ -1354,6 +1366,8 @@ def check_command(
     proof_hash = hashlib.sha256(payload_str.encode()).hexdigest()
 
     evidence_list = list(decision.evidence) if decision.evidence else []
+    if body.shadow_mode:
+        evidence_list.insert(0, "mode:shadow")
     if prev_hash:
         evidence_list.append(f"prev_hash:{prev_hash}")
 
@@ -1377,6 +1391,7 @@ def check_command(
         "client_ip": _client_ip(request),
         "ed25519_signature": ed25519_sig,
         "ed25519_pubkey": ed25519_pubkey,
+        "shadow_mode": bool(body.shadow_mode),
     }
     _sb_insert_audit(audit_row)
 
@@ -1400,6 +1415,8 @@ def check_command(
     for k, v in headers.items():
         response.headers[k] = v
     response.headers["X-RK-Enforcement-Mode"] = "fail-closed"
+    if body.shadow_mode:
+        response.headers["X-RK-Shadow-Mode"] = "active"
 
     out = {
         "action_id": decision.action_id,
@@ -1408,7 +1425,7 @@ def check_command(
         "worlds_evaluated": decision.worlds_evaluated,
         "worlds_in_basin_b": decision.worlds_in_basin_b,
         "max_divergence": decision.max_divergence,
-        "evidence": decision.evidence,
+        "evidence": evidence_list,
         "proof_hash": proof_hash,
         "execution_binding_required": True,
         "execution_binding_present": binding_has_argv,
@@ -1418,6 +1435,7 @@ def check_command(
         "credits_remaining": remaining,
         "ed25519_signature": ed25519_sig,
         "ed25519_pubkey": ed25519_pubkey,
+        "shadow_mode": bool(body.shadow_mode),
     }
     if decision.verdict == "ALLOW" and binding_has_argv:
         out["execution_permit"] = _mint_execution_permit(decision.action_id, auth["key_hash"], artifact_hash)

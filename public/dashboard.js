@@ -77,16 +77,34 @@
   if (!rk.requireKey()) return;
   const esc = rk.htmlEscape;
 
-  function formatVerdict(verdict) {
+  function formatVerdict(verdict, evidence, shadow_mode) {
+    if (typeof verdict === 'object' && verdict !== null) {
+      evidence = verdict.evidence;
+      shadow_mode = verdict.shadow_mode;
+      verdict = verdict.verdict;
+    }
     if (!verdict) return '—';
+    const isShadow = Boolean(shadow_mode) || (Array.isArray(evidence) && evidence.some(e => typeof e === 'string' && (e.includes('mode:shadow') || e.includes('shadow'))));
+    if (isShadow) {
+      if (verdict === 'BLOCK') return 'SHADOW (BLOCK)';
+      if (verdict.startsWith('WARN')) return 'SHADOW (WARN)';
+      return `SHADOW (${verdict})`;
+    }
     if (verdict === 'WARN_APPROVED') return 'WARNING(APPROVED)';
     if (verdict === 'WARN_REJECTED') return 'WARNING(REJECTED)';
     if (verdict === 'WARN') return 'WARN (PENDING)';
     return verdict;
   }
 
-  function verdictClass(verdict) {
+  function verdictClass(verdict, evidence, shadow_mode) {
+    if (typeof verdict === 'object' && verdict !== null) {
+      evidence = verdict.evidence;
+      shadow_mode = verdict.shadow_mode;
+      verdict = verdict.verdict;
+    }
     if (!verdict) return 'muted';
+    const isShadow = Boolean(shadow_mode) || (Array.isArray(evidence) && evidence.some(e => typeof e === 'string' && (e.includes('mode:shadow') || e.includes('shadow'))));
+    if (isShadow) return 'shadow-verdict';
     if (verdict === 'WARN_APPROVED') return 'warn-approved';
     if (verdict === 'WARN_REJECTED') return 'warn-rejected';
     return verdict.toLowerCase();
@@ -290,7 +308,9 @@
     if (!me) return;
     const badge = document.getElementById('userBadge');
     if (badge) {
-      badge.textContent = (me.name || 'client') + ' - ' + (me.key_masked || '');
+      const planName = (me.plan || 'developer').toLowerCase();
+      const planLabel = planName === 'enterprise' ? 'Enterprise' : planName === 'professional' ? 'Professional' : 'Developer';
+      badge.innerHTML = `${esc(me.name || 'client')} <span style="color:var(--text-muted);">&middot;</span> <code>${esc(me.key_masked || '')}</code> <span class="tier-badge ${planName}" onclick="window.openUpgradeModal && window.openUpgradeModal()" title="Click to view subscription plan">${esc(planLabel)}</span>`;
     }
 
     const tbody = document.getElementById('ov-recent');
@@ -298,7 +318,7 @@
       tbody.innerHTML = '';
       audit.slice(0, 8).forEach(e => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${esc(rk.fmtTime(e.ts))}</td><td><span class="pill ${verdictClass(e.verdict)}">${esc(formatVerdict(e.verdict))}</span></td><td><code>${esc(e.command || '')}</code></td><td>${esc(e.cost ?? '-')}</td>`;
+        tr.innerHTML = `<td>${esc(rk.fmtTime(e.ts))}</td><td><span class="pill ${verdictClass(e.verdict, e.evidence, e.shadow_mode)}">${esc(formatVerdict(e.verdict, e.evidence, e.shadow_mode))}</span></td><td><code>${esc(e.command || '')}</code></td><td>${esc(e.cost ?? '-')}</td>`;
         tbody.appendChild(tr);
       });
       if (!audit.length) tbody.innerHTML = '<tr><td colspan="4" class="muted">no activity yet</td></tr>';
@@ -369,7 +389,7 @@
       }
       tr.innerHTML = `
         <td>${esc(rk.fmtTime(e.ts))}</td>
-        <td><span class="pill ${verdictClass(e.verdict)}">${esc(formatVerdict(e.verdict))}</span></td>
+        <td><span class="pill ${verdictClass(e.verdict, e.evidence, e.shadow_mode)}">${esc(formatVerdict(e.verdict, e.evidence, e.shadow_mode))}</span></td>
         <td>${esc(e.confidence ?? '—')}</td>
         <td>${fmtField(e.command)}</td>
         <td>${fmtField(e.prime_intent)}</td>
@@ -441,7 +461,7 @@
         <h4>Verdict</h4>
         <div class="detail-row">
           <div class="label">Status</div>
-          <div class="value"><span class="pill ${verdictClass(entry.verdict)}">${esc(formatVerdict(entry.verdict))}</span></div>
+          <div class="value"><span class="pill ${verdictClass(entry.verdict, entry.evidence, entry.shadow_mode)}">${esc(formatVerdict(entry.verdict, entry.evidence, entry.shadow_mode))}</span></div>
         </div>
         <div class="detail-row">
           <div class="label">Confidence</div>
@@ -939,7 +959,7 @@
         matchingEntries.slice(0,5).map(function(e){
           return '<div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;align-items:center;">' +
             '<span style="color:var(--text-muted);white-space:nowrap;">' + esc(rk.fmtTime(e.ts)) + '</span>' +
-            '<span class="pill ' + verdictClass(e.verdict) + '" style="font-size:10px;">' + esc(formatVerdict(e.verdict)) + '</span>' +
+            '<span class="pill ' + verdictClass(e.verdict, e.evidence, e.shadow_mode) + '" style="font-size:10px;">' + esc(formatVerdict(e.verdict, e.evidence, e.shadow_mode)) + '</span>' +
             '<span style="font-family:var(--font-mono);color:var(--text-soft);font-size:11px;margin-left:8px;">' + esc(e.agent_id || 'default') + '</span>' +
             '<span style="font-family:var(--font-mono);color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
               (e.command && e.command.startsWith('[redacted]') ? '[redacted] ' + esc(e.command.replace('[redacted] ','').slice(0,40)) : esc((e.command||'').slice(0,40))) +
@@ -951,7 +971,7 @@
             matchingEntries.slice(5).map(function(e){
               return '<div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;align-items:center;">' +
                 '<span style="color:var(--text-muted);white-space:nowrap;">' + esc(rk.fmtTime(e.ts)) + '</span>' +
-                '<span class="pill ' + verdictClass(e.verdict) + '" style="font-size:10px;">' + esc(formatVerdict(e.verdict)) + '</span>' +
+                '<span class="pill ' + verdictClass(e.verdict, e.evidence, e.shadow_mode) + '" style="font-size:10px;">' + esc(formatVerdict(e.verdict, e.evidence, e.shadow_mode)) + '</span>' +
             '<span style="font-family:var(--font-mono);color:var(--text-soft);font-size:11px;margin-left:8px;">' + esc(e.agent_id || 'default') + '</span>' +
                 '<span style="font-family:var(--font-mono);color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
                   (e.command && e.command.startsWith('[redacted]') ? '[redacted] ' + esc(e.command.replace('[redacted] ','').slice(0,40)) : esc((e.command||'').slice(0,40))) +
@@ -988,9 +1008,94 @@
     if (g('comp-euai-body'))  g('comp-euai-body').innerHTML  = euaiC.map(function(x){ var m=audit.filter(function(e){return x.ctrl.count_fn([e])>0;}); return _compRow(x.ctrl, x.count, m); }).join('');
   }
 
+  // ── Tier Management & Upgrade Modal ───────────────────────────────────────
+  window.openUpgradeModal = function(featureName) {
+    var overlay = document.getElementById('rkUpgradeModal');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'rkUpgradeModal';
+      overlay.className = 'rk-upgrade-overlay';
+      overlay.innerHTML = `
+        <div class="rk-upgrade-dialog">
+          <button class="rk-upgrade-close" onclick="window.closeUpgradeModal()">&times;</button>
+          <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">Enterprise Subscription Tiers</div>
+          <h2 style="margin: 0 0 8px; font-size: 22px; font-weight: 600;">Upgrade Reality Kernel Plan</h2>
+          <p id="upgradeModalSubtitle" style="color: var(--text-muted); font-size: 13px; margin: 0 0 20px;">Unlock real-time SIEM streaming, certified compliance packs, and dedicated agent fleet protection.</p>
+          
+          <div class="rk-upgrade-grid">
+            <!-- Developer Tier -->
+            <div class="rk-plan-card">
+              <span class="tier-badge developer" style="align-self: flex-start;">Developer</span>
+              <div class="price">Free</div>
+              <p style="color: var(--text-muted); font-size: 12px; margin: 0;">For evaluation, local testing & hackathons.</p>
+              <ul class="rk-plan-features">
+                <li>500 actions / month</li>
+                <li>Python Client SDK (v0.7.0)</li>
+                <li>Pre-dispatch Intent Verification</li>
+                <li>7-day cryptographic audit log</li>
+                <li>Community Support</li>
+              </ul>
+              <button class="btn btn-sm" style="margin-top: 16px; opacity: 0.6; cursor: default;">Current Tier</button>
+            </div>
+
+            <!-- Professional Tier -->
+            <div class="rk-plan-card highlight">
+              <span class="tier-badge professional" style="align-self: flex-start;">Professional</span>
+              <div class="price">$499 <span style="font-size: 12px; font-weight: normal; color: var(--text-muted);">/mo</span></div>
+              <p style="color: var(--text-muted); font-size: 12px; margin: 0;">For production agent pipelines & early AI startups.</p>
+              <ul class="rk-plan-features">
+                <li>50,000 actions / month</li>
+                <li>EU AI Act & ISO 42001 Exports</li>
+                <li>90-day cryptographic audit retention</li>
+                <li>Automated Agent Fleet Dashboard</li>
+                <li>Priority Email & Discord Support</li>
+              </ul>
+              <a href="/pricing" class="btn btn-sm" style="margin-top: 16px; text-align: center; text-decoration: none; background: var(--accent); color: #000; font-weight: 600;">Upgrade to Pro</a>
+            </div>
+
+            <!-- Enterprise Tier -->
+            <div class="rk-plan-card">
+              <span class="tier-badge enterprise" style="align-self: flex-start;">Enterprise</span>
+              <div class="price">Custom <span style="font-size: 12px; font-weight: normal; color: var(--text-muted);">(Annual)</span></div>
+              <p style="color: var(--text-muted); font-size: 12px; margin: 0;">For regulated financial & enterprise AI deployments.</p>
+              <ul class="rk-plan-features">
+                <li>Unlimited agent actions</li>
+                <li>Live SIEM Stream (Splunk/Datadog)</li>
+                <li>365-day immutable audit ledger</li>
+                <li>eBPF Host Probes & Isolation</li>
+                <li>Dedicated VPC & 99.99% SLA</li>
+              </ul>
+              <a href="mailto:founder@realitykernel.dev?subject=Enterprise%20Plan%20Inquiry" class="btn btn-sm" style="margin-top: 16px; text-align: center; text-decoration: none; border: 1px solid var(--accent-line); color: var(--text);">Contact Sales</a>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) window.closeUpgradeModal();
+      });
+    }
+    var subtitle = document.getElementById('upgradeModalSubtitle');
+    if (subtitle && featureName) {
+      subtitle.innerHTML = '<strong>' + esc(featureName) + '</strong> requires a Professional or Enterprise subscription. Choose an option below to upgrade.';
+    }
+    overlay.classList.add('show');
+  };
+
+  window.closeUpgradeModal = function() {
+    var overlay = document.getElementById('rkUpgradeModal');
+    if (overlay) overlay.classList.remove('show');
+  };
+
   var exportComplianceBtn = document.getElementById('exportComplianceBtn');
   if (exportComplianceBtn) {
     exportComplianceBtn.addEventListener('click', function() {
+      var plan = (me && me.plan || 'developer').toLowerCase();
+      if (plan === 'developer') {
+        showToast('EU AI Act & ISO 42001 export requires Professional or Enterprise plan.', 'warn');
+        window.openUpgradeModal('Certified Compliance Export');
+        return;
+      }
       if (!audit.length) { showToast('Load audit data first.', 'warn'); return; }
       var report = {
         rk_compliance_report_version: '1.0',
@@ -1061,6 +1166,12 @@
     var newBtn = _siemSaveBtn.cloneNode(true);
     _siemSaveBtn.parentNode.replaceChild(newBtn, _siemSaveBtn);
     newBtn.addEventListener('click', function() {
+      var plan = (me && me.plan || 'developer').toLowerCase();
+      if (plan === 'developer') {
+        showToast('Real-time SIEM forwarding is an Enterprise feature.', 'warn');
+        window.openUpgradeModal('SIEM Log Forwarding');
+        return;
+      }
       var url = _siemInput ? _siemInput.value.trim() : '';
       if (url && !url.startsWith('http')) {
         showToast('Enter a valid https:// SIEM endpoint URL.', 'warn'); return;

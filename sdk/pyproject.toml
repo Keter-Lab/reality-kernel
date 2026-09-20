@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "realitykernel"
+version = "0.7.0"
+authors = [
+  { name="Reality Kernel Labs", email="founder@realitykernel.dev" },
+]
+description = "Deterministic cryptographic intent-verification and execution barrier for autonomous AI agents."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "httpx>=0.24.0",
+    "cryptography>=41.0.0",
+]
+
+[project.urls]
+"Homepage" = "https://www.realitykernel.dev"
+"Documentation" = "https://www.realitykernel.dev/integration"

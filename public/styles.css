@@ -2798,3 +2798,135 @@ html.theme-ready .callout {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
+
+/* ── Shadow Verdict Pill & Tier Badges ── */
+.pill.shadow-verdict {
+  background: rgba(168, 85, 247, 0.16) !important;
+  color: #c084fc !important;
+  border-color: rgba(168, 85, 247, 0.45) !important;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.tier-badge:hover {
+  transform: translateY(-1px);
+  opacity: 0.9;
+}
+.tier-badge.developer {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+.tier-badge.professional {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+}
+.tier-badge.enterprise {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+/* ── Upgrade Modal ── */
+.rk-upgrade-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(5, 7, 12, 0.82);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.rk-upgrade-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+.rk-upgrade-dialog {
+  background: var(--bg-surface, #0c0f17);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 16px;
+  max-width: 820px;
+  width: 100%;
+  padding: 32px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+  position: relative;
+}
+.rk-upgrade-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+}
+.rk-upgrade-close:hover { color: var(--text); }
+.rk-upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+}
+@media (max-width: 768px) {
+  .rk-upgrade-grid { grid-template-columns: 1fr; }
+}
+.rk-plan-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elev-1, #121622);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.rk-plan-card.highlight {
+  border-color: var(--accent);
+  background: rgba(20, 184, 166, 0.05);
+}
+.rk-plan-card .price {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  margin: 12px 0;
+}
+.rk-plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.rk-plan-features li {
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rk-plan-features li::before {
+  content: '✓';
+  color: var(--accent);
+  font-weight: bold;
+}
