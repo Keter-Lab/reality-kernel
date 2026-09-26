@@ -155,7 +155,7 @@
         <div class="trial-note">
           <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></span>
           <div>
-            <strong>No key yet&bull;</strong>
+            <strong>No key yet?</strong>
             <span>Switch to <a href="#request" id="linkToRequest">Request Developer Sandbox</a> — 500 credits and a tenant key are provisioned after domain verification.</span>
           </div>
         </div>
@@ -192,7 +192,7 @@
               </select>
             </div>
             <div class="full">
-              <label for="rqUse">What will the agent be allowed to touch&bull; <span style="color:var(--text-faint); letter-spacing:0; text-transform:none; font-weight:400;">(optional)</span></label>
+              <label for="rqUse">What will the agent be allowed to touch? <span style="color:var(--text-faint); letter-spacing:0; text-transform:none; font-weight:400;">(optional)</span></label>
               <textarea id="rqUse" name="use_case" rows="2" maxlength="600" placeholder="Shell in a sandboxed CI runner; read-only access to a Postgres replica; outbound to *.github.com only."></textarea>
             </div>
           </div>
@@ -283,7 +283,7 @@
           err.textContent = 'Invalid, suspended, or exhausted key. Verify your credentials or contact support.';
           err.hidden = false; btn.disabled = false; btn.innerHTML = loginBtnHtml; return;
         }
-        (remember &bull; localStorage : sessionStorage).setItem('rk_api_key', key);
+        (remember ? localStorage : sessionStorage).setItem('rk_api_key', key);
         location.href = '/dashboard';
       });
 
@@ -312,15 +312,15 @@
           let body = null; try { body = await r.json(); } catch {}
           if (!r.ok) {
             const detail = body && body.detail;
-            const msg = typeof detail === 'string' &bull; detail
-              : Array.isArray(detail) && detail[0] && detail[0].msg &bull; detail[0].msg
-              : r.status === 429 &bull; 'Too many requests from this network. Please retry later.'
+            const msg = typeof detail === 'string' ? detail
+              : Array.isArray(detail) && detail[0] && detail[0].msg ? detail[0].msg
+              : r.status === 429 ? 'Too many requests from this network. Please retry later.'
               : 'The access desk is temporarily unavailable. Please retry shortly or email contact@realitykernel.dev.';
             return fail(msg);
           }
           $('confirmReqId').textContent = (body && body.request_id) || '—';
           $('confirmCredits').textContent = (body && body.credits) || 500;
-          $('confirmVerif').textContent = body && body.verification === 'manual_review' &bull; 'Manual review' : 'Automated domain';
+          $('confirmVerif').textContent = body && body.verification === 'manual_review' ? 'Manual review' : 'Automated domain';
           $('confirmEmail').textContent = payload.work_email;
           $('confirmModal').classList.add('show');
           $('requestForm').reset(); $('rqFramework').value = 'custom';
