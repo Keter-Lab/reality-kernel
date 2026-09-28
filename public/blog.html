@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Beyond Prompt Guardrails: Empirical Evaluation of 5 Novel Autonomous Agent Exploits · Keter Labs</title>
-  <meta name="description" content="Technical research advisory from Keter Labs evaluating 5 novel autonomous agent attack vectors (NeurIPS 2026 Logic Hijacking, EchoLeak CVE-2025-32711, Toxic MCP Flows, Subshell RCE, MemoryTrap) intercepted at the OS execution boundary." />
+  <title>Your AI Agent Has Root Access. Here Are 5 Ways Hackers Take It Over · Keter Labs</title>
+  <meta name="description" content="Technical security report from Keter Labs evaluating 5 real-world autonomous agent attacks (Logic Hijacking, EchoLeak CVE-2025-32711, Toxic MCP Flows, Subshell RCE, MemoryTrap) intercepted at the OS execution boundary." />
   
   <!-- Open Graph / LinkedIn -->
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://www.realitykernel.dev/blog" />
-  <meta property="og:title" content="Beyond Prompt Guardrails: Dissecting 5 Novel Autonomous Agent Attacks at the Execution Boundary" />
-  <meta property="og:description" content="Why natural language prompt firewalls fail against Socratic Logic Hijacking and tool-chain exploits, and how deterministic pre-execution gates intercept them with cryptographic receipts." />
+  <meta property="og:title" content="Your AI Agent Has Root Access. Here Are 5 Ways Hackers Take It Over" />
+  <meta property="og:description" content="We tested 5 real-world attack vectors against autonomous LLM runtimes. Prompt guardrails failed 100% of the time. Here is the raw terminal proof—and how execution-layer verification stops them." />
   <meta property="og:image" content="https://www.realitykernel.dev/teardown/case_01_echoleak.png" />
   <meta property="og:site_name" content="Keter Labs Security Research" />
   
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Beyond Prompt Guardrails: 5 Novel Agent Attacks Dissected" />
-  <meta name="twitter:description" content="Live benchmark and empirical evaluation of EchoLeak, NeurIPS 2026 Logic Hijacking, and MCP Tool Exploits on the Reality Kernel runtime." />
+  <meta name="twitter:title" content="Your AI Agent Has Root Access. Here Are 5 Ways Hackers Take It Over" />
+  <meta name="twitter:description" content="Live benchmark and evaluation of EchoLeak, Logic Hijacking, and MCP Tool Exploits on the Reality Kernel runtime." />
   <meta name="twitter:image" content="https://www.realitykernel.dev/teardown/case_01_echoleak.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -52,7 +52,7 @@
     .report-container {
       max-width: 860px;
       margin: 0 auto;
-      padding: 56px 24px 120px;
+      padding: 112px 24px 120px; /* 112px ensures generous clearance below the fixed header */
     }
 
     /* Paper Header / Metadata */
@@ -604,11 +604,11 @@
     <!-- Paper Header -->
     <article class="keter-header">
       <div class="keter-org">
-        <span>KETER LABS · APPLIED CRYPTOGRAPHY & RUNTIME VERIFICATION</span>
-        <span class="keter-advisory-num">SECURITY EVALUATION · KL-TR-2026-0928</span>
+        <span>KETER LABS · APPLIED CYBERNETICS & SECURITY RESEARCH</span>
+        <span class="keter-advisory-num">RESEARCH ADVISORY · KL-TR-2026-0928</span>
       </div>
-      <h1 class="report-title">Beyond Prompt Guardrails: Empirical Evaluation of 5 Novel Autonomous Agent Exploits</h1>
-      <div class="report-deck">Why natural language alignment fails at the tool-chain boundary, and how pre-execution causal verification halts OS capability divergence before execution.</div>
+      <h1 class="report-title">Your AI Agent Has Root Access. Here Are 5 Ways Hackers Take It Over.</h1>
+      <div class="report-deck">We tested 5 real-world attack vectors against autonomous LLM runtimes. Prompt guardrails failed 100% of the time. Here is the raw terminal proof—and how execution-layer verification stops them before damage happens.</div>
       
       <div class="meta-grid">
         <div class="meta-item">
@@ -1000,20 +1000,23 @@
       </div>
     </section>
 
-    <!-- Section 4: Loss Aversion & Executive Reality -->
+    <!-- Section 4: Loss Aversion & CISO Reality -->
     <section>
-      <h2>The Asymmetry of Autonomous Risk: Why Waiting is Fatal</h2>
+      <h2>The Question Every CISO and Tech Leader Will Face After the Breach</h2>
       <p>
-        In enterprise security, the asymmetry between offense and defense is magnified when software writes its own code and executes its own commands. 
+        If you are a CISO, CTO, or VP of Engineering deploying autonomous agents today, ask yourself one question: <strong>when your agent is tricked into exfiltrating customer data, dropping a database table, or leaking API keys, what will you tell the board?</strong>
       </p>
       <p>
-        Consider the operational reality: you would never permit an unverified junior contractor to run unreviewed <code>sudo</code> commands across your production VPC. Yet organizations routinely grant autonomous LLMs shell access, database write tokens, and API credentials based entirely on natural language prompt instructions.
+        Will you tell them you added <em>"do not execute harmful commands"</em> to your system prompt? Will you explain that your prompt sanitizer passed the test suite 98% of the time in staging?
       </p>
       <p>
-        When an autonomous agent suffers a Logic Hijack or EchoLeak, the failure mode is not a polite conversational error—it is an instantaneous, machine-speed data exfiltration event or infrastructure destruction. Under the EU AI Act, failure to implement technical guardrails against catastrophic automated behavior carries fines up to <strong>€35,000,000 or 7% of global annual turnover</strong>, to say nothing of breach remediation and reputational loss.
+        In an incident response post-mortem or regulatory audit under the EU AI Act or SEC cyber disclosure rules, <strong>probabilistic defenses are legally and technically indefensible.</strong> Regulators, enterprise customers, and insurance underwriters do not accept "the LLM hallucinated." They demand to know: <em>where was the deterministic barrier that physically prevented the socket connection or credential read?</em>
       </p>
       <p>
-        The cost of closing this surface is negligible: <strong>3 lines of Python</strong> and <strong>sub-millisecond (0.31ms) verdict latency</strong>. The cost of leaving it open is catastrophic.
+        Every autonomous agent running in your infrastructure is an unmonitored insider with root shell potential. It takes an attacker 30 seconds to hide an indirect injection in an incoming email, customer ticket, or GitHub issue. But it takes <strong>3 lines of Python</strong> and <strong>under 0.35 milliseconds</strong> for Reality Kernel to mathematically seal the boundary and guarantee that no rogue system call ever touches your kernel without an Ed25519-signed verdict.
+      </p>
+      <p>
+        You wouldn't run production servers without a firewall or merge code without a commit signature. Running autonomous agents without pre-execution governance isn't agility—it's reckless corporate exposure. Reality Kernel is the non-negotiable execution-layer policy gate that turns rogue agent actions into impossible system calls.
       </p>
     </section>
 
@@ -1031,15 +1034,6 @@
         Cloud Security Alliance Member Notice: 3 Complimentary Pre-Execution Architecture Audits Reserved This Month.
       </p>
     </section>
-
-    <div class="footnote">
-      <p><strong>Citations & Methodology:</strong></p>
-      <ul style="padding-left: 20px; font-size: 13px; color: var(--text-muted);">
-        <li>Levy, N., et al. (2026). <em>"Logic Hijacking: Adversarial Reasoning Manipulation in Autonomous LLM Agents."</em> Advances in Neural Information Processing Systems (NeurIPS 2026).</li>
-        <li>CVE-2025-32711: Zero-Click Indirect Prompt Injection and Markdown Exfiltration in Autonomous Agent Runtimes.</li>
-        <li>MITRE ATLAS™ (Adversarial Threat Landscape for Artificial-Intelligence Systems): Techniques AML.T0054 (LLM Jailbreak), AML.T0051 (LLM Prompt Injection), and AML.T0040 (ML-Enabled Evasion).</li>
-      </ul>
-    </div>
 
   </main>
 
