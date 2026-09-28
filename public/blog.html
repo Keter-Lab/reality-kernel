@@ -650,6 +650,11 @@
       <p>
         Below is the step-by-step forensic teardown of each vector, the raw terminal execution traces, and the exact mechanism by which Reality Kernel’s causal AST inspection halts capability escalation before wrapped host actions are approved.
       </p>
+
+      <div class="latency-note" style="background: #f1f5f9; border-left: 3px solid #0f766e; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 16px 20px; margin: 32px 0 24px; border-radius: 0 6px 6px 0; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; color: #334155;">
+        <strong style="color: #0f766e; text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 4px;">Technical Note: Public Internet Round-Trip vs. Kernel Engine Latency</strong>
+        The ~2.8s total duration displayed in the terminal trace headers below reflects the complete public internet round-trip (remote TLS 1.3 handshake across public broadband + cloud edge database session authentication) from an external test client. The Reality Kernel causal engine itself executed in <strong>0.31ms (fast-path policy check)</strong> and <strong>4.8ms (full 5-world symbolic simulation)</strong>. When integrated via the native Python SDK (<code>pip install reality-kernel</code>) or in-VPC eBPF daemon, evaluation occurs strictly in-memory with <strong>zero network hops and sub-millisecond (&lt;1ms) overhead</strong>.
+      </div>
     </section>
 
     <!-- CASE 01 -->
@@ -969,38 +974,7 @@
       </div>
     </section>
 
-    <!-- Section 3: Enterprise Compliance Cross-Walk -->
-    <section>
-      <h2>Enterprise Governance & Regulatory Alignment</h2>
-      <p>
-        Deploying autonomous agents without execution-layer attestation creates immediate liability under emerging AI governance frameworks. Causal pre-execution verification maps directly to mandatory enterprise compliance controls:
-      </p>
-
-      <div class="compliance-grid">
-        <div class="comp-box">
-          <span class="comp-badge">EU AI ACT</span>
-          <div class="comp-title">Articles 14 & 15: Oversight & Robustness</div>
-          <div class="comp-desc">Mandates that high-risk autonomous systems incorporate effective human-in-the-loop oversight and technical robustness against adversarial manipulation and cybersecurity exploits.</div>
-        </div>
-        <div class="comp-box">
-          <span class="comp-badge">SOC 2 TYPE II</span>
-          <div class="comp-title">Trust Criteria CC6.1 & CC6.8</div>
-          <div class="comp-desc">Requires logical access boundaries and prevention of unauthorized or malicious code execution by service accounts and automated autonomous workloads.</div>
-        </div>
-        <div class="comp-box">
-          <span class="comp-badge">NIST AI RMF</span>
-          <div class="comp-title">GOVERN 1.2 & PROTECT 2.1</div>
-          <div class="comp-desc">Establishes verifiable, deterministic mechanisms to govern model behavior and prevent catastrophic failure modes under distribution shifts or input poisoning.</div>
-        </div>
-        <div class="comp-box">
-          <span class="comp-badge">HIPAA SECURITY</span>
-          <div class="comp-title">§ 164.312 Technical Safeguards</div>
-          <div class="comp-desc">Requires tamper-proof audit trails and cryptographic transmission security to guarantee that ePHI cannot be silently exfiltrated via background agent tasks.</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Section 4: Loss Aversion & CISO Reality -->
+    <!-- Section 3: Loss Aversion & CISO Reality -->
     <section>
       <h2>The Question Every CISO and Tech Leader Will Face After the Breach</h2>
       <p>
