@@ -1,8 +1,11 @@
 /* Reality Kernel Client Portal — shared client code (login + dashboard) */
+if (typeof window !== 'undefined' && window.location.hostname === 'realitykernel.dev') {
+  window.location.replace('https://www.realitykernel.dev' + window.location.pathname + window.location.search + window.location.hash);
+}
 (function () {
   const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? (window.RK_API_BASE || 'http://localhost:8000')
-    : ''
+    : (location.hostname === 'realitykernel.dev' ? 'https://www.realitykernel.dev' : '')
 
   /* ── Theme (light default, optional dark) ───────────────────────────────
      Applied as early as this script runs so the painted theme matches the

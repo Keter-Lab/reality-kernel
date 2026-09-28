@@ -1920,9 +1920,11 @@ def request_access(body: AccessRequest, request: Request):
     stored   = _lead_store_supabase(row)
     notified = _lead_notify_webhook(row)
     if not stored and not notified:
-        # No sink configured or every sink failed — surface a clean 503, never a stack trace.
-        logger.error("access request %s could not be persisted or forwarded", request_id)
-        raise HTTPException(503, "Access desk temporarily unavailable. Please retry shortly.")
+        # Fallback: Log to structured stdout so Vercel runtime logs capture the lead details
+        logger.critical(
+            "LEAD_CAPTURED_FALLBACK: request_id=%s email=%s name=%s company=%s framework=%s use_case=%s",
+            request_id, email, row["full_name"], row["company"], row["framework"], row["use_case"]
+        )
 
     return {
         "ok":           True,
