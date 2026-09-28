@@ -179,7 +179,7 @@
         <ul>
           <li><a href="/playground">Playground</a></li>
           <li><a href="/verifier">Verifier</a></li>
-          <li><a href="/blog">Research &amp; Teardowns</a></li>
+          <li><a href="/blog">Research</a></li>
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/benchmark">Benchmark</a></li>
           <li><a href="/security">Security &amp; threat model</a></li>
@@ -441,14 +441,15 @@
         toast('warn', 'Action terminated', 'Block policy enforced.');
       };
 
-      // ── URL Query Param Auto-Load ──
+      // ── URL Query Param Auto-Load (fills inputs, user triggers execution) ──
       const params = new URLSearchParams(location.search);
       const urlCmd = params.get('cmd');
       const urlIntent = params.get('intent');
       if (urlCmd) document.getElementById('pgLanding-cmd').value = urlCmd;
       if (urlIntent) document.getElementById('pgLanding-intent').value = urlIntent;
-      if (urlCmd && urlIntent) {
-        setTimeout(() => document.getElementById('pgLanding-run').click(), 300);
+      if (urlCmd || urlIntent) {
+        // Scroll smoothly to simulation input and give focus
+        document.getElementById('pgLanding-cmd').scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     })();
   </script>
