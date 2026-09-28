@@ -25,6 +25,14 @@
       "destination": "/playground.html"
     },
     {
+      "source": "/blog",
+      "destination": "/blog.html"
+    },
+    {
+      "source": "/research",
+      "destination": "/blog.html"
+    },
+    {
       "source": "/faq",
       "destination": "/faq.html"
     },

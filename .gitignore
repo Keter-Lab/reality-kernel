@@ -10,3 +10,16 @@ build/
 sdk/dist/
 sdk/build/
 sdk/*.egg-info/
+.venv/
+*.txt
+patch_*.py
+fix_*.js
+patch_*.js
+fix.js
+fix.py
+initTelemetry.js
+*.docx
+cleanup_pending.py
+emit_telemetry*.py
+scripts/
+

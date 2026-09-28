@@ -174,11 +174,11 @@ html[data-theme="dark"] .rk-gradient-text {
 .rk-compare-head { text-align: center; margin-bottom: 2.5rem; }
 .rk-compare-eyebrow {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
-  color: #14b8a6;
+  font-size: 11px;
+  color: #0f766e;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  font-weight: 600;
+  font-weight: 700;
 }
 .rk-compare-title {
   font-size: clamp(1.6rem, 3vw, 2.2rem);
@@ -248,3 +248,45 @@ html[data-theme="dark"] .rk-compare-col.bad .mark { color: #fca5a5; }
 html[data-theme="dark"] .rk-compare-col.good .label,
 html[data-theme="dark"] .rk-compare-col.good .mark { color: #5eead4; }
 html[data-theme="dark"] .rk-compare-list .row { color: #cbd5e1; }
+html[data-theme="dark"] .rk-compare-eyebrow { color: #2dd4bf; }
+
+/* ── WCAG 2.2 Level AA/AAA & Section 508 Contrast & Focus Enhancements ── */
+.eyebrow {
+  color: #0f766e !important;
+  font-weight: 600 !important;
+}
+html[data-theme="dark"] .eyebrow {
+  color: #2dd4bf !important;
+}
+
+footer h5 {
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+html[data-theme="dark"] footer h5 {
+  color: #94a3b8 !important;
+}
+
+/* Explicit high-contrast focus rings (WCAG 2.4.7 / F78) */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #0284c7 !important;
+  outline-offset: 3px !important;
+}
+
+html[data-theme="dark"] a:focus-visible,
+html[data-theme="dark"] button:focus-visible,
+html[data-theme="dark"] input:focus-visible,
+html[data-theme="dark"] select:focus-visible,
+html[data-theme="dark"] textarea:focus-visible,
+html[data-theme="dark"] [role="button"]:focus-visible,
+html[data-theme="dark"] [tabindex]:focus-visible {
+  outline: 2px solid #38bdf8 !important;
+  outline-offset: 3px !important;
+}
+

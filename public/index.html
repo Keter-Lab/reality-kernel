@@ -50,7 +50,7 @@
         <span class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 shadow-sm"><img src="/logo.png" alt="Reality Kernel" width="26" height="26" class="h-[26px] w-[26px] rounded-full object-cover" /></span>
         <span class="leading-none">
           <span class="block text-[13px] font-bold tracking-[0.12em] text-slate-900">REALITY KERNEL</span>
-          <span class="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400 sm:block">Execution-layer security</span>
+          <span class="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500 sm:block">Execution-layer security</span>
         </span>
       </a>
       <nav class="rk-nav absolute inset-x-0 top-16 hidden flex-col gap-1 border-b border-slate-200 bg-white p-3 shadow-card md:static md:flex md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
@@ -58,6 +58,7 @@
         <a href="/demo.html" class="nav-link">Demo</a>
         <a href="/playground" class="nav-link">Playground</a>
         <a href="/verifier" class="nav-link">Verifier</a>
+        <a href="/blog" class="nav-link">Research</a>
         <a href="/docs" class="nav-link">Docs</a>
         <a href="/security" class="nav-link">Security</a>
         <a href="/pricing" class="nav-link">Pricing</a>
@@ -97,7 +98,7 @@
             <a href="/demo.html" class="bg-slate-900 text-white hover:bg-slate-800 font-medium tracking-wide text-sm px-6 py-2.5 rounded-lg shadow-sm transition-all">View Interactive Demo</a>
             <a href="/login#request" class="btn-secondary" data-auth="request">Request Access</a>
           </div>
-          <div class="mt-4 flex flex-wrap items-center justify-center font-mono text-[11px] font-medium tracking-widest text-slate-400 uppercase gap-6 animate-fade-up [animation-delay:220ms]">
+          <div class="mt-4 flex flex-wrap items-center justify-center font-mono text-[11px] font-semibold tracking-widest text-slate-600 uppercase gap-6 animate-fade-up [animation-delay:220ms]">
             <span>pip install reality-kernel</span>
             <span>3 lines to integrate</span>
             <span>static verdicts p50 0.31ms</span>
@@ -113,10 +114,10 @@
     <section class="border-y border-slate-200/70 bg-white/60 backdrop-blur">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
         <dl class="grid grid-cols-2 gap-6 sm:grid-cols-4">
-          <div><dt class="text-xs text-slate-500">Verdict latency (p50)</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular">0.31<span class="text-base font-semibold text-slate-400"> ms</span></dd></div>
-          <div><dt class="text-xs text-slate-500">Signature scheme</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Ed25519</dd></div>
-          <div><dt class="text-xs text-slate-500">Proof chain</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">SHA-256</dd></div>
-          <div><dt class="text-xs text-slate-500">Integration</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">3 lines</dd></div>
+          <div><dt class="text-xs font-semibold text-slate-600">Verdict latency (p50)</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular">0.31<span class="text-base font-semibold text-slate-600"> ms</span></dd></div>
+          <div><dt class="text-xs font-semibold text-slate-600">Signature scheme</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Ed25519</dd></div>
+          <div><dt class="text-xs font-semibold text-slate-600">Proof chain</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">SHA-256</dd></div>
+          <div><dt class="text-xs font-semibold text-slate-600">Integration</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">3 lines</dd></div>
         </dl>
       </div>
     </section>
@@ -320,52 +321,53 @@ rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
           <span class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 shadow-sm"><img src="/logo.png" alt="Reality Kernel" class="h-[26px] w-[26px] rounded-full object-cover" /></span>
           <span class="leading-none">
             <span class="block text-[13px] font-bold tracking-[0.12em] text-slate-900">REALITY KERNEL</span>
-            <span class="mt-1 block font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">Keter Labs &bull; Cryptographic Security Division</span>
+            <span class="mt-1 block font-mono text-[10px] uppercase tracking-[0.16em] text-slate-600">Keter Labs &bull; Cryptographic Security Division</span>
           </span>
         </div>
-        <p class="mt-5 max-w-sm text-sm leading-6 text-slate-500">Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+        <p class="mt-5 max-w-sm text-sm leading-6 text-slate-700">Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
       </div>
       <div>
-        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">Product</h5>
+        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-800 font-bold">Product</h5>
         <ul class="mt-4 space-y-2.5 text-sm">
-          <li><a class="text-slate-600 hover:text-slate-900" href="/playground">Playground</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/verifier">Verifier</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/pricing">Pricing</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/benchmark">Benchmark</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/security">Security &amp; threat model</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/playground">Playground</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/verifier">Verifier</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/blog">Research &amp; Teardowns</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/pricing">Pricing</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/benchmark">Benchmark</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/security">Security &amp; threat model</a></li>
         </ul>
       </div>
       <div>
-        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">Developers</h5>
+        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-800 font-bold">Developers</h5>
         <ul class="mt-4 space-y-2.5 text-sm">
-          <li><a class="text-slate-600 hover:text-slate-900" href="/integration">Integration guide</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/sdk">SDK reference</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/integration#api">API reference</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/login#request">Request sandbox</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/integration">Integration guide</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/sdk">SDK reference</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/integration#api">API reference</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/login#request">Request sandbox</a></li>
         </ul>
       </div>
       <div>
-        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">Trust</h5>
+        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-800 font-bold">Trust</h5>
         <ul class="mt-4 space-y-2.5 text-sm">
-          <li><a class="text-slate-600 hover:text-slate-900" href="/about">About</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/privacy">Privacy policy</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/terms">Terms &amp; conditions</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/cookies">Cookie policy</a></li>
-          <li><a class="text-slate-600 hover:text-slate-900" href="/faq">FAQ</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/about">About</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/privacy">Privacy policy</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/terms">Terms &amp; conditions</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/cookies">Cookie policy</a></li>
+          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/faq">FAQ</a></li>
         </ul>
       </div>
     </div>
     <div class="border-t border-slate-200/80">
-      <div class="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-5 font-mono text-[11px] text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <div class="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-5 font-mono text-[11px] text-slate-600 font-medium sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <span>&copy; 2026 Reality Kernel &bull; All rights reserved</span>
         <span class="rk-footer-social">
           <a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>
           </a>
-          <a href="https://github.com/Keter-Lab" target="_blank" rel="noopener" aria-label="Reality Kernel on GitHub" title="GitHub">
+          <a href="https://github.com/Keter-Lab" target="_blank" rel="noopener" aria-label="Reality Kernel on GitHub (opens in a new window)" title="GitHub (opens in a new window)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path></svg>
           </a>
-          <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" aria-label="Reality Kernel on LinkedIn" title="LinkedIn">
+          <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" aria-label="Reality Kernel on LinkedIn (opens in a new window)" title="LinkedIn (opens in a new window)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.94 8.5A1.56 1.56 0 1 1 6.93 5.4a1.56 1.56 0 0 1 .01 3.1zM5.5 9.75h2.88V19H5.5V9.75zm5.07 0h2.76v1.26h.04c.38-.72 1.33-1.48 2.74-1.48 2.93 0 3.47 1.93 3.47 4.45V19h-2.88v-4.44c0-1.06-.02-2.42-1.47-2.42-1.47 0-1.69 1.15-1.69 2.34V19h-2.88V9.75z"></path></svg>
           </a>
         </span>

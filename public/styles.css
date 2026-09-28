@@ -23,16 +23,16 @@
 
   /* Text */
   --text:          #0f172a;
-  --text-2:        #334155;
-  --text-muted:    #64748b;
-  --text-faint:    #94a3b8;
+  --text-2:        #1e293b;
+  --text-muted:    #334155;
+  --text-faint:    #475569;
   --text-bright:   #020617;
 
-  /* Signature accent — glass cyan */
-  --accent:        #14b8a6;
-  --accent-bright: #0f766e;
-  --accent-soft:   rgba(20, 184, 166, 0.11);
-  --accent-line:   rgba(20, 184, 166, 0.34);
+  /* Signature accent — deep teal (WCAG compliant) */
+  --accent:        #0f766e;
+  --accent-bright: #115e59;
+  --accent-soft:   rgba(15, 118, 110, 0.10);
+  --accent-line:   rgba(15, 118, 110, 0.28);
 
   /* Status */
   --ok:            #10b981;
@@ -833,7 +833,7 @@ body.login-page { display: grid; grid-template-columns: 1.05fr 1fr; min-height: 
 .pill.block, .pill.warn-rejected { background: var(--block-soft) !important; color: var(--block) !important; border-color: var(--block-line) !important; }
 .pill.info  { background: var(--info-soft); color: var(--info); border-color: rgba(138,180,248,0.28); }
 .pill.muted { background: rgba(255,255,255,0.03); color: var(--text-muted); border-color: var(--border); }
-.pill.warn-approved { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.pill.warn-approved { background: var(--accent-soft); color: #0f766e; border-color: var(--accent-line); font-weight: 600; }
 
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
 .dot.ok    { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
@@ -995,7 +995,7 @@ body.login-page { display: grid; grid-template-columns: 1.05fr 1fr; min-height: 
 .cta-banner { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 24px; background: var(--bg-elev-1); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); }
 .cta-text { flex: 1; }
 .cta-text strong { display: block; color: var(--text); margin-bottom: 4px; font-weight: 500; font-size: 15px; }
-.cta-text span { font-size: 13.5px; color: var(--text-muted); }
+.cta-text span { font-size: 13.5px; color: #334155; font-weight: 500; }
 
 .warning-bar { display: none; padding: 11px 18px; background: var(--warn-soft); border: 1px solid var(--warn-line); color: var(--warn); font-size: 13px; text-align: center; border-radius: 8px; margin: 16px 24px 0; }
 .warning-bar.show { display: block; }
@@ -1484,10 +1484,11 @@ button.rk-nav-link.external:hover, a.rk-nav-link.external:hover { color: var(--t
   padding: 22px 22px;
 }
 .verifier-strip-cell .vs-label {
-  font-family: var(--font-mono); font-size: 9.5px;
-  color: var(--text-faint); letter-spacing: 0.18em;
+  font-family: var(--font-mono); font-size: 10px;
+  color: #334155; letter-spacing: 0.18em;
   text-transform: uppercase; margin-bottom: 10px;
   display: flex; gap: 8px; align-items: center;
+  font-weight: 600;
 }
 .verifier-strip-cell .vs-value {
   font-family: var(--font-display); font-size: 22px;
@@ -2039,12 +2040,12 @@ button.rk-nav-link.external:hover, a.rk-nav-link.external:hover { color: var(--t
 .rk-footer { border-top: 1px solid var(--border); padding: 56px 32px 36px; background: var(--bg-elev-0); }
 .rk-footer-inner { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 40px; }
 .rk-footer-inner .rk-footer-brand p { color: var(--text-muted); font-size: 13px; line-height: 1.6; max-width: 36ch; margin: 14px 0 0; }
-.rk-footer h5 { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 14px; font-weight: 500; }
+.rk-footer h5 { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #334155; margin: 0 0 14px; font-weight: 700; }
 .rk-footer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.rk-footer ul a { font-size: 13px; color: var(--text-muted); border-bottom: none; }
+.rk-footer ul a { font-size: 13.5px; color: #334155; font-weight: 500; border-bottom: none; }
 .rk-footer ul a:hover { color: var(--text); }
 .rk-footer-bottom { max-width: 1240px; margin: 44px auto 0; padding-top: 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-.rk-footer-bottom span { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); letter-spacing: 0.14em; text-transform: uppercase; }
+.rk-footer-bottom span { font-family: var(--font-mono); font-size: 11px; color: #334155; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
 .rk-footer-social { display: inline-flex; align-items: center; gap: 10px; text-transform: none !important; letter-spacing: 0 !important; }
 .rk-footer-social a { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-muted); background: var(--bg-elev-1); transition: border-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease; }
 .rk-footer-social a:hover { color: var(--accent); border-color: var(--accent-line); transform: translateY(-1px); box-shadow: 0 8px 20px rgba(8, 145, 178, 0.2); }
@@ -2929,4 +2930,44 @@ html.theme-ready .callout {
   content: '✓';
   color: var(--accent);
   font-weight: bold;
+}
+
+/* ── WCAG 2.2 Level AA/AAA & Section 508 Focus Indication ────────────────── */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #0284c7 !important;
+  outline-offset: 3px !important;
+}
+
+html[data-theme="dark"] a:focus-visible,
+html[data-theme="dark"] button:focus-visible,
+html[data-theme="dark"] input:focus-visible,
+html[data-theme="dark"] select:focus-visible,
+html[data-theme="dark"] textarea:focus-visible,
+html[data-theme="dark"] [role="button"]:focus-visible,
+html[data-theme="dark"] [tabindex]:focus-visible {
+  outline: 2px solid #38bdf8 !important;
+  outline-offset: 3px !important;
+}
+
+html[data-theme="dark"] .rk-footer h5,
+html[data-theme="dark"] .rk-footer-bottom span {
+  color: #94a3b8 !important;
+}
+html[data-theme="dark"] .rk-footer ul a {
+  color: #cbd5e1 !important;
+}
+html[data-theme="dark"] .verifier-strip-cell .vs-label {
+  color: #94a3b8 !important;
+}
+html[data-theme="dark"] .brand-sub {
+  color: #94a3b8 !important;
+}
+html[data-theme="dark"] .cta-text span {
+  color: #cbd5e1 !important;
 }
