@@ -29,7 +29,7 @@
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="FAQ · Reality Kernel" />
-  <meta name="twitter:description" content="How does causal simulation work? How to integrate in 3 lines of code? Pricing, credits, and zero-retention security posture explained." />
+  <meta name="twitter:description" content="How does in-kernel eBPF enforcement work? How to integrate in 3 lines of code? Open-source licensing and zero-retention security posture explained." />
   <meta name="twitter:image" content="https://www.realitykernel.dev/og-preview.png" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
@@ -61,8 +61,8 @@
       <a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener">GitHub ⭐</a>
     </nav>
     <div class="rk-header-cta">
-      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
-      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      
+      <a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener" class="btn btn-sm">GitHub ⭐</a>
       <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
         <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
@@ -126,11 +126,10 @@
 
         <div class="faq-item" data-cat="pricing">
           <button class="faq-q" type="button">
-            How are credits consumed?
-            <span class="caret">+</span>
-          </button>
+            How does Reality Kernel work without a cloud API?
+            <span class="caret">+</span></button>
           <div class="faq-a">
-            <p>The fast path (read-only commands like <code>ls</code>, <code>cat</code>, <code>grep</code>) costs <strong>1 credit</strong>. Anything that hits the full engine — risky writes, ambiguous intent, pipelines — costs <strong>5 credits</strong>. Every <code>/v1/check</code> response returns the exact cost in <code>credits_consumed</code>.</p>
+            <p>The open-source engine runs 100% locally on your Linux host. The Rust intent verifier evaluates agent actions in-memory without any external network call. The eBPF/LSM probes intercept syscalls inside the kernel. No cloud account, no API key, and no rate-limits are required for local deployments.</p>
           </div>
         </div>
 

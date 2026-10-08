@@ -544,11 +544,11 @@
               </div>
               <div class="faq-item">
                 <button class="faq-q" type="button">Credits ran out — what happens&bull; <span class="caret">+</span></button>
-                <div class="faq-a"><p>The API returns <code>HTTP 402</code> on every subsequent <code>/v1/check</code>. Agents pause, surface the error, and wait for a top-up. No silent bypasses.</p></div>
+                <div class="faq-a"><p>Unauthorized actions return <code>HTTP 403</code>. Agent execution pauses fail-closed. No silent bypasses.</p></div>
               </div>
               <div class="faq-item">
                 <button class="faq-q" type="button">Where does my command data go&bull; <span class="caret">+</span></button>
-                <div class="faq-a"><p>Commands and intents are evaluated in-memory and hashed. Only cryptographic proof hashes and basic audit metadata (credits, timestamps, verdicts) are persisted. Self-hosted deployments are available for regulated buyers.</p></div>
+                <div class="faq-a"><p>Commands and intents are evaluated in-memory and hashed. Only cryptographic proof hashes and basic audit metadata (timestamps, verdicts) are persisted. Self-hosted deployments are available for regulated buyers.</p></div>
               </div>
               <div class="faq-item">
                 <button class="faq-q" type="button">Can I rotate my API key&bull; <span class="caret">+</span></button>

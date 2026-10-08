@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sign in · Request Developer | Reality Kernel</title>
+  <title>Enterprise Access · Keter Labs | Reality Kernel</title>
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self' 'unsafe-inline';
@@ -15,7 +15,7 @@
     base-uri 'self';
     form-action 'self'
   " />
-  <meta name="description" content="Sign in to the Reality Kernel Operator Console with your API key, or request a Developer sandbox with 500 credits and a cryptographic tenant key." />
+  <meta name="description" content="Request an enterprise API key for Reality Kernel hosted fleet management. The open-source engine is freely available on GitHub with no login required." />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/favicon.png" />
@@ -58,8 +58,8 @@
       <a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener">GitHub ⭐</a>
     </nav>
     <div class="rk-header-cta">
-      <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
-      <a href="/login#request" class="btn btn-sm" data-auth="request">Request Access</a>
+      
+      <a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener" class="btn btn-sm">GitHub ⭐</a>
       <button class="rk-menu-toggle" type="button" aria-label="Toggle navigation">
         <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
@@ -98,7 +98,7 @@
           <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
           <div>
             <strong>Sub-millisecond fast path</strong>
-            <span>Read-only traffic clears in under 1 ms at 1 credit. Simulation only when side effects exist.</span>
+            <span>Local in-memory policy checks run in sub-millisecond time. Full engine engages only when agent actions carry side effects.</span>
           </div>
         </li>
       </ul>
@@ -126,7 +126,7 @@
     <main class="login-card glass-card">
       <div class="auth-tabs" role="tablist">
         <button type="button" class="active" id="tabSignin" role="tab" aria-selected="true">Sign In</button>
-        <button type="button" id="tabRequest" role="tab" aria-selected="false">Request Developer Sandbox</button>
+        <button type="button" id="tabRequest" role="tab" aria-selected="false">Request Enterprise Keybox</button>
       </div>
 
       <!-- SIGN IN -->
@@ -146,7 +146,7 @@
 
           <div style="display:flex; gap:10px; margin-top:22px;">
             <button type="submit" id="loginBtn" style="flex:1.3; margin-top:0;">
-              <span>Sign in</span><span style="font-family:var(--font-mono); font-weight:500;">→</span>
+              <span>Enterprise Login</span><span style="font-family:var(--font-mono); font-weight:500;">→</span>
             </button>
             <a href="/playground" class="btn ghost" style="flex:1; margin-top:0; text-decoration:none; border-bottom:none;">Playground</a>
           </div>
@@ -157,7 +157,7 @@
           <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></span>
           <div>
             <strong>No key yet?</strong>
-            <span>Switch to <a href="#request" id="linkToRequest">Request Developer Sandbox</a> — 500 credits and a tenant key are provisioned after domain verification.</span>
+            <span>Switch to <a href="#request" id="linkToRequest">Request Enterprise Key</a> — Enterprise key and a tenant key are provisioned after domain verification.</span>
           </div>
         </div>
       </div>
@@ -165,7 +165,7 @@
       <!-- REQUEST ACCESS -->
       <div class="auth-panel" id="panelRequest" role="tabpanel">
         <h2>Developer sandbox</h2>
-        <p class="login-sub">500 credits · cryptographic tenant key · full Ed25519 signing. Provisioned after automated domain verification.</p>
+        <p class="login-sub">Enterprise API key · hosted fleet management · Ed25519 signing. Provisioned after automated domain verification.</p>
 
         <form id="requestForm" autocomplete="on" novalidate>
           <div class="form-grid">
@@ -204,13 +204,13 @@
             <span>Request Developer Access</span><span style="font-family:var(--font-mono); font-weight:500;">→</span>
           </button>
           <p id="requestError" class="error" hidden></p>
-          <p class="subtle" style="margin:12px 0 0; text-align:center;">No credit card. Requests from free-mail domains are reviewed manually.</p>
+          <p class="subtle" style="margin:12px 0 0; text-align:center;">No billing required for open-source users. Requests from free-mail domains are reviewed manually.</p>
         </form>
 
         <ul class="provision-list" style="margin-top:22px;">
           <li><span class="st">01</span><div><strong>Domain verification</strong><span>Automated check against your organisation's mail domain.</span></div></li>
           <li><span class="st">02</span><div><strong>Tenant key provisioning</strong><span>A unique key is minted offline; only its SHA-256 hash is stored.</span></div></li>
-          <li><span class="st">03</span><div><strong>Secure delivery</strong><span>Credentials and 500 credits reach your registered work email within 6–12 hours.</span></div></li>
+          <li><span class="st">03</span><div><strong>Secure delivery</strong><span>Credentials and Enterprise key reach your registered work email within 6–12 hours.</span></div></li>
         </ul>
       </div>
 
@@ -224,7 +224,7 @@
       <div class="modal-seal"><span class="pulse"></span>Access request received</div>
       <h3 id="confirmTitle">Your sandbox is being provisioned.</h3>
       <p>
-        Your cryptographic tenant key and <strong id="confirmCredits">500</strong> sandbox credits are currently being
+        Your enterprise API key is currently being
         provisioned. Your credentials will be securely delivered to your registered work email within
         <strong>6–12 hours</strong> following automated domain verification.
       </p>
@@ -320,7 +320,7 @@
             return fail(msg);
           }
           $('confirmReqId').textContent = (body && body.request_id) || '—';
-          $('confirmCredits').textContent = (body && body.credits) || 500;
+          // enterprise key delivery
           $('confirmVerif').textContent = body && body.verification === 'manual_review' ? 'Manual review' : 'Automated domain';
           $('confirmEmail').textContent = payload.work_email;
           $('confirmModal').classList.add('show');
