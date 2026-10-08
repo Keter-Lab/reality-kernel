@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pricing · Reality Kernel</title>
-  <meta name="description" content="Developer sandbox with 500 free credits, Starter at $99/mo for 10,000 checks, Professional at $499/mo for 100,000 checks, and Enterprise with on-premises eBPF kernel sensor. Transparent credit accounting: 1 credit per fast-path check, 5 per shadow-world simulation." />
+  <title>Open Source & Enterprise · Reality Kernel</title>
+  <meta name="description" content="Reality Kernel is 100% free and open-source under dual Apache-2.0 / MIT licenses. Enterprise options available for multi-host fleet deployments." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.realitykernel.dev/pricing" />
-  <meta property="og:title" content="Pricing · Reality Kernel" />
-  <meta property="og:description" content="Developer (free) · Starter ($99/mo) · Professional ($499/mo) · Enterprise (custom). Transparent credit accounting." />
+  <meta property="og:title" content="Open Source & Enterprise · Reality Kernel" />
+  <meta property="og:description" content="Reality Kernel is 100% free and open source. Community core for developers and enterprise support for fleet deployments." />
   <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta http-equiv="Content-Security-Policy" content="
@@ -66,112 +66,63 @@
   <section class="rk-page-hero">
     <div class="rk-inner">
       <div>
-        <span class="rk-eyebrow">Pricing</span>
-        <h1>Priced per verdict.<br><em>Not per promise.</em></h1>
-        <p>Every plan runs the same engine, returns the same signed verdicts, and writes to the same tamper-evident ledger. Tiers differ in volume, session intelligence, and where the sensor plane lives.</p>
+        <span class="rk-eyebrow">Open Source & Enterprise</span>
+        <h1>Free for developers.<br><em>Built for the kernel.</em></h1>
+        <p>Reality Kernel is 100% free and open-source for community development, academic research, and local agent workloads. Enterprise options are available for multi-host fleet deployments.</p>
       </div>
       <div class="data-ribbon" style="margin-top:0;">
-        <span><b>1</b> credit · fast path</span>
-        <span><b>5</b> credits · simulation</span>
-        <span><b>0</b> credits · overrides</span>
+        <span><b>Apache 2.0 / MIT</b> · license</span>
+        <span><b>$0</b> · open source</span>
+        <span><b>PyPI</b> · realitykernel</span>
       </div>
     </div>
   </section>
 
   <section class="rk-section rk-tight">
     <div class="rk-inner">
-      <div class="price-grid reveal">
+      <div class="price-grid reveal" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); max-width: 900px; margin: 0 auto;">
 
-        <!-- Developer -->
-        <div class="price-card">
-          <div class="pc-tier"><span>Tier 0</span><span class="pc-badge">Sandbox</span></div>
-          <div class="pc-name">Developer</div>
-          <div class="pc-price"><span class="amt">$0</span><span class="per">/ verified request</span></div>
-          <p class="pc-sub">For engineers evaluating execution-layer controls in a single agent or framework.</p>
-          <div class="pc-meter">
-            <div><b>Credits</b><span>500 · one-time</span></div>
-            <div><b>Key</b><span>Cryptographic tenant key</span></div>
-          </div>
-          <ul>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Fast-path cloud checks via <code>POST /v1/check</code></span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Full shadow-world simulation (5 credits / call)</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Ed25519-signed verdicts · public key at <code>/v1/pubkey</code></span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Local mock mode in the SDK for offline test suites</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Operator console · audit ledger · chain verifier</span></li>
-            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>Session accumulator &amp; least-agency policy</span></li>
-            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>CI/CD scan pipeline · alert webhooks</span></li>
-          </ul>
-          <a href="/login#request" class="btn ghost">Request Developer Access</a>
-          <div class="pc-foot">Delivered after domain verification · 6–12h</div>
-        </div>
-
-        <!-- Starter -->
-        <div class="price-card">
-          <div class="pc-tier"><span>Tier 1</span><span class="pc-badge">Starter</span></div>
-          <div class="pc-name">Starter</div>
-          <div class="pc-price"><span class="amt">$99</span><span class="per">/ month</span></div>
-          <p class="pc-sub">For developers testing agent security against real traffic before a production rollout.</p>
-          <div class="pc-meter">
-            <div><b>Checks</b><span>10,000 / month</span></div>
-            <div><b>Burst</b><span>120 req / min / key</span></div>
-          </div>
-          <ul>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Everything in Developer</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>ALLOW / WARN / BLOCK verdicts with full evidence</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Ed25519-signed, SHA-256-chained audit log</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Discord alerts on WARN / BLOCK</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Monthly credit refill · idempotency keys</span></li>
-            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>Session accumulator &amp; least-agency policy</span></li>
-            <li class="dim"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg><span>CI/CD scan pipeline</span></li>
-          </ul>
-          <a href="mailto:contact@realitykernel.dev&bull;subject=Starter%20Plan%20Activation" class="btn ghost">Activate Starter</a>
-          <div class="pc-foot">Monthly · cancel anytime</div>
-        </div>
-
-        <!-- Professional -->
+        <!-- Community Open Source -->
         <div class="price-card featured">
-          <div class="pc-tier"><span>Tier 2</span><span class="pc-badge">Most deployed</span></div>
-          <div class="pc-name">Professional</div>
-          <div class="pc-price"><span class="amt">$499</span><span class="per">/ month</span></div>
-          <p class="pc-sub">For teams shipping agents to production who need sequence-aware detection and policy enforcement.</p>
+          <div class="pc-tier"><span>Community</span><span class="pc-badge">Open Source</span></div>
+          <div class="pc-name">Community Core</div>
+          <div class="pc-price"><span class="amt">$0</span><span class="per">/ Free Forever</span></div>
+          <p class="pc-sub">Dual-licensed under Apache 2.0 / MIT for AI developers, researchers, and self-hosted environments.</p>
           <div class="pc-meter">
-            <div><b>Checks</b><span>100,000 / month</span></div>
-            <div><b>Burst</b><span>120 req / min / key</span></div>
+            <div><b>License</b><span>Apache-2.0 / MIT</span></div>
+            <div><b>Source</b><span>100% Public on GitHub</span></div>
           </div>
           <ul>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Everything in Starter</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>Session accumulator</strong> — slow-drip exfiltration chain rules, keyed to tenant + agent identity</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>Least-agency policy</strong> — <code>allowed_tools</code>, <code>allowed_egress</code> enforced pre-simulation</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Scoped session tokens via <code>POST /v1/token</code></span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>CI/CD scan pipeline</strong> — <code>POST /v1/scan</code>, up to 50 commands, gate on <code>policy_pass</code></span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Discord webhooks with signed one-click operator overrides</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Strict mode · configurable retention · idempotency keys</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Linux eBPF & LSM in-kernel sensor (<code>sys_enter_execve</code>, <code>file_open</code>)</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>4-layer Rust intent verification engine with fast-path execution</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Python client SDK (<code>pip install realitykernel</code>) & CLI</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Ed25519-signed receipts with SHA-256 state chain (<code>prev_hash</code>)</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Container & PID-tree scoping via BPF maps</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Unlimited local agent verifications & offline test mode</span></li>
           </ul>
-          <a href="mailto:contact@realitykernel.dev&bull;subject=Professional%20Plan%20Activation" class="btn">Activate Professional</a>
-          <div class="pc-foot">Monthly · cancel anytime · overage at list rate</div>
+          <a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener" class="btn" style="background:#0f172a; color:#fff; text-align:center;">View on GitHub ⭐</a>
+          <div class="pc-foot">Clone, build, or install via PyPI immediately</div>
         </div>
 
-        <!-- Enterprise -->
+        <!-- Enterprise Fleet -->
         <div class="price-card">
-          <div class="pc-tier"><span>Tier 3</span><span class="pc-badge">Sovereign</span></div>
-          <div class="pc-name">Enterprise</div>
-          <div class="pc-price"><span class="amt">Custom</span></div>
-          <p class="pc-sub">For regulated environments that require kernel-level attestation and evidence that survives an audit.</p>
+          <div class="pc-tier"><span>Enterprise</span><span class="pc-badge">Custom</span></div>
+          <div class="pc-name">Enterprise Fleet</div>
+          <div class="pc-price"><span class="amt">Custom</span><span class="per">/ Deployment</span></div>
+          <p class="pc-sub">For enterprise security teams requiring multi-node fleet policy distribution and compliance reporting.</p>
           <div class="pc-meter">
-            <div><b>Checks</b><span>Unlimited</span></div>
-            <div><b>Deploy</b><span>Dedicated VPC / on-prem</span></div>
+            <div><b>Deployment</b><span>Private Cloud / On-Prem</span></div>
+            <div><b>Support</b><span>Engineering Team Direct</span></div>
           </div>
           <ul>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Everything in Professional</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong><code>rk-sensor</code></strong> — on-premises eBPF kernel sensor (Rust · Linux ≥ 5.8)</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Syscall attestation reconciled against issued verdicts</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>SOC 2 &amp; HIPAA-aligned cryptographic audit trails · SIEM export</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Region-locked data residency · customer-held signing keys</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Custom SLA · named engineer · private architecture review</span></li>
-            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span><strong>Design Partnership</strong> program for platform embeds</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Everything in Community Core</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Centralized multi-host policy synchronization controller</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>SIEM streaming export (Splunk, Microsoft Sentinel, Elastic)</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Automated compliance attestation (SOC 2, ISO 27001, EU AI Act)</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg><span>Custom LSM probe engineering & dedicated SLA</span></li>
           </ul>
-          <a href="mailto:contact@realitykernel.dev&bull;subject=Enterprise%20Architecture%20Review" class="btn ghost">Book Architecture Review</a>
-          <div class="pc-foot">Annual · procurement-ready · DPA available</div>
+          <a href="mailto:tabrezmukadam57@gmail.com?subject=Reality%20Kernel%20Enterprise%20Inquiry" class="btn ghost" style="text-align:center;">Contact Keter Labs</a>
+          <div class="pc-foot">Tailored to enterprise security architectures</div>
         </div>
 
       </div>

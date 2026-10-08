@@ -58,7 +58,7 @@
       <a href="/blog">Research</a>
       <a href="/docs">Docs</a>
       <a href="/security">Security</a>
-      <a href="/pricing">Pricing</a>
+      <a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener">GitHub ⭐</a>
     </nav>
     <div class="rk-header-cta">
       <a href="/login" class="btn btn-sm ghost" data-auth="signin">Sign in</a>
@@ -196,17 +196,22 @@
 
         <div class="faq-item" data-cat="pricing">
           <button class="faq-q" type="button">
-            What are your commercial subscription tiers?
+            Is Reality Kernel open source?
             <span class="caret">+</span>
           </button>
           <div class="faq-a">
-            <p>We offer subscription tiers tailored to different operational scales:</p>
-            <ul>
-              <li><strong>Developer (Free)</strong>: Rate-limited access to the public playground and basic API checks for testing.</li>
-              <li><strong>Builder ($99/mo)</strong>: Dedicated API keys, expanded rate limits, and standard developer operations support.</li>
-              <li><strong>Team ($799/mo)</strong>: Multi-agent pipeline integration, collaborative team dashboards, historical log visibility.</li>
-              <li><strong>Enterprise (Custom)</strong>: Dedicated VPC or self-hosted deployment, strict control mapping, exportable tamper-evident ledgers, priority SLA.</li>
-            </ul>
+            <p>Yes. The core Reality Kernel engine—including our in-kernel eBPF/LSM probes, Rust verification engine, and Python SDK—is completely free and open source under a dual Apache-2.0 / MIT license. You can inspect, modify, and run it on your own Linux environments with zero licensing fees.</p>
+          </div>
+        </div>
+
+        <div class="faq-item" data-cat="pricing">
+          <button class="faq-q" type="button">
+            What is the difference between Community and Enterprise?
+            <span class="caret">+</span>
+          </button>
+          <div class="faq-a">
+            <p><strong>Community Core (100% Free)</strong> includes the full eBPF LSM sensor, local Rust fast-path engine, Python SDK, and Ed25519 tamper-proof receipts for single-node self-hosted agents.<br/><br/>
+            <strong>Enterprise Fleet</strong> is designed for enterprise security teams managing distributed multi-host agent clusters, offering centralized policy distribution, SIEM export (Splunk, Microsoft Sentinel), and automated SOC 2 / ISO 27001 compliance attestation.</p>
           </div>
         </div>
 
@@ -216,27 +221,17 @@
             <span class="caret">+</span>
           </button>
           <div class="faq-a">
-            <p>No. Reality Kernel operates on a zero-retention model. Command bodies are evaluated in-memory and hashed. Only cryptographic proof hashes and basic audit properties (credits, timestamps, verdicts) are persisted. We never train models on your data.</p>
+            <p>No. Reality Kernel operates on a zero-retention model. Command bodies are evaluated in-memory and hashed. Only cryptographic proof hashes and basic audit properties (timestamps, verdicts) are persisted. We never train models on your data.</p>
           </div>
         </div>
 
         <div class="faq-item" data-cat="access">
           <button class="faq-q" type="button">
-            Can I rotate my API key?
+            Can I run Reality Kernel offline without internet?
             <span class="caret">+</span>
           </button>
           <div class="faq-a">
-            <p>Yes. Old keys are invalidated instantly, and the new key inherits your existing credit balance, plan, and history. Rotation is one message to your account manager.</p>
-          </div>
-        </div>
-
-        <div class="faq-item" data-cat="pricing">
-          <button class="faq-q" type="button">
-            What happens when credits hit zero?
-            <span class="caret">+</span>
-          </button>
-          <div class="faq-a">
-            <p>The API returns <code>HTTP 402</code> on every subsequent <code>/v1/check</code>. Agents pause gracefully — no silent bypasses. Contact your account manager to top up; balances are applied inside minutes.</p>
+            <p>Yes. The open-source engine runs completely locally on your host or container environment. You can compile the Rust engine and eBPF probes to run in air-gapped or offline networks with zero external network dependencies.</p>
           </div>
         </div>
 
@@ -274,7 +269,7 @@
           <li><a href="/playground">Playground</a></li>
           <li><a href="/verifier">Verifier</a></li>
           <li><a href="/blog">Research</a></li>
-          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener">GitHub ⭐</a></li>
           <li><a href="/benchmark">Benchmark</a></li>
           <li><a href="/security">Security &amp; threat model</a></li>
         </ul>

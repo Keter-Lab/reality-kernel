@@ -4,7 +4,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/realitykernel.svg)](https://pypi.org/project/realitykernel/)
 [![Rust: 1.80+](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Linux: 5.15+ (eBPF/LSM)](https://img.shields.io/badge/linux-5.15%2B%20(eBPF%2FLSM)-green.svg)](https://kernel.org)
-[![Fast-Path Latency](https://img.shields.io/badge/latency-%3C0.31ms-success.svg)](#benchmarks)
+[![Execution: In-Memory Fast-Path](https://img.shields.io/badge/execution-sub--millisecond-success.svg)](#performance)
 
 **In-kernel eBPF runtime security barrier and deterministic execution attestation for autonomous AI agents.**
 
@@ -22,11 +22,11 @@ Most current security solutions operate at the **application layer** (prompt fil
 
 ---
 
-## 🛡️ The Solution: In-Kernel Enforcement (<0.31ms Latency)
+## 🛡️ The Solution: In-Kernel Enforcement (Sub-Millisecond Fast-Path)
 
 **Reality Kernel** shifts enforcement down to the **Linux Kernel** using **eBPF (Extended Berkeley Packet Filter)** and **LSM (Linux Security Modules)**. 
 
-No matter what prompt the agent saw, and no matter what jailbreak it encountered, Reality Kernel validates the proposed action in user-space in `<0.31ms` and intercepts unauthorized operations directly in the kernel before syscall execution.
+No matter what prompt the agent saw, and no matter what jailbreak it encountered, Reality Kernel validates the proposed action in user-space memory and intercepts unauthorized operations directly in the kernel before syscall execution.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -36,7 +36,7 @@ No matter what prompt the agent saw, and no matter what jailbreak it encountered
 │   [ Autonomous AI Agent ] (CrewAI / Claude / AutoGPT / LangChain)              │
 │             │                                                                   │
 │             ▼                                                                   │
-│   [ Layer 1: Rust Intent Engine ] ──> Fast-Path Policy Validation (<0.31ms)     │
+│   [ Layer 1: Rust Intent Engine ] ──> Sub-Millisecond Policy Validation         │
 │             │                                                                   │
 │    ═════════╪══════════════════════════════════════════════════════════════     │
 │             ▼  (Attempts Syscall: execve / file_open / connect)                 │
@@ -72,7 +72,7 @@ prime_intent = "Read application error logs in /var/log/app"
 action = "cat /var/log/app/error.log"
 
 try:
-    # Deterministic pre-dispatch verification (<0.31ms fast-path)
+    # Deterministic pre-dispatch verification (sub-millisecond in-memory)
     verdict = rk.guard(action, prime_intent)
     print(f"Verdict: {verdict.verdict} | Latency: {verdict.latency_ms}ms")
 except ActionBlocked as e:
@@ -104,7 +104,7 @@ print(verdict.shadow_mode)  # True
 | :--- | :--- | :--- |
 | **Enforcement Point** | User-space API proxy | **Linux Kernel via LSM & eBPF** |
 | **Jailbreak Resistance** | Low (Heuristics can be bypassed) | **Absolute** (Syscall denied at OS level) |
-| **Latency Impact** | High (50ms – 500ms secondary LLM calls) | **Ultra-Low (<0.31ms fast-path in Rust)** |
+| **Latency Impact** | High (300ms – 1,000ms+ secondary LLM calls) | **Sub-Millisecond (Local in-memory Rust engine)** |
 | **Process Confinement** | None (Cannot block rogue bash calls) | **Deterministic cgroup / PID blocking** |
 | **Audit Integrity** | Mutable plain text logs | **Ed25519 cryptographic state chain** |
 
@@ -151,13 +151,13 @@ cargo test
 
 ---
 
-## 📊 Benchmarks
+## 📊 Performance & Latency Profile
 
-Micro-benchmarked on Linux kernel 6.8 (x86_64, AMD EPYC / Intel Xeon):
+Reality Kernel is designed to run in-line with autonomous agent execution loops without introducing perceptible lag:
 
-* **Fast-Path Intent Verification:** `0.308 ms` average (p99: `0.482 ms`)
-* **eBPF Syscall Interception Overhead:** `< 1.2 microseconds` per event
-* **Ring Buffer Event Throughput:** `> 450,000 events/sec` before drop threshold
+* **Local In-Memory Evaluation:** Pre-dispatch policy evaluation runs locally in host memory, completely bypassing the 300ms–1,000ms network roundtrips required by secondary LLM-based guardrails.
+* **Low-Overhead eBPF Interception:** System call probes execute inside the Linux kernel within microseconds, introducing zero perceptible penalty to host processes.
+* **Non-Blocking Telemetry:** Audit events are streamed to user space via BPF ring buffers asynchronously, ensuring event capture never stalls agent task execution.
 
 ---
 
