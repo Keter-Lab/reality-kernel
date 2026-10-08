@@ -23,6 +23,7 @@ _CRITICAL_PATTERNS = [
     r'rm\s+(-rf?|-r)\s+~',              # Recursive delete home directory
     r'bash\s+-[ic]',                     # Interactive/command shell
     r'sh\s+-[ic]',                       # sh interactive/command
+    r'zsh\s+-[ic]',                      # zsh interactive/command
     r'nc\s+-e',                          # Netcat exec
     r'ncat\s+-e',                        # Ncat exec
     r'>\s*/dev/tcp',                     # Bash TCP socket
@@ -32,7 +33,7 @@ _CRITICAL_PATTERNS = [
     r'TRUNCATE\s+TABLE',                # Table truncation
     r'dd\s+if=.+of=/dev/',              # Disk-level destruction
     r'mkfs\s+/dev/',                    # Format a live device
-    r'python[23]?\s+-c\s+.*(__import__|subprocess|os\.system|exec|eval)', # Python RCE with dangerous calls
+    r'python[23]?\s+-c\s+.*(__import__|subprocess|os\.system|os\.popen|pty\.spawn|exec|eval)', # Python RCE with dangerous calls
     r'perl\s+-e\s+.*system\s*\(',       # Perl RCE with system()
     # SSRF / Internal Network Probing variants (immediate block)
     r'169\.254',            # standard dotted-decimal
