@@ -1,16 +1,24 @@
-# Reality Kernel 🛡️
+<p align="center">
+  <img src="assets/logo.png" alt="Reality Kernel" width="110" height="110" style="border-radius: 50%;" />
+</p>
 
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
-[![PyPI version](https://img.shields.io/pypi/v/realitykernel.svg)](https://pypi.org/project/realitykernel/)
-[![Rust: 1.80+](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
-[![Linux: 5.15+ (eBPF/LSM)](https://img.shields.io/badge/linux-5.15%2B%20(eBPF%2FLSM)-green.svg)](https://kernel.org)
-[![Execution: In-Memory Fast-Path](https://img.shields.io/badge/execution-sub--millisecond-success.svg)](#performance)
+<h1 align="center">Reality Kernel</h1>
 
-**In-kernel eBPF runtime security barrier and deterministic execution attestation for autonomous AI agents.**
+<p align="center">
+  <b>In-kernel eBPF runtime security barrier & deterministic execution attestation for autonomous AI agents.</b>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg" alt="License"></a>
+  <a href="https://pypi.org/project/realitykernel/"><img src="https://img.shields.io/pypi/v/realitykernel.svg" alt="PyPI"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.80%2B-orange.svg" alt="Rust"></a>
+  <a href="https://kernel.org"><img src="https://img.shields.io/badge/linux-5.15%2B%20(eBPF%2FLSM)-green.svg" alt="Linux eBPF"></a>
+  <a href="#performance"><img src="https://img.shields.io/badge/execution-sub--millisecond-success.svg" alt="Latency"></a>
+</p>
 
 ---
 
-## ⚡ The Problem: AI Agents Have Root-Level Risk but Toy-Level Defenses
+## ◈ The Problem: AI Agents Have Root-Level Risk but Toy-Level Defenses
 
 When you connect autonomous AI agents (Claude Computer Use, AutoGPT, CrewAI, LangChain) to a production environment, you grant them real operating system privileges: executing bash commands, reading files, modifying databases, and calling external APIs.
 
@@ -22,36 +30,47 @@ Most current security solutions operate at the **application layer** (prompt fil
 
 ---
 
-## 🛡️ The Solution: In-Kernel Enforcement (Sub-Millisecond Fast-Path)
+## ◈ The Solution: In-Kernel Enforcement (Sub-Millisecond Fast-Path)
 
 **Reality Kernel** shifts enforcement down to the **Linux Kernel** using **eBPF (Extended Berkeley Packet Filter)** and **LSM (Linux Security Modules)**. 
 
 No matter what prompt the agent saw, and no matter what jailbreak it encountered, Reality Kernel validates the proposed action in user-space memory and intercepts unauthorized operations directly in the kernel before syscall execution.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           REALITY KERNEL ARCHITECTURE                           │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   [ Autonomous AI Agent ] (CrewAI / Claude / AutoGPT / LangChain)              │
-│             │                                                                   │
-│             ▼                                                                   │
-│   [ Layer 1: Rust Intent Engine ] ──> Sub-Millisecond Policy Validation         │
-│             │                                                                   │
-│    ═════════╪══════════════════════════════════════════════════════════════     │
-│             ▼  (Attempts Syscall: execve / file_open / connect)                 │
-│   [ Layer 2: eBPF / LSM Probes ]  ──> Intercepts in Kernel Space                │
-│             │                         - Checks MONITORED_PIDS / CGROUPS         │
-│             │                         - If rogue action: FAIL-CLOSED (Blocked)  │
-│             │                         - Zero host OS overhead                   │
-│             ▼                                                                   │
-│   [ Layer 3: Ed25519 Receipt Chain ] ──> SHA-256 State Chain (Tamper-Proof Audit)│
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Userspace ["User Space (Agent Execution)"]
+        Agent["Autonomous AI Agent<br/>(CrewAI / Claude / AutoGPT / LangChain)"]
+        IntentEngine["Layer 1: Rust Intent Engine<br/>Sub-Millisecond Policy Check"]
+        Agent -->|"1. Proposes Action"| IntentEngine
+    end
+
+    subgraph KernelSpace ["Linux Kernel (eBPF & LSM Subsystem)"]
+        direction TB
+        LSMHook{"Layer 2: In-Kernel LSM Probes<br/>sys_enter_execve · file_open · bprm_check_security"}
+        BPFMaps[("BPF Maps<br/>MONITORED_PIDS · CGROUPS")]
+        
+        IntentEngine -->|"2. Dispatches Syscall"| LSMHook
+        LSMHook <-->|"Process Scope Lookup"| BPFMaps
+        
+        BlockAction["FAIL-CLOSED<br/>Syscall Intercepted & Denied"]
+        AllowAction["PERMITTED<br/>Syscall Executes on Host"]
+        
+        LSMHook -->|"Policy Divergence / Rogue Action"| BlockAction
+        LSMHook -->|"Authorized Action"| AllowAction
+    end
+
+    subgraph AuditLedger ["Cryptographic Attestation"]
+        RingBuf["BPF Ring Buffer Telemetry"]
+        EdReceipt["Layer 3: Ed25519 Signed Receipt<br/>SHA-256 prev_hash Audit Chain"]
+        
+        AllowAction -->|"Asynchronous Event Stream"| RingBuf
+        RingBuf --> EdReceipt
+    end
 ```
 
 ---
 
-## 🚀 Quickstart (Python SDK)
+## ◈ Quickstart (Python SDK)
 
 Install the production client package from PyPI:
 
@@ -98,7 +117,7 @@ print(verdict.shadow_mode)  # True
 
 ---
 
-## ⚖️ Architectural Comparison
+## ◈ Architectural Comparison
 
 | Dimension | App-Layer Guardrails (NeMo, Lakera, Llama Guard) | **Reality Kernel (eBPF + Rust)** |
 | :--- | :--- | :--- |
@@ -110,7 +129,7 @@ print(verdict.shadow_mode)  # True
 
 ---
 
-## 🛠️ Workspace Structure & Building from Source
+## ◈ Workspace Structure & Building from Source
 
 Reality Kernel is architected as a modular Rust workspace:
 
@@ -151,7 +170,7 @@ cargo test
 
 ---
 
-## 📊 Performance & Latency Profile
+## ◈ Performance & Latency Profile
 
 Reality Kernel is designed to run in-line with autonomous agent execution loops without introducing perceptible lag:
 
@@ -161,7 +180,7 @@ Reality Kernel is designed to run in-line with autonomous agent execution loops 
 
 ---
 
-## 🔒 Threat Model & Handled Vectors
+## ◈ Threat Model & Handled Vectors
 
 * **Indirect Prompt Injection:** Adversary plants hidden instructions in data ingested by the agent.
 * **Unauthorized File Exfiltration:** Agent attempts to read SSH keys, `.env`, or credential stores.
@@ -170,7 +189,7 @@ Reality Kernel is designed to run in-line with autonomous agent execution loops 
 
 ---
 
-## 🤝 Contributing
+## ◈ Contributing
 
 We welcome contributions from security researchers, systems programmers, and AI builders!
 * See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
@@ -178,7 +197,7 @@ We welcome contributions from security researchers, systems programmers, and AI 
 
 ---
 
-## 📜 License
+## ◈ License
 
 Reality Kernel is dual-licensed under:
 * **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE))
