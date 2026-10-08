@@ -4,7 +4,7 @@ use aya_ebpf::programs::TracePointContext;
 use rk_ebpf_common::{TaggedUnlinkEvent, EVENT_TAG_UNLINK};
 
 use crate::maps::EVENTS;
-use crate::util::{bump_drop_counter, fill_comm, identity, ns_stub, read_user_cstr};
+use crate::util::{bump_drop_counter, fill_comm, identity, is_monitored, ns_stub, read_user_cstr};
 
 const ARG1_OFFSET: usize = 24;
 
@@ -17,6 +17,11 @@ pub fn unlinkat_enter(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn do_unlinkat(ctx: &TracePointContext) -> Result<(), i64> {
+    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
+    if !is_monitored(cgroup_id, pid, tgid) {
+        return Ok(());
+    }
+
     let pathname_ptr = ctx.read_at::<*const u8>(ARG1_OFFSET)?;
 
     let Some(mut slot) = EVENTS.reserve::<TaggedUnlinkEvent>(0) else {
@@ -29,7 +34,6 @@ unsafe fn do_unlinkat(ctx: &TracePointContext) -> Result<(), i64> {
     (*tagged)._pad = [0; 7];
 
     let event = &mut (*tagged).event;
-    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
     let (mnt_ns, _, _) = ns_stub();
 
     event.ts_ns = ts_ns;

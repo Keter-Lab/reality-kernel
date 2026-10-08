@@ -3,10 +3,31 @@ use aya_ebpf::helpers::{
     bpf_get_current_uid_gid, bpf_ktime_get_ns, bpf_probe_read_user, bpf_probe_read_user_str_bytes,
 };
 
-use crate::maps::EVENT_DROPS;
+use crate::maps::{EVENT_DROPS, FILTER_MODE, MONITORED_CGROUPS, MONITORED_PIDS};
 
 pub const O_WRONLY: u32 = 0x1;
 pub const O_RDWR: u32 = 0x2;
+
+#[inline(always)]
+pub fn is_monitored(cgroup_id: u64, pid: u32, tgid: u32) -> bool {
+    // If filter mode is 0 (promiscuous / audit all), accept all events (default)
+    if let Some(&0) = unsafe { FILTER_MODE.get(0) } {
+        return true;
+    }
+
+    // 1. Container check: Is this process running within a monitored cgroup?
+    if unsafe { MONITORED_CGROUPS.get(&cgroup_id) }.is_some() {
+        return true;
+    }
+
+    // 2. PID-tree check: Is this PID or its parent thread group registered?
+    if unsafe { MONITORED_PIDS.get(&pid) }.is_some() || unsafe { MONITORED_PIDS.get(&tgid) }.is_some() {
+        return true;
+    }
+
+    false
+}
+
 
 #[inline(always)]
 pub fn fill_comm(comm: &mut [u8; 16]) {

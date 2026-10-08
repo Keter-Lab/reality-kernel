@@ -6,7 +6,7 @@ use rk_ebpf_common::{
 };
 
 use crate::maps::EVENTS;
-use crate::util::{bump_drop_counter, fill_comm, identity, ns_stub, read_user_cstr, read_user_ptr};
+use crate::util::{bump_drop_counter, fill_comm, identity, is_monitored, ns_stub, read_user_cstr, read_user_ptr};
 
 const ARG0_OFFSET: usize = 16;
 const ARG1_OFFSET: usize = 24;
@@ -41,6 +41,11 @@ unsafe fn do_execveat(ctx: &TracePointContext) -> Result<(), i64> {
 }
 
 unsafe fn emit_exec(filename_ptr: *const u8, argv_ptr: *const *const u8) -> Result<(), i64> {
+    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
+    if !is_monitored(cgroup_id, pid, tgid) {
+        return Ok(());
+    }
+
     let Some(mut slot) = EVENTS.reserve::<TaggedExecEvent>(0) else {
         bump_drop_counter();
         return Ok(());
@@ -51,13 +56,13 @@ unsafe fn emit_exec(filename_ptr: *const u8, argv_ptr: *const *const u8) -> Resu
     (*tagged)._pad = [0; 7];
 
     let event = &mut (*tagged).event;
-    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
     let (mnt_ns, pid_ns, ppid) = ns_stub();
 
     event.ts_ns = ts_ns;
     event.pid = pid;
     event.tgid = tgid;
     event.ppid = ppid;
+
     event.uid = uid;
     event.gid = gid;
     event.mnt_ns = mnt_ns;

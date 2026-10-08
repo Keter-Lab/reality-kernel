@@ -4,7 +4,7 @@ use aya_ebpf::programs::SockAddrContext;
 use rk_ebpf_common::{TaggedNetConnectEvent, EVENT_TAG_NET_CONNECT};
 
 use crate::maps::EVENTS;
-use crate::util::{bump_drop_counter, fill_comm, identity, is_loopback_v4, is_loopback_v6};
+use crate::util::{bump_drop_counter, fill_comm, identity, is_loopback_v4, is_loopback_v6, is_monitored};
 
 const AF_INET: u16 = 2;
 const AF_INET6: u16 = 10;
@@ -32,6 +32,11 @@ pub fn rk_connect6(ctx: SockAddrContext) -> i32 {
 }
 
 unsafe fn emit_connect(ctx: &SockAddrContext, family: u16) -> Result<(), i64> {
+    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
+    if !is_monitored(cgroup_id, pid, tgid) {
+        return Ok(());
+    }
+
     let Some(mut slot) = EVENTS.reserve::<TaggedNetConnectEvent>(0) else {
         bump_drop_counter();
         return Ok(());
@@ -42,7 +47,6 @@ unsafe fn emit_connect(ctx: &SockAddrContext, family: u16) -> Result<(), i64> {
     (*tagged)._pad = [0; 7];
 
     let event = &mut (*tagged).event;
-    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
 
     event.ts_ns = ts_ns;
     event.pid = pid;

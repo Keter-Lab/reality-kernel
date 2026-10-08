@@ -5,7 +5,7 @@ use rk_ebpf_common::{TaggedFileOpenEvent, EVENT_TAG_FILE_OPEN};
 
 use crate::maps::EVENTS;
 use crate::util::{
-    bump_drop_counter, fill_comm, identity, ns_stub, path_has_sensitive_prefix, read_user_cstr, O_RDWR,
+    bump_drop_counter, fill_comm, identity, is_monitored, ns_stub, path_has_sensitive_prefix, read_user_cstr, O_RDWR,
     O_WRONLY,
 };
 
@@ -29,6 +29,11 @@ pub fn openat_enter(ctx: TracePointContext) -> u32 {
 }
 
 unsafe fn do_openat(ctx: &TracePointContext) -> Result<(), i64> {
+    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
+    if !is_monitored(cgroup_id, pid, tgid) {
+        return Ok(());
+    }
+
     let filename_ptr = ctx.read_at::<*const u8>(OPENAT_FILENAME_OFFSET)?;
     let flags = ctx.read_at::<u32>(OPENAT_FLAGS_OFFSET)?;
     let mode = ctx.read_at::<u32>(OPENAT_MODE_OFFSET)?;
@@ -43,7 +48,6 @@ unsafe fn do_openat(ctx: &TracePointContext) -> Result<(), i64> {
     (*tagged)._pad = [0; 7];
 
     let event = &mut (*tagged).event;
-    let (ts_ns, pid, tgid, uid, gid, cgroup_id) = identity();
     let (mnt_ns, _, _) = ns_stub();
 
     event.ts_ns = ts_ns;
