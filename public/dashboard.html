@@ -164,7 +164,7 @@
           <div class="page-head">
             <div>
               <h2>Dashboard</h2>
-              <p>Real-time view of your engine, credits, and last verdicts.</p>
+              <p>Real-time view of your engine, telemetry, and last verdicts.</p>
             </div>
           </div>
 
@@ -251,9 +251,9 @@
               </p>
             </div>
             <div class="card featured hover-lift">
-              <h4>Need more credits or a higher plan&bull;</h4>
+              <h4>Need Enterprise Support?</h4>
               <p style="font-size: 13.5px; line-height: 1.65; margin: 12px 0 14px;">
-                Top-ups and plan changes are handled manually. Message Keter Labs on LinkedIn — we respond inside 24 hours and can rotate, extend, or upgrade your key in minutes.
+                For dedicated support, fleet deployments, or custom eBPF filters, contact the Keter Labs team.
               </p>
               <a class="btn btn-sm" href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" aria-label="Support on LinkedIn (opens in a new window)" title="Support on LinkedIn (opens in a new window)" style="border-bottom: none; text-decoration: none;">
                 Contact Keter Labs <span style="font-family: var(--font-mono);">→</span>
@@ -267,13 +267,13 @@
           <div class="page-head">
             <div>
               <h2>Usage</h2>
-              <p>Credit consumption, top-up history, and verdict distribution.</p>
+              <p>Event throughput, fleet telemetry, and verdict distribution.</p>
             </div>
           </div>
 
           <div class="grid">
             <div class="card stat featured">
-              <div class="label"><span class="dot warn"></span>Credits used</div>
+              <div class="label"><span class="dot warn"></span>Events Audited</div>
               <div class="value"><span id="us-used">—</span><span class="of" id="us-limit"></span></div>
               <div class="bar"><div class="fill" id="us-bar"></div></div>
               <div class="sub"><span id="us-pct">—</span> of total allocation</div>
@@ -316,13 +316,13 @@
             <div class="card hover-lift">
               <h4>Fast path vs full engine</h4>
               <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
-                Read-only commands (<code>ls</code>, <code>cat</code>, <code>grep</code>…) execute at <strong>1 credit</strong>. Risky or ambiguous commands run the full engine at <strong>5 credits</strong>.
+                Read-only commands bypass the deep simulator via the fast path in microseconds. Risky or ambiguous commands trigger the full symbolic execution engine.
               </p>
             </div>
             <div class="card hover-lift">
-              <h4>Hard cap behavior</h4>
+              <h4>Rate Limits</h4>
               <p style="font-size: 13.5px; line-height: 1.7; margin: 12px 0 0;">
-                When credits hit zero the API returns <code>HTTP 402</code> until your account is topped up. Agents pause gracefully — no silent bypasses.
+                If the telemetry pipe exceeds capacity, the agent pauses gracefully fail-closed. No silent bypasses.
               </p>
             </div>
           </div>
@@ -504,7 +504,7 @@
           <div class="page-head">
             <div>
               <h2>FAQ</h2>
-              <p>Common questions about credits, verdicts, integration, and security.</p>
+              <p>Common questions about verdicts, integration, and enterprise security.</p>
             </div>
             <div class="actions">
               <a class="btn btn-sm ghost" href="/faq" style="border-bottom:none; text-decoration:none; margin-top:0;">Full FAQ →</a>
@@ -515,11 +515,10 @@
             <div class="faq-list" id="faqList">
               <div class="faq-item open">
                 <button class="faq-q" type="button">
-                  How are credits consumed&bull;
-                  <span class="caret">+</span>
+                  How are actions verified?<span class="caret">+</span>
                 </button>
                 <div class="faq-a">
-                  <p>The fast path (read-only commands like <code>ls</code>, <code>cat</code>, <code>grep</code>) costs <strong>1 credit</strong>. Anything that hits the full engine — risky writes, ambiguous intent, pipelines — costs <strong>5 credits</strong>. Every <code>/v1/check</code> response returns the exact cost in <code>credits_consumed</code>.</p>
+                  <p>The fast path instantly permits safe, read-only commands. Anything that mutates state hits the full symbolic execution engine before the syscall is executed.</p>
                 </div>
               </div>
               <div class="faq-item">
@@ -543,7 +542,7 @@
                 <div class="faq-a"><p>Each verdict is hashed with SHA-256 over the decision payload (command, intent, verdict, timestamp, evidence). The hash chain-links into a tamper-evident audit log — if any entry is altered, the chain breaks.</p></div>
               </div>
               <div class="faq-item">
-                <button class="faq-q" type="button">Credits ran out — what happens&bull; <span class="caret">+</span></button>
+                <button class="faq-q" type="button">What happens if a threat is detected?<span class="caret">+</span></button>
                 <div class="faq-a"><p>Unauthorized actions return <code>HTTP 403</code>. Agent execution pauses fail-closed. No silent bypasses.</p></div>
               </div>
               <div class="faq-item">
@@ -552,7 +551,7 @@
               </div>
               <div class="faq-item">
                 <button class="faq-q" type="button">Can I rotate my API key&bull; <span class="caret">+</span></button>
-                <div class="faq-a"><p>Yes — contact Reality Kernel support. The old key is invalidated immediately, and the new key inherits your existing credit balance and history.</p></div>
+                <div class="faq-a"><p>Yes, Enterprise Fleet management allows pushing real-time eBPF policy updates to all active agent runners simultaneously.</p></div>
               </div>
             </div>
 
