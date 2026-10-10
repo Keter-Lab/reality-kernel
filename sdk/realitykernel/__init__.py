@@ -3,8 +3,8 @@ Reality Kernel Python Client SDK
 Deterministic cryptographic intent-verification barrier for autonomous AI agents.
 """
 
-from realitykernel.client import RealityKernel, Verdict
-from realitykernel.exceptions import (
+from .client import RealityKernel, Verdict
+from .exceptions import (
     ActionBlocked,
     ActionNeedsReview,
     InsufficientCreditsError,
