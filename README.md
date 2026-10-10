@@ -121,11 +121,11 @@ print(verdict.shadow_mode)  # True
 
 | Dimension | App-Layer Guardrails (NeMo, Lakera, Llama Guard) | **Reality Kernel (eBPF + Rust)** |
 | :--- | :--- | :--- |
-| **Enforcement Point** | User-space API proxy | **Linux Kernel via LSM & eBPF** |
-| **Jailbreak Resistance** | Low (Heuristics can be bypassed) | **Absolute** (Syscall denied at OS level) |
-| **Latency Impact** | High (300ms – 1,000ms+ secondary LLM calls) | **Sub-Millisecond (Local in-memory Rust engine)** |
-| **Process Confinement** | None (Cannot block rogue bash calls) | **Deterministic cgroup / PID blocking** |
-| **Audit Integrity** | Mutable plain text logs | **Ed25519 cryptographic state chain** |
+| **Enforcement Point** | User-space API proxy | **Pre-Dispatch Symbolic Gate + Kernel eBPF Probes** |
+| **Jailbreak Resistance** | Low (Heuristics can be bypassed) | **Deterministic** (Pre-dispatch gate + in-kernel socket denial) |
+| **Latency Impact** | High (300ms – 1,000ms+ secondary LLM calls) | **Sub-Millisecond** (Local in-memory evaluation) |
+| **Process Confinement** | None (Cannot block rogue bash calls) | **Deterministic cgroup / PID monitoring & Egress Blocking** |
+| **Audit Integrity** | Mutable plain text logs | **SHA-256 rolling hash chain & Ed25519 signatures** |
 
 ---
 

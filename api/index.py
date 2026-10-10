@@ -639,28 +639,46 @@ def _extract_binaries(command: str) -> list[str]:
 
 
 def _extract_domains(command: str) -> list[str]:
-    urls = re.findall(r'https?://([a-zA-Z0-9\[\]][a-zA-Z0-9.\-:]*)', command)
-    domains = []
-    for host in urls:
-        host = host.replace("[", "").replace("]", "")
-        domains.append(host.lower())
+    import ipaddress
+    import urllib.parse
+
+    domains = set()
+    raw_urls = re.findall(r"https?://[^\s'\"<>]+", command)
+    for raw in raw_urls:
+        try:
+            parsed = urllib.parse.urlsplit(raw)
+            host = parsed.hostname
+            if host:
+                domains.add(host.lower().strip("[]"))
+        except Exception:
+            pass
 
     ip_pattern = re.compile(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
     for match in ip_pattern.finditer(command):
         ip = match.group(1)
         if ip not in ('127.0.0.1', '0.0.0.0', '255.255.255.255'):
-            domains.append(ip)
+            domains.add(ip)
 
     for word in command.split():
         word = word.strip().lower()
         word = re.sub(r'^https?://', '', word)
         word = word.split('/')[0]
-        if "." in word or ":" in word or word.isdigit():
-            if not word.startswith('-') and not any(c in word for c in "'\"()$*<>|&;"):
-                clean = word.replace("[", "").replace("]", "")
-                if clean:
-                    domains.append(clean)
-    return list(set(domains))
+        if '@' in word:
+            word = word.split('@')[-1]
+        if ':' in word and not word.startswith('['):
+            word = word.split(':')[0]
+        word = word.replace('[', '').replace(']', '').strip()
+        
+        if word.isdigit() and len(word) >= 7:
+            try:
+                ip_obj = ipaddress.ip_address(int(word))
+                domains.add(str(ip_obj))
+            except Exception:
+                pass
+        elif '.' in word and not word.startswith('-') and not any(c in word for c in "'\"()$*<>|&;"):
+            domains.add(word)
+            
+    return list(domains)
 
 def _domain_matches(domain: str, pattern: str) -> bool:
     pattern = pattern.lower()

@@ -104,6 +104,14 @@ BINARY_CAPABILITIES = {
             "-exec rm": EffectClass.CATASTROPHIC_WRITE,
             "-exec sh": EffectClass.DESTRUCTIVE_EXEC,
             "-exec bash": EffectClass.DESTRUCTIVE_EXEC,
+            "-exec": EffectClass.DESTRUCTIVE_EXEC,
+            "-execdir": EffectClass.DESTRUCTIVE_EXEC,
+            "-ok": EffectClass.DESTRUCTIVE_EXEC,
+            "-okdir": EffectClass.DESTRUCTIVE_EXEC,
+            "-fprint": EffectClass.WRITE,
+            "-fprint0": EffectClass.WRITE,
+            "-fprintf": EffectClass.WRITE,
+            "-fls": EffectClass.WRITE,
         }
     },
     "stat": {"base": EffectClass.READ},
@@ -112,7 +120,13 @@ BINARY_CAPABILITIES = {
     "more": {"base": EffectClass.READ},
     "diff": {"base": EffectClass.READ},
     "wc":   {"base": EffectClass.READ},
-    "sort": {"base": EffectClass.READ},
+    "sort": {
+        "base": EffectClass.READ,
+        "flag_modifiers": {
+            "-o": EffectClass.WRITE,
+            "--output": EffectClass.WRITE,
+        }
+    },
     "ps":   {"base": EffectClass.READ},
     "who":  {"base": EffectClass.READ},
     "top":  {"base": EffectClass.READ},

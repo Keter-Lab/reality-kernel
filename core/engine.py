@@ -39,7 +39,7 @@ _FAST_PATH_PATTERN_STRINGS = [
     r'^(less|more|view)\b',
     r'^(wc|wc\s+-[lwc]+)\b',
     r'^(file|stat|lstat)\b',
-    r'^(find)\b(?!.*-(exec|ok|execdir|okdir)\b)',
+    r'^(find)\b(?!.*-(exec|ok|execdir|okdir|delete|fprint|fprint0|fprintf|fls)\b)',
     r'^(tree)\b',
     r'^(pwd)\b',
     r'^(du\s|df\s|df\b)',
@@ -47,7 +47,8 @@ _FAST_PATH_PATTERN_STRINGS = [
     # Text search & processing (read-only)
     r'^(grep|egrep|fgrep|rg|ag|ack)\b',
     r'^(awk)\b(?!.*system\s*\()',
-    r'^(cut|sort|uniq|tr|paste|join)\b',
+    r'^(cut|uniq|tr|paste|join)\b',
+    r'^(sort)\b(?!.*(-o\b|--output))',
     r'^(diff|cmp|comm)\b',
     r'^(strings|xxd|od|hexdump)\b',
     r'^(jq)\b',
@@ -178,6 +179,8 @@ _FORCED_SLOW_PATH_STRINGS = [
     r'localhost',
     r'127\.0\.0\.1',
     r'0\.0\.0\.0',
+    r'-(delete|fprint|fprint0|fprintf|fls)\b',
+    r'sort\s+.*(-o\b|--output)',
 ]
 
 # Pre-compile at module load so each request does ZERO regex compilation.
@@ -335,8 +338,11 @@ def analyse(
 
     elapsed = time.perf_counter() - t0
     if verbose:
-        print(render_decision(decision))
-        print(f"  \033[2mEngine latency: {elapsed*1000:.1f}ms\033[0m\n")
+        try:
+            print(render_decision(decision))
+            print(f"  \033[2mEngine latency: {elapsed*1000:.1f}ms\033[0m\n")
+        except (UnicodeEncodeError, OSError):
+            pass
 
     return decision
 

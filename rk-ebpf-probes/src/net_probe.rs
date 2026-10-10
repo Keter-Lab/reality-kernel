@@ -16,7 +16,7 @@ pub fn rk_connect4(ctx: SockAddrContext) -> i32 {
     unsafe {
         match emit_connect(&ctx, AF_INET) {
             Ok(_) => 1,
-            Err(_) => 1,
+            Err(_) => 0, // Deny connection with -EPERM at kernel level
         }
     }
 }
@@ -26,7 +26,7 @@ pub fn rk_connect6(ctx: SockAddrContext) -> i32 {
     unsafe {
         match emit_connect(&ctx, AF_INET6) {
             Ok(_) => 1,
-            Err(_) => 1,
+            Err(_) => 0, // Deny connection with -EPERM at kernel level
         }
     }
 }
@@ -76,13 +76,26 @@ unsafe fn emit_connect(ctx: &SockAddrContext, family: u16) -> Result<(), i64> {
             slot.discard(0);
             return Ok(());
         }
-        event.addr[0..4].copy_from_slice(&ip.to_be_bytes());
+        let ip_bytes = ip.to_be_bytes();
+        // IMDS / Cloud Metadata protection: Block 169.254.0.0/16 (AWS/GCP/Azure link-local)
+        if ip_bytes[0] == 169 && ip_bytes[1] == 254 {
+            slot.discard(0);
+            return Err(-1);
+        }
+        event.addr[0..4].copy_from_slice(&ip_bytes);
     } else {
         let ip6 = ctx.user_ip6();
         let bytes = ip6.octets();
         if is_loopback_v6(&bytes) {
             slot.discard(0);
             return Ok(());
+        }
+        // Block IPv4-mapped 169.254.0.0/16 or IPv6 link-local fe80::/10
+        if (bytes[0..12] == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff] && bytes[12] == 169 && bytes[13] == 254)
+            || (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80)
+        {
+            slot.discard(0);
+            return Err(-1);
         }
         event.addr = bytes;
     }

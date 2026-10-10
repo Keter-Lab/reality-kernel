@@ -99,22 +99,23 @@ class RealityKernel:
         timeout: float = 10.0,
         shadow_mode: bool = False,
     ):
-        self.api_key = api_key or os.environ.get("RK_API_KEY", "")
-        if not self.api_key:
-            raise RealityKernelError("Missing RK_API_KEY. Pass api_key or set os.environ['RK_API_KEY'].")
-
+        self.api_key = api_key or os.environ.get("RK_API_KEY", "local_mode")
+        self.local_mode = self.api_key in ("local_mode", "local", "community") or base_url == "local"
         self.base_url = (base_url or os.environ.get("RK_BASE_URL", "https://www.realitykernel.dev")).rstrip("/")
         self.agent_id = agent_id or os.environ.get("RK_AGENT_ID", "")
         self.shadow_mode = shadow_mode
-        self._http = httpx.Client(
-            base_url=self.base_url,
-            timeout=timeout,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "realitykernel-python/0.7.0",
-            },
-        )
+        if not self.local_mode:
+            self._http = httpx.Client(
+                base_url=self.base_url,
+                timeout=timeout,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "realitykernel-python/0.7.0",
+                },
+            )
+        else:
+            self._http = None
         self._pubkey_b64: Optional[str] = None
 
     def pubkey(self) -> str:
@@ -140,6 +141,31 @@ class RealityKernel:
         shadow_mode: Optional[bool] = None,
         execution_binding: Optional[Dict[str, Any]] = None,
     ) -> Verdict:
+        if self.local_mode:
+            t0 = time.perf_counter()
+            try:
+                import sys
+                from pathlib import Path
+                # add repo root if available
+                repo_root = str(Path(__file__).resolve().parent.parent.parent)
+                if repo_root not in sys.path:
+                    sys.path.insert(0, repo_root)
+                from core.engine import analyse
+                dec = analyse(command, prime_intent, suppress_audit=False, verbose=False)
+                latency = (time.perf_counter() - t0) * 1000.0
+                return Verdict(
+                    action_id=dec.action_id,
+                    verdict=dec.verdict,
+                    confidence=dec.confidence,
+                    evidence=dec.evidence,
+                    proof_hash=dec.proof_hash,
+                    latency_ms=round(latency, 2),
+                    shadow_mode=self.shadow_mode if shadow_mode is None else shadow_mode,
+                    raw={"divergence": dec.max_divergence, "local_engine": True},
+                )
+            except Exception as e:
+                if not self._http:
+                    raise RealityKernelError(f"Local engine execution failed: {e}") from e
         """
         Evaluate proposed command against prime intent.
         
@@ -243,7 +269,8 @@ class RealityKernel:
 
     def close(self):
         """Close underlying HTTP transport."""
-        self._http.close()
+        if self._http:
+            self._http.close()
 
     def __enter__(self):
         return self

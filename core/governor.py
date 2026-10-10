@@ -147,22 +147,44 @@ def _compute_confidence(max_div: float, worlds_b: int, total: int, static_floor:
     return round(min(max(raw_calculated, static_floor), 1.0), 3)
 
 
-def _write_audit_log(record: dict, suppress: bool = False):
-    """Append decision record to tamper-evident JSONL audit log.
+_LAST_AUDIT_HASH = None
 
-    suppress=True is passed by api.py so that the richer API-level audit
-    entry (which includes key_hint, session_id, agent_id) is the single
-    source of truth, and we don't write a duplicate governor-level entry
-    that lacks that context.
-    """
+def _get_last_audit_hash(log_path: str = "rk_audit.jsonl") -> str:
+    global _LAST_AUDIT_HASH
+    if _LAST_AUDIT_HASH is not None:
+        return _LAST_AUDIT_HASH
+    try:
+        import os
+        if os.path.exists(log_path) and os.path.getsize(log_path) > 0:
+            with open(log_path, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f if line.strip()]
+                if lines:
+                    last_rec = json.loads(lines[-1])
+                    _LAST_AUDIT_HASH = last_rec.get("proof") or last_rec.get("proof_hash", "0" * 64)
+                    return _LAST_AUDIT_HASH
+    except Exception:
+        pass
+    _LAST_AUDIT_HASH = "0" * 64
+    return _LAST_AUDIT_HASH
+
+def _write_audit_log(record: dict, suppress: bool = False):
+    """Append decision record to tamper-evident JSONL audit log with SHA-256 rolling chain."""
     if suppress:
         return
+    global _LAST_AUDIT_HASH
     try:
-        with open("rk_audit.jsonl", "a") as f:
+        prev_hash = _get_last_audit_hash()
+        record["prev_hash"] = prev_hash
+        proof_payload = json.dumps(record, sort_keys=True).encode("utf-8")
+        rolling_proof = hashlib.sha256(proof_payload).hexdigest()
+        record["proof"] = rolling_proof
+        _LAST_AUDIT_HASH = rolling_proof
+
+        with open("rk_audit.jsonl", "a", encoding="utf-8") as f:
             json.dump(record, f, sort_keys=True)
             f.write("\n")
     except OSError as e:
-        print(f"[rk-α] audit-log write skipped: {e}", file=sys.stderr)
+        print(f"[rk-audit] audit-log write skipped: {e}", file=sys.stderr)
 
 
 def _terminate_agent(pid: int):
