@@ -38,6 +38,51 @@ jobs:
       - name: Run Tests
         run: cargo test --workspace
 
+  ebpf-build:
+    name: eBPF Probe Build (BPF target)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The probe modules are gated behind #[cfg(target_arch = "bpf")], so the
+      # stable `cargo check --workspace` job never compiles them. This job cross-
+      # compiles rk-ebpf-probes for the real BPF target so kernel-side code
+      # (net_probe egress denial, etc.) is actually covered by CI.
+      - name: Install Rust nightly (+ rust-src)
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly
+          components: rust-src
+
+      - name: Cargo Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-ebpf-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-
+
+      # bpf-linker is required to link BPF objects. If a future bpf-linker
+      # release needs a system LLVM, add an `apt-get install -y llvm` step here.
+      - name: Install bpf-linker
+        run: cargo install bpf-linker --locked
+
+      # bpfel-unknown-none is a Tier-3 target with no prebuilt core, so core is
+      # built from source via `-Z build-std=core` (needs the rust-src component
+      # installed above). Release mode matches the shipped probe object and keeps
+      # the BPF stack within verifier limits.
+      - name: Build eBPF probes (bpfel-unknown-none)
+        run: |
+          cargo +nightly build -p rk-ebpf-probes \
+            --target bpfel-unknown-none \
+            -Z build-std=core \
+            --release
+
   python-checks:
     name: Python Engine Checks
     runs-on: ubuntu-latest
