@@ -14,8 +14,8 @@ We take the security of Reality Kernel, its eBPF kernel probes, and symbolic exe
 ### Responsible Disclosure Process
 
 1. **Do not open a public issue.** Please report vulnerabilities privately.
-2. Email your findings directly to the Keter Labs security team at:
-   **security@keterlabs.com** (or open a private GitHub Security Advisory).
+2. Email your findings directly to the maintainer at:
+   **tabrez@realitykernel.dev** (or open a private GitHub Security Advisory).
 3. Include the following details:
    - Type of vulnerability (e.g., eBPF probe bypass, symbolic execution evasion, fast-path escape).
    - Step-by-step reproduction instructions or proof-of-concept (PoC) script.

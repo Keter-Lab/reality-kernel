@@ -34,7 +34,7 @@ This Code of Conduct applies within all community spaces, including GitHub repos
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leadership at **maintainers@keterlabs.com**. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leadership at **contact@realitykernel.dev**. All complaints will be reviewed and investigated promptly and fairly.
 
 ## Attribution
 
