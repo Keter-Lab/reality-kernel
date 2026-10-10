@@ -33,7 +33,7 @@ fn build_ebpf(target: &str, release: bool) -> Result<()> {
     println!("[xtask] building rk-ebpf-probes for target {target}");
 
     let mut cmd = Command::new("cargo");
-    cmd.args(["build", "-p", "rk-ebpf-probes", "--target", target]);
+    cmd.args(["build", "-p", "rk-ebpf-probes", "--target", target, "-Z", "build-std=core"]);
     if release {
         cmd.arg("--release");
     }
