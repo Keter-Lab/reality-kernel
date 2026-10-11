@@ -1,20 +1,45 @@
-<p align="center">
-  <img src="assets/logo.png" alt="Reality Kernel" width="110" height="110" style="border-radius: 50%;" />
-</p>
-
-<h1 align="center">Reality Kernel</h1>
+<div align="center">
 
 <p align="center">
-  <b>In-kernel eBPF runtime security barrier & deterministic execution attestation for autonomous AI agents.</b>
+  <img src="assets/logo.png" alt="Reality Kernel" width="100" height="100" style="border-radius: 50%;" />
 </p>
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg" alt="License"></a>
-  <a href="https://pypi.org/project/realitykernel/"><img src="https://img.shields.io/pypi/v/realitykernel.svg" alt="PyPI"></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.80%2B-orange.svg" alt="Rust"></a>
-  <a href="https://kernel.org"><img src="https://img.shields.io/badge/linux-5.15%2B%20(eBPF%2FLSM)-green.svg" alt="Linux eBPF"></a>
-  <a href="#performance"><img src="https://img.shields.io/badge/execution-sub--millisecond-success.svg" alt="Latency"></a>
-</p>
+# Reality Kernel
+
+### In-kernel eBPF runtime security barrier & deterministic execution attestation for autonomous AI agents.
+
+**Never trust an LLM to police itself. Intercept rogue syscalls at the Linux kernel boundary in < 1ms.**
+
+[![PyPI](https://img.shields.io/pypi/v/realitykernel?style=flat-square&color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/realitykernel/)
+[![Rust](https://img.shields.io/badge/rust-1.80%2B-orange?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![eBPF / LSM](https://img.shields.io/badge/linux-5.15%2B%20(eBPF%2FLSM)-green?style=flat-square&logo=linux&logoColor=white)](https://kernel.org)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Keter-Lab/reality-kernel/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Keter-Lab/reality-kernel/actions)
+
+**[Website](https://realitykernel.dev/) · [Documentation](https://realitykernel.dev/docs) · [Architecture](#-the-solution-in-kernel-enforcement-sub-millisecond-fast-path) · [Quickstart](#-quickstart-python-sdk) · [Benchmarks](#-architectural-comparison)**
+
+<code>pip install realitykernel</code>
+
+<br /><br />
+
+<img src="assets/rk-interception-demo.svg" alt="Reality Kernel eBPF Interception Demonstration" width="100%" />
+
+<br /><br />
+
+</div>
+
+---
+
+### Protect an agent in 3 lines of code:
+
+```python
+from realitykernel import RealityKernel
+
+rk = RealityKernel(api_key="local_mode")
+# Deterministic sub-millisecond pre-dispatch verification
+rk.guard(action="cat ~/.ssh/id_rsa", prime_intent="Analyze public git logs")
+# 🚨 ActionBlocked: Unauthorized credential access (-EPERM, prev_hash chained to local ledger)
+```
 
 ---
 
