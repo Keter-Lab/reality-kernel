@@ -1003,19 +1003,18 @@ pub fn compute_subcommand_effect(sub: &ParsedSubCommand) -> (EffectClass, Vec<St
         let mut current = cap.base;
         let mut upgraded = false;
         for (flag, eff) in &cap.flag_modifiers {
-            if sub.flags_str.to_lowercase().contains(&flag.to_lowercase())
-                || sub.full_str.to_lowercase().contains(&flag.to_lowercase())
+            if (sub.flags_str.to_lowercase().contains(&flag.to_lowercase())
+                || sub.full_str.to_lowercase().contains(&flag.to_lowercase()))
+                && eff.severity() > current.severity()
             {
-                if eff.severity() > current.severity() {
-                    evidence.push(format!(
-                        "Flag modifier '{}' upgrades '{}' to {}",
-                        flag,
-                        sub.binary,
-                        eff.as_str()
-                    ));
-                    current = *eff;
-                    upgraded = true;
-                }
+                evidence.push(format!(
+                    "Flag modifier '{}' upgrades '{}' to {}",
+                    flag,
+                    sub.binary,
+                    eff.as_str()
+                ));
+                current = *eff;
+                upgraded = true;
             }
         }
         if !upgraded {
@@ -1086,7 +1085,7 @@ pub fn compute_effect_graph(command: &str, prime_intent: &str) -> EffectGraph {
 
     let effect_list: Vec<EffectClass> = subcommand_effects.iter().map(|(e, _)| *e).collect();
     let sensitive_in_chain = is_pipe
-        && ((effect_list.iter().any(|e| *e == EffectClass::Read)
+        && ((effect_list.contains(&EffectClass::Read)
             && effect_list.iter().any(|e| {
                 matches!(
                     e,
@@ -1095,7 +1094,7 @@ pub fn compute_effect_graph(command: &str, prime_intent: &str) -> EffectGraph {
                         | EffectClass::Exfiltration
                 )
             }))
-            || effect_list.iter().any(|e| *e == EffectClass::Exfiltration));
+            || effect_list.contains(&EffectClass::Exfiltration));
 
     if sensitive_in_chain {
         let old = worst;

@@ -153,10 +153,6 @@ fn forced_slow_patterns() -> Vec<&'static str> {
     ]
 }
 
-fn truncate(s: &str, n: usize) -> String {
-    s.chars().take(n).collect()
-}
-
 pub fn is_fast_path(command: &str) -> bool {
     let trimmed = command.trim();
     if trimmed.is_empty() || trimmed.len() > MAX_COMMAND_LEN {
@@ -260,7 +256,7 @@ pub fn analyse(command: &str, prime_intent: &str, n_worlds: usize) -> AnalysisRe
     all_pre_evidence.extend(static_evidence.clone());
 
     if threat_class == "CRITICAL" {
-        let mut basin_summary = serde_json::json!({
+        let basin_summary = serde_json::json!({
             "decision": "BLOCK",
             "max_divergence": 1.0,
             "evidence": all_pre_evidence,

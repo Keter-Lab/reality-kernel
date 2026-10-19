@@ -43,7 +43,9 @@ jobs:
         run: |
           set -euo pipefail
           for obj in rk-bpf/build/*/*.bpf.o; do
-            llvm-readelf -S "$obj" | grep -q '\.BTF ' || { echo "::error::$obj has no .BTF section"; exit 1; }
+            # Capture first: grep -q closing the pipe early would SIGPIPE readelf under pipefail.
+            sections=$(llvm-readelf -S "$obj")
+            grep -qE '[[:space:]]\.BTF[[:space:]]' <<<"$sections" || { echo "::error::$obj has no .BTF section"; exit 1; }
             echo "ok: $obj"
           done
 
