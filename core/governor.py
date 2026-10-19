@@ -79,7 +79,7 @@ def evaluate(
     evidence     = basin_summary.get("evidence", [])
     worlds_b     = basin_summary.get("worlds_in_B", 0)
 
-    verdict    = _map_decision(decision_str, max_div)
+    verdict    = _map_decision(decision_str, max_div, static_floor)
     
     total_evidence_count = evidence_count + len(evidence)
     confidence = _compute_confidence(max_div, worlds_b, worlds_count, static_floor, total_evidence_count)
@@ -129,10 +129,11 @@ def evaluate(
     return decision
 
 
-def _map_decision(decision_str: str, max_div: float) -> str:
-    if decision_str == "BLOCK" or max_div >= 0.90:
+def _map_decision(decision_str: str, max_div: float, static_floor: float = 0.0) -> str:
+    """Determine final verdict respecting both dynamic divergence and static safety floors."""
+    if decision_str == "BLOCK" or max_div >= 0.90 or static_floor >= 0.90:
         return "BLOCK"
-    elif decision_str == "WARN" or max_div >= 0.50:
+    elif decision_str == "WARN" or max_div >= 0.50 or static_floor >= 0.50:
         return "WARN"
     return "ALLOW"
 
@@ -150,41 +151,49 @@ def _compute_confidence(max_div: float, worlds_b: int, total: int, static_floor:
 _LAST_AUDIT_HASH = None
 
 def _get_last_audit_hash(log_path: str = "rk_audit.jsonl") -> str:
+    """Read the actual last proof hash from disk to prevent multi-process fork discrepancies."""
     global _LAST_AUDIT_HASH
-    if _LAST_AUDIT_HASH is not None:
-        return _LAST_AUDIT_HASH
     try:
         import os
         if os.path.exists(log_path) and os.path.getsize(log_path) > 0:
-            with open(log_path, "r", encoding="utf-8") as f:
-                lines = [line.strip() for line in f if line.strip()]
-                if lines:
-                    last_rec = json.loads(lines[-1])
-                    _LAST_AUDIT_HASH = last_rec.get("proof") or last_rec.get("proof_hash", "0" * 64)
-                    return _LAST_AUDIT_HASH
+            with open(log_path, "rb") as f:
+                # Seek near the end to find the last complete line efficiently
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                buf_size = min(size, 8192)
+                f.seek(size - buf_size, os.SEEK_SET)
+                lines = f.read().splitlines()
+                for line in reversed(lines):
+                    line_str = line.strip().decode("utf-8", errors="ignore")
+                    if line_str:
+                        last_rec = json.loads(line_str)
+                        last_hash = last_rec.get("proof") or last_rec.get("proof_hash")
+                        if last_hash:
+                            _LAST_AUDIT_HASH = last_hash
+                            return last_hash
     except Exception:
         pass
-    _LAST_AUDIT_HASH = "0" * 64
-    return _LAST_AUDIT_HASH
+    return _LAST_AUDIT_HASH or ("0" * 64)
 
-def _write_audit_log(record: dict, suppress: bool = False):
+def _write_audit_log(record: dict, suppress: bool = False, log_path: str = "rk_audit.jsonl"):
     """Append decision record to tamper-evident JSONL audit log with SHA-256 rolling chain."""
     if suppress:
         return
     global _LAST_AUDIT_HASH
     try:
-        prev_hash = _get_last_audit_hash()
+        prev_hash = _get_last_audit_hash(log_path)
         record["prev_hash"] = prev_hash
         proof_payload = json.dumps(record, sort_keys=True).encode("utf-8")
         rolling_proof = hashlib.sha256(proof_payload).hexdigest()
         record["proof"] = rolling_proof
         _LAST_AUDIT_HASH = rolling_proof
 
-        with open("rk_audit.jsonl", "a", encoding="utf-8") as f:
+        with open(log_path, "a", encoding="utf-8") as f:
             json.dump(record, f, sort_keys=True)
             f.write("\n")
+            f.flush()
     except OSError as e:
-        print(f"[rk-audit] audit-log write skipped: {e}", file=sys.stderr)
+        print(f"[rk-audit] CRITICAL: audit-log write failed: {e}", file=sys.stderr)
 
 
 def _terminate_agent(pid: int):

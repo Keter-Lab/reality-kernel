@@ -55,41 +55,38 @@ Most current security solutions operate at the **application layer** (prompt fil
 
 ---
 
-## ◈ The Solution: In-Kernel Enforcement (Sub-Millisecond Fast-Path)
+## ◈ The Solution: Multi-Tier Pre-Dispatch Barrier & Kernel Telemetry
 
-**Reality Kernel** shifts enforcement down to the **Linux Kernel** using **eBPF (Extended Berkeley Packet Filter)** and **LSM (Linux Security Modules)**. 
+**Reality Kernel** provides defense-in-depth across userspace pre-dispatch validation, kernel-level telemetry, and cryptographic execution attestation:
 
-No matter what prompt the agent saw, and no matter what jailbreak it encountered, Reality Kernel validates the proposed action in user-space memory and intercepts unauthorized operations directly in the kernel before syscall execution.
+1. **Deterministic Pre-Dispatch Barrier (SDK `rk.guard`):** In-memory sub-millisecond evaluation intercepts unearned writes, credential theft, and prompt injections before the agent executes the action. Operates fail-closed on verification or network errors.
+2. **eBPF Kernel Telemetry & Network Interception:** Non-invasive Aya eBPF probes attach to kernel tracepoints (`sys_enter_execve`, `sys_enter_openat`, `sys_enter_unlinkat`) and cgroup socket hooks (`cgroup/connect4`, `cgroup/connect6`) to monitor host interactions and enforce network egress policies.
+3. **Out-of-Band Sensor Termination (`rk-sensor`):** The host sensor daemon continuously correlates kernel execution telemetry against the policy engine, issuing an immediate out-of-band `SIGKILL` if an unvetted or diverged command executes.
+4. **Cryptographic Attestation:** Every action is recorded into a rolling SHA-256 hash chain and attested with Ed25519 signatures, providing non-repudiable audit logs.
 
 ```mermaid
 flowchart TD
-    subgraph Userspace ["User Space (Agent Execution)"]
+    subgraph Userspace ["User Space (Agent Execution & Barrier)"]
         Agent["Autonomous AI Agent<br/>(CrewAI / Claude / AutoGPT / LangChain)"]
-        IntentEngine["Layer 1: Rust Intent Engine<br/>Sub-Millisecond Policy Check"]
-        Agent -->|"1. Proposes Action"| IntentEngine
+        PreBarrier["Layer 1: Deterministic Pre-Dispatch Barrier<br/>rk.guard(cmd, intent) — Fail-Closed"]
+        Agent -->|"1. Proposes Action"| PreBarrier
     end
 
-    subgraph KernelSpace ["Linux Kernel (eBPF & LSM Subsystem)"]
+    subgraph KernelTelemetry ["Kernel & Sensor Layer (eBPF Telemetry)"]
         direction TB
-        LSMHook{"Layer 2: In-Kernel LSM Probes<br/>sys_enter_execve · file_open · bprm_check_security"}
-        BPFMaps[("BPF Maps<br/>MONITORED_PIDS · CGROUPS")]
+        BPFProbes["Layer 2: Aya eBPF Probes & cgroup Sockets<br/>tracepoints: execve · openat · unlinkat · connect4"]
+        RingBuf["BPF RingBuffer Event Stream"]
+        Sensor["rk-sensor Daemon<br/>Out-of-Band Process Killer (SIGKILL)"]
         
-        IntentEngine -->|"2. Dispatches Syscall"| LSMHook
-        LSMHook <-->|"Process Scope Lookup"| BPFMaps
-        
-        BlockAction["FAIL-CLOSED<br/>Syscall Intercepted & Denied"]
-        AllowAction["PERMITTED<br/>Syscall Executes on Host"]
-        
-        LSMHook -->|"Policy Divergence / Rogue Action"| BlockAction
-        LSMHook -->|"Authorized Action"| AllowAction
+        PreBarrier -->|"2. Dispatches Syscall"| BPFProbes
+        BPFProbes -->|"Kernel Telemetry"| RingBuf
+        RingBuf -->|"Stream Events"| Sensor
+        Sensor -.->|"Divergence Detected"| KillAction["Terminate Rogue Agent (SIGKILL)"]
     end
 
     subgraph AuditLedger ["Cryptographic Attestation"]
-        RingBuf["BPF Ring Buffer Telemetry"]
         EdReceipt["Layer 3: Ed25519 Signed Receipt<br/>SHA-256 prev_hash Audit Chain"]
-        
-        AllowAction -->|"Asynchronous Event Stream"| RingBuf
-        RingBuf --> EdReceipt
+        PreBarrier -->|"Attested Record"| EdReceipt
     end
 ```
 

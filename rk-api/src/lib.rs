@@ -118,15 +118,22 @@ pub fn app_from_env() -> Result<Router, ApiError> {
         ));
     }
 
-    let rk_secret = std::env::var("RK_SECRET_KEY").unwrap_or_default();
+    let rk_secret = std::env::var("RK_SECRET_KEY")
+        .or_else(|_| std::env::var("SERVER_SECRET"))
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Fatal configuration error: RK_SECRET_KEY or SERVER_SECRET must be set.",
+            )
+        })?;
+    if rk_secret.trim().is_empty() {
+        return Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Fatal configuration error: RK_SECRET_KEY cannot be empty.",
+        ));
+    }
     let signer = Arc::new(RkSigner::new(&rk_secret));
-
-    let server_secret = std::env::var("SERVER_SECRET")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("RK_SECRET_KEY").ok())
-        .unwrap_or_else(|| "dev-fallback-secret-12345".to_string())
-        .into_bytes();
+    let server_secret = rk_secret.into_bytes();
 
     let discord_notify_block = std::env::var("DISCORD_NOTIFY_BLOCK")
         .map(|v| v.eq_ignore_ascii_case("true"))

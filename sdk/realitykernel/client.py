@@ -96,6 +96,7 @@ class RealityKernel:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         agent_id: Optional[str] = None,
+        pinned_pubkey: Optional[str] = None,
         timeout: float = 10.0,
         shadow_mode: bool = False,
     ):
@@ -104,6 +105,8 @@ class RealityKernel:
         self.base_url = (base_url or os.environ.get("RK_BASE_URL", "https://www.realitykernel.dev")).rstrip("/")
         self.agent_id = agent_id or os.environ.get("RK_AGENT_ID", "")
         self.shadow_mode = shadow_mode
+        self.pinned_pubkey = pinned_pubkey or os.environ.get("RK_PINNED_PUBKEY")
+        self._pubkey_b64: Optional[str] = self.pinned_pubkey
         if not self.local_mode:
             self._http = httpx.Client(
                 base_url=self.base_url,
@@ -111,23 +114,25 @@ class RealityKernel:
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
-                    "User-Agent": "realitykernel-python/0.7.0",
+                    "User-Agent": "realitykernel-python/0.7.1",
                 },
             )
         else:
             self._http = None
-        self._pubkey_b64: Optional[str] = None
 
     def pubkey(self) -> str:
-        """Fetch and cache the server's public Ed25519 key for offline verification."""
-        if self._pubkey_b64 is None:
-            try:
-                r = self._http.get("/v1/pubkey")
-                r.raise_for_status()
-                self._pubkey_b64 = r.json().get("public_key", "")
-            except httpx.HTTPError as exc:
-                raise RealityKernelError(f"Failed to fetch Reality Kernel public key: {exc}") from exc
-        return self._pubkey_b64
+        """Fetch and cache the server's public Ed25519 key (or return pinned pubkey)."""
+        if self._pubkey_b64:
+            return self._pubkey_b64
+        if self.local_mode or not self._http:
+            return ""
+        try:
+            r = self._http.get("/v1/pubkey")
+            r.raise_for_status()
+            self._pubkey_b64 = r.json().get("public_key", "")
+        except httpx.HTTPError as exc:
+            raise RealityKernelError(f"Failed to fetch Reality Kernel public key: {exc}") from exc
+        return self._pubkey_b64 or ""
 
     def check(
         self,
@@ -162,6 +167,27 @@ class RealityKernel:
                     latency_ms=round(latency, 2),
                     shadow_mode=self.shadow_mode if shadow_mode is None else shadow_mode,
                     raw={"divergence": dec.max_divergence, "local_engine": True},
+                )
+            except ImportError:
+                # Built-in lightweight fallback evaluator for standalone PyPI installations without core package
+                latency = (time.perf_counter() - t0) * 1000.0
+                aid = hashlib.sha256(f"{command}:{prime_intent}:{time.time()}".encode()).hexdigest()[:12]
+                low_cmd = (command or "").lower()
+                is_destructive = any(w in low_cmd for w in ["rm -rf", "mkfs", "dd if=", ":(){ :|:& };:"])
+                is_secret = any(w in low_cmd for w in [".env", "id_rsa", "/etc/shadow", "aws_secret"])
+                v_str = "BLOCK" if (is_destructive or is_secret) else "ALLOW"
+                conf = 1.0 if v_str == "BLOCK" else 0.95
+                ev = ["Local heuristic filter detected high risk pattern"] if v_str == "BLOCK" else []
+                ph = hashlib.sha256(f"{aid}:{v_str}:{conf}".encode()).hexdigest()
+                return Verdict(
+                    action_id=aid,
+                    verdict=v_str,
+                    confidence=conf,
+                    evidence=ev,
+                    proof_hash=ph,
+                    latency_ms=round(latency, 2),
+                    shadow_mode=self.shadow_mode if shadow_mode is None else shadow_mode,
+                    raw={"local_engine": True, "standalone_fallback": True},
                 )
             except Exception as e:
                 if not self._http:
@@ -233,16 +259,35 @@ class RealityKernel:
         session_id: str = "",
         policy: Optional[Dict[str, Any]] = None,
         shadow_mode: Optional[bool] = None,
+        fail_closed: bool = True,
         **kw,
     ) -> Verdict:
         """
         Execution barrier: Raises ActionBlocked or ActionNeedsReview unless allowed.
         
-        In shadow mode (or if initialized with shadow_mode=True), does not raise exceptions
-        and allows continuous execution while logging cryptographic verdicts.
+        If fail_closed is True (default), transport failures or verification errors
+        fail closed and raise ActionBlocked to safeguard autonomous execution.
         """
         is_shadow = self.shadow_mode if shadow_mode is None else shadow_mode
-        v = self.check(command, prime_intent, session_id=session_id, policy=policy, shadow_mode=is_shadow, **kw)
+        try:
+            v = self.check(command, prime_intent, session_id=session_id, policy=policy, shadow_mode=is_shadow, **kw)
+        except (ActionBlocked, ActionNeedsReview):
+            raise
+        except Exception as exc:
+            if is_shadow:
+                raise
+            if fail_closed:
+                synth = Verdict(
+                    action_id="barrier_fail_closed",
+                    verdict="BLOCK",
+                    confidence=1.0,
+                    evidence=[f"Fail-closed execution barrier triggered: {exc}"],
+                    proof_hash="",
+                    shadow_mode=False,
+                    raw={"fail_closed": True, "error": str(exc)},
+                )
+                raise ActionBlocked(synth) from exc
+            raise
         
         if is_shadow or v.shadow_mode:
             if v.verdict in ("BLOCK", "WARN"):

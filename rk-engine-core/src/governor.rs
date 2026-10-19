@@ -15,10 +15,10 @@ pub struct AnalysisResult {
     pub proof_hash: String,
 }
 
-pub fn map_decision(decision_str: &str, max_div: f64) -> String {
-    if decision_str == "BLOCK" || max_div >= 0.90 {
+pub fn map_decision(decision_str: &str, max_div: f64, static_floor: f64) -> String {
+    if decision_str == "BLOCK" || max_div >= 0.90 || static_floor >= 0.90 {
         "BLOCK".to_string()
-    } else if decision_str == "WARN" || max_div >= 0.50 {
+    } else if decision_str == "WARN" || max_div >= 0.50 || static_floor >= 0.50 {
         "WARN".to_string()
     } else {
         "ALLOW".to_string()
@@ -52,7 +52,7 @@ pub fn evaluate(
         .unwrap_or_default();
     let worlds_b = basin_summary.get("worlds_in_B").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
-    let verdict = map_decision(decision_str, max_div);
+    let verdict = map_decision(decision_str, max_div, static_floor);
     let confidence = compute_confidence(max_div, worlds_b, worlds_count, static_floor, evidence_count + evidence.len());
 
     let ts = now_secs();

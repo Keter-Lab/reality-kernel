@@ -18,9 +18,13 @@ pub struct RkSigner {
 }
 
 impl RkSigner {
-    pub fn new(secret_key: &str) -> Self {
+    pub fn try_new(secret_key: &str) -> Result<Self, SigningError> {
+        let trimmed = secret_key.trim();
+        if trimmed.is_empty() {
+            return Err(SigningError::InvalidKey);
+        }
         let mut hasher = Sha256::new();
-        hasher.update(format!("rk_ed25519_v1:{secret_key}").as_bytes());
+        hasher.update(format!("rk_ed25519_v1:{trimmed}").as_bytes());
         let digest = hasher.finalize();
         let mut secret_bytes = [0u8; 32];
         secret_bytes.copy_from_slice(&digest[..32]);
@@ -29,10 +33,14 @@ impl RkSigner {
         let verifying: VerifyingKey = signing_key.verifying_key();
         let public_key_b64 = STANDARD.encode(verifying.as_bytes());
 
-        Self {
+        Ok(Self {
             signing_key,
             public_key_b64,
-        }
+        })
+    }
+
+    pub fn new(secret_key: &str) -> Self {
+        Self::try_new(secret_key).expect("CRITICAL: Failed to initialize RkSigner. RK_SECRET_KEY cannot be empty.")
     }
 
     pub fn sign(&self, payload: &str) -> Result<String, SigningError> {

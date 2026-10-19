@@ -19,12 +19,12 @@ static FAST_CACHE: OnceLock<Mutex<LruCache<String, bool>>> = OnceLock::new();
 
 fn fast_path_patterns() -> Vec<&'static str> {
     vec![
-        r"^(ls|ll|la|dir)\b", r"^cat\b", r"^(head|tail)\b", r"^(less|more|view)\b",
+        r"^(ls|ll|la|dir)\b",
         r"^(wc|wc\s+-[lwc]+)\b", r"^(file|stat|lstat)\b", r"^(find)\b", r"^(tree)\b", r"^(pwd)\b", r"^(du\s|df\s|df\b)",
-        r"^(grep|egrep|fgrep|rg|ag|ack)\b", r"^(sed\s+-n|sed\s+.*\bp\b)", r"^(awk)\b(?!.*system\()", r"^(cut|sort|uniq|tr|paste|join)\b",
-        r"^(diff|cmp|comm)\b", r"^(strings|xxd|od|hexdump)\b", r"^(jq)\b", r"^(yq)\b", r"^(csvkit|csvstat|csvlook)\b",
+        r"^(cut|sort|uniq|tr|paste|join)\b",
+        r"^(diff|cmp|comm)\b", r"^(jq)\b", r"^(yq)\b", r"^(csvkit|csvstat|csvlook)\b",
         r"^(echo)\b", r"^(printf)\b", r"^(date)\b", r"^(whoami|id|groups|logname)\b", r"^(hostname|uname)\b", r"^(uptime|w)\b", r"^(ps\s|ps\b)",
-        r"^(top\s+-b|top\s+-n)", r"^(env|printenv|set\b)", r"^(which|whereis|type)\b", r"^(man|help|info)\b", r"^(history)\b", r"^(lsof\b)",
+        r"^(top\s+-b|top\s+-n)", r"^(which|whereis|type)\b", r"^(man|help|info)\b", r"^(history)\b", r"^(lsof\b)",
         r"^(lscpu|lshw|lspci|lsusb|lsblk)\b", r"^(free\b)", r"^(vmstat|iostat|sar)\b", r"^(ulimit\s+-[asSn])", r"^(nproc)\b",
         r"^(curl|wget)\s+https?://[a-zA-Z0-9.-]+/?\s*$", r"^curl\s+.*--version\s*$", r"^curl\s+http://localhost:\d+/health",
         r"^(pip\s+(list|show|freeze))", r"^(npm\s+(list|ls|info|view))", r"^(yarn\s+(list|info))", r"^(apt\s+(list|show|search))", r"^(dpkg\s+-[lL])", r"^(rpm\s+-q)", r"^(brew\s+(list|info|search))", r"^(gem\s+(list|info))",
@@ -39,11 +39,17 @@ fn fast_path_patterns() -> Vec<&'static str> {
 
 fn forced_slow_patterns() -> Vec<&'static str> {
     vec![
-        r"\|", r"&&", r";", r";;", r"`", r"\$\(", r"rm\s", r"dd\s", r"mkfs", r"DROP\s", r"DELETE\s+FROM",
+        r"\|", r"&&", r";", r";;", r"`", r"\$\(", r"[><]", r"&", r"[\r\n]", r"\\n", r"\\r",
+        r"rm\s", r"dd\s", r"mkfs", r"DROP\s", r"DELETE\s+FROM",
         r"chmod", r"chown", r"crontab", r"authorized_keys", r"scp\s", r"rsync\s", r"nc\s", r"ncat\s", r"socat\s", r"openssl\s+s_client",
-        r"bash\s+-i", r"python.*-c\s", r"eval\(", r"exec\(", r"\.env", r"\.pem", r"\.key", r"id_rsa", r"/etc/passwd", r"/etc/shadow",
-        r"secret", r"credential", r"/proc/.*/environ", r"/proc/.*/mem", r"/etc/sudoers", r"169\.254", r"2852039166", r"0xa9fe", r"\[::ffff:169\.254",
+        r"bash\s+-i", r"python.*-c\s", r"eval\(", r"exec\(",
+        r"\.env", r"\.pem", r"\.key", r"\.docker", r"\.aws", r"\.kube", r"\.ssh", r"\.netrc", r"\.git-credentials", r"\.gitconfig",
+        r"id_rsa", r"id_ed25519", r"id_ecdsa", r"id_dsa", r"/etc/passwd", r"/etc/shadow", r"/etc/master\.passwd",
+        r"secret", r"credential", r"api[_-]?key", r"password", r"token", r"/proc/", r"/sys/", r"/etc/sudoers",
+        r"^(env|printenv)\b", r"^\s*set\b",
+        r"169\.254", r"2852039166", r"0xa9fe", r"\[::ffff:169\.254",
         r"metadata\.google\.internal", r"instance-data", r"localhost", r"127\.0\.0\.1", r"0\.0\.0\.0",
+        r"-(delete|fprint|fprint0|fprintf|fls)\b", r"sort\s+.*(-o\b|--output)",
     ]
 }
 
@@ -52,10 +58,14 @@ fn truncate(s: &str, n: usize) -> String {
 }
 
 pub fn is_fast_path(command: &str) -> bool {
-    if command.is_empty() {
+    let trimmed = command.trim();
+    if trimmed.is_empty() || trimmed.len() > MAX_COMMAND_LEN {
         return false;
     }
-    let cmd = truncate(command.trim(), MAX_COMMAND_LEN);
+    if trimmed.contains('\n') || trimmed.contains('\r') {
+        return false;
+    }
+    let cmd = trimmed.to_string();
     let cache = FAST_CACHE.get_or_init(|| {
         Mutex::new(LruCache::new(NonZeroUsize::new(4096).expect("non zero")))
     });
@@ -76,8 +86,32 @@ pub fn is_fast_path(command: &str) -> bool {
 }
 
 pub fn analyse(command: &str, prime_intent: &str, n_worlds: usize) -> AnalysisResult {
-    let command = truncate(command, MAX_COMMAND_LEN);
-    let prime_intent = truncate(prime_intent, MAX_INTENT_LEN);
+    if command.len() > MAX_COMMAND_LEN {
+        return AnalysisResult {
+            verdict: "BLOCK".into(),
+            confidence: 1.0,
+            evidence: vec![format!("Command length ({}) exceeds safety cap ({})", command.len(), MAX_COMMAND_LEN)],
+            worlds_evaluated: 0,
+            worlds_in_basin_b: 0,
+            max_divergence: 1.0,
+            action_id: "block-length".into(),
+            proof_hash: "".into(),
+        };
+    }
+    if prime_intent.len() > MAX_INTENT_LEN {
+        return AnalysisResult {
+            verdict: "BLOCK".into(),
+            confidence: 1.0,
+            evidence: vec![format!("Intent length ({}) exceeds safety cap ({})", prime_intent.len(), MAX_INTENT_LEN)],
+            worlds_evaluated: 0,
+            worlds_in_basin_b: 0,
+            max_divergence: 1.0,
+            action_id: "block-length".into(),
+            proof_hash: "".into(),
+        };
+    }
+    let command = command.to_string();
+    let prime_intent = prime_intent.to_string();
 
     let (normalized, unicode_evidence) = unicode::normalize_command(&command);
     if normalized.trim().is_empty() {

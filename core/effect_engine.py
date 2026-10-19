@@ -524,12 +524,20 @@ def _infer_intent_effects(prime_intent: str) -> set:
 
 def _parse_command(command: str) -> list[dict]:
     """
-    Split a compound command (pipes, &&, ;, or space-adjacent rm/destructive)
-    into sub-commands.
+    Split a compound command (pipes, &&, ;, newlines, or space-adjacent rm/destructive)
+    and subshells ($(cmd) / `cmd`) into sub-commands.
     Returns a list of {binary, flags_str, full_str} dicts.
     """
-    # Split on standard shell operators
-    parts = re.split(r'\|{1,2}|&&|;|\n', command)
+    # Extract subshells ($(cmd) and `cmd`) first to analyze nested payloads
+    subshells = []
+    for m in re.finditer(r'\$\(([^)]+)\)|`([^`]+)`', command):
+        inner = m.group(1) or m.group(2)
+        if inner and inner.strip():
+            subshells.append(inner.strip())
+
+    # Split on standard shell operators and line delimiters
+    parts = re.split(r'\|{1,2}|&&|;|\r?\n|&', command)
+    parts.extend(subshells)
 
     # Secondary split: within each part, detect if 'rm ' appears mid-string
     # without a preceding operator (e.g., "cp src/ dst/ rm -rf dir/")
@@ -647,7 +655,7 @@ def compute_effect_graph(command: str, prime_intent: str) -> EffectGraph:
     a structured EffectGraph that feeds into all engine layers.
     """
     subs = _parse_command(command)
-    is_pipe = "|" in command or "&&" in command or ";" in command
+    is_pipe = any(op in command for op in ("|", "&&", ";", "\n", "\r", "&"))
     all_evidence = []
     subcommand_effects = []
     actual_effect_classes = set()

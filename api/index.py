@@ -457,13 +457,29 @@ def _sb_insert_audit_chained(row: dict) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _client_ip(request: Request) -> str:
-    real = request.headers.get("x-real-ip", "")
-    if real:
-        return real.strip()[:64]
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        ips = [ip.strip() for ip in xff.split(",") if ip.strip()]
-        return ips[-1][:64] if ips else "unknown"
+    # Do not trust unverified spoofable X-Real-IP / X-Forwarded-For headers.
+    # Only inspect forwarded headers if running in trusted proxy environment (e.g. Vercel / Cloudflare).
+    trust_proxies = os.environ.get("RK_TRUST_PROXIES", "false").lower() in ("1", "true", "yes")
+    is_vercel = bool(request.headers.get("x-vercel-id"))
+    is_cf = bool(request.headers.get("cf-ray"))
+
+    if trust_proxies or is_vercel or is_cf:
+        if is_cf:
+            cf_ip = request.headers.get("cf-connecting-ip", "").strip()
+            if cf_ip:
+                return cf_ip[:64]
+        if is_vercel:
+            v_ip = request.headers.get("x-vercel-forwarded-for", "").strip()
+            if v_ip:
+                return v_ip.split(",")[0].strip()[:64]
+        real = request.headers.get("x-real-ip", "").strip()
+        if real:
+            return real[:64]
+        xff = request.headers.get("x-forwarded-for", "").strip()
+        if xff:
+            ips = [ip.strip() for ip in xff.split(",") if ip.strip()]
+            return ips[0][:64] if ips else "unknown"
+
     return (request.client.host if request.client else "unknown")[:64]
 
 
@@ -491,12 +507,14 @@ def _resolve_effective_agent_id(auth: dict, requested_agent_id: str) -> str:
     requested = (requested_agent_id or "").strip()[:120]
     token_agent = (auth.get("agent_id") or "").strip()[:120]
 
-    # Session tokens are identity-bound: body agent_id may not override token binding.
+    # Session tokens are strictly identity-bound: body agent_id cannot forge or override binding.
     if auth.get("is_session_token"):
-        if requested and token_agent and requested != token_agent:
+        if not token_agent:
+            raise HTTPException(403, "Invalid session token: bound agent_id is missing.")
+        if requested and requested != token_agent:
             logger.warning("session token agent mismatch: token_agent=%s requested_agent=%s", token_agent, requested)
             raise HTTPException(403, "agent_id mismatch with session token binding.")
-        return token_agent or requested
+        return token_agent
 
     # Master keys may set explicit per-request agent identity for attribution.
     return requested or token_agent
@@ -620,22 +638,46 @@ def _consume_execution_token_once(action_id: str, key_hash: str, artifact_hash: 
 
 
 def _extract_binaries(command: str) -> list[str]:
-    parts = re.split(r';|&&|\|\||\|', command)
-    binaries = []
+    if not command:
+        return []
+
+    # 1. Extract subshell command contents $(cmd), `cmd`, <(cmd), >(cmd)
+    nested = []
+    for m in re.finditer(r'\$\(([^)]+)\)|`([^`]+)`', command):
+        inner = m.group(1) or m.group(2)
+        if inner and inner.strip():
+            nested.append(inner.strip())
+    for m in re.finditer(r'[<>]\(([^)]+)\)', command):
+        inner = m.group(1)
+        if inner and inner.strip():
+            nested.append(inner.strip())
+
+    # 2. Split on all command separators including newlines and ampersands
+    all_commands = [command] + nested
+    parts = []
+    for cmd in all_commands:
+        parts.extend(re.split(r';|&&|\|\||\||\r?\n|&', cmd))
+
+    binaries = set()
     for part in parts:
         part = part.strip()
         if not part:
             continue
-        subparts = part.split()
-        for token in subparts:
-            if "=" in token and not token.startswith("-"):
+        try:
+            tokens = shlex.split(part, posix=True)
+        except Exception:
+            tokens = part.split()
+
+        for token in tokens:
+            if "=" in token and not token.startswith("-") and not token.startswith("./"):
                 continue
-            bin_name = token.split("/")[-1].split("\\")[-1]
+            token_clean = re.sub(r'^[\\()$`"\']+|[\\()$`"\']+$', '', token)
+            bin_name = token_clean.split("/")[-1].split("\\")[-1]
             bin_name = re.sub(r'["\'`()]', '', bin_name)
-            if bin_name:
-                binaries.append(bin_name.lower())
-            break
-    return binaries
+            if bin_name and not bin_name.startswith("-"):
+                binaries.add(bin_name.lower())
+                break
+    return list(binaries)
 
 
 def _extract_domains(command: str) -> list[str]:
@@ -1092,15 +1134,28 @@ def get_audit(limit: int = 50, auth=Depends(get_api_key)):
     return {"entries": rows, "count": len(rows)}
 
 
+VALID_SESSION_SCOPES = {"fs:read", "sys:info", "git", "network"}
+
 @app.post("/v1/token")
 def generate_token(body: TokenRequest, auth=Depends(get_api_key)):
     if auth.get("is_session_token"):
         raise HTTPException(400, "Cannot generate a session token using another session token.")
 
+    clean_agent_id = (body.agent_id or "").strip()[:120]
+    if not clean_agent_id:
+        raise HTTPException(400, "agent_id is required when generating a session token.")
+
+    invalid_scopes = [s for s in body.scopes if s not in VALID_SESSION_SCOPES]
+    if invalid_scopes:
+        raise HTTPException(
+            400,
+            f"Invalid token scopes: {invalid_scopes}. Permitted: {sorted(list(VALID_SESSION_SCOPES))}"
+        )
+
     now = int(time.time())
     payload = {
         "key_hash": auth["key_hash"],
-        "agent_id": body.agent_id[:120],
+        "agent_id": clean_agent_id,
         "session_id": body.session_id[:120],
         "scopes": body.scopes,
         "exp": now + body.ttl
@@ -1114,7 +1169,7 @@ def generate_token(body: TokenRequest, auth=Depends(get_api_key)):
         "token": token,
         "expires_at": now + body.ttl,
         "scopes": body.scopes,
-        "agent_id": body.agent_id,
+        "agent_id": clean_agent_id,
         "session_id": body.session_id
     }
 
@@ -1316,8 +1371,9 @@ def check_command(
     t0 = time.perf_counter()
 
     # Session state tracking
-    session_agent = effective_agent_id or auth.get("agent_id", "") or "default"
-    session_id = f"{auth['key_hash']}_{session_agent}"
+    raw_agent = effective_agent_id or auth.get("agent_id", "") or "default"
+    session_agent = re.sub(r'[^a-zA-Z0-9_\-]', '', raw_agent)[:64] or "default"
+    session_id = f"{auth['key_hash'][:16]}_{session_agent}"
     is_escalated, session_evidence = update_and_check_session(
         session_id, cmd_val, sb_client, SUPABASE_REST, _sb_headers()
     )
@@ -1525,12 +1581,28 @@ def consume_execution_permit(body: ExecutionConsumeRequest, request: Request, au
 def override_verdict(body: OverrideRequest, auth=Depends(get_api_key)):
     if auth.get("is_session_token"):
         raise HTTPException(403, "Session tokens cannot override verdicts.")
+
+    row = auth.get("row", {})
+    # Operator verification: Autonomous agents cannot self-approve warnings.
+    # Overrides strictly require operator or admin role, or explicit operator scope.
+    is_operator = (
+        row.get("role") in ("operator", "admin") or
+        "operator" in auth.get("scopes", []) or
+        "operator:override" in auth.get("scopes", []) or
+        row.get("is_operator") is True
+    )
+    if not is_operator:
+        raise HTTPException(
+            403,
+            "Autonomous agents cannot self-approve verdicts. Overrides require an operator key with 'operator' or 'admin' role."
+        )
+
     kh = auth["key_hash"]
     
     url_get = (
         f"{SUPABASE_REST}/audit_log"
         f"?key_hash=eq.{kh}&action_id=eq.{body.action_id}"
-        f"&select=proof_hash,command,prime_intent,session_id,agent_id,confidence,client_ip"
+        f"&select=proof_hash,verdict,command,prime_intent,session_id,agent_id,confidence,client_ip"
     )
     try:
         r_get = sb_client.get(url_get, headers=_sb_headers())
@@ -1540,6 +1612,18 @@ def override_verdict(body: OverrideRequest, auth=Depends(get_api_key)):
 
     if not orig:
         raise HTTPException(404, "Action not found or access denied.")
+
+    orig_verdict = orig.get("verdict", "")
+    if orig_verdict == "BLOCK":
+        raise HTTPException(
+            403,
+            "BLOCK verdicts are immutable and cannot be overridden. Only WARN actions may be reviewed by operators."
+        )
+    if orig_verdict not in ("WARN", "WARN_REJECTED"):
+        raise HTTPException(
+            400,
+            f"Cannot override action with verdict '{orig_verdict}'. Only WARN actions may be overridden."
+        )
 
     verdict_str = "WARN_APPROVED" if body.decision == "approved" else "WARN_REJECTED"
     conf = float(orig.get("confidence", 0.0))
@@ -1972,7 +2056,7 @@ def demo_check(body: CheckRequest, request: Request):
         "worlds_evaluated":  decision.worlds_evaluated,
         "worlds_in_basin_b": decision.worlds_in_basin_b,
         "max_divergence":    decision.max_divergence,
-        "evidence":          decision.evidence,
+        "evidence":          ["Policy inspection: divergence detected"] if decision.evidence and decision.verdict in ("BLOCK", "WARN") else [],
         "proof_hash":        decision.proof_hash,
         "latency_ms":        round((time.perf_counter() - t0) * 1000, 1),
     }
