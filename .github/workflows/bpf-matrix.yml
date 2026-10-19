@@ -12,7 +12,7 @@ env:
 jobs:
   static-checks:
     name: Code Hygiene & Supply Chain Gates
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -43,16 +43,22 @@ jobs:
 
   build-bpf:
     name: Cross-Compile C CO-RE BPF (x86_64 & arm64)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Clang & LLVM Tools
-        run: sudo apt-get update && sudo apt-get install -y clang-18 llvm-18 libbpf-dev make
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libbpf-dev make || sudo apt-get install -y clang-18 llvm-18 libbpf-dev make
 
       - name: Build Dual-Arch BPF Objects
         run: |
-          make -C rk-bpf all CC=clang-18 LLVM_STRIP=llvm-strip-18
+          if command -v clang-18 >/dev/null 2>&1; then
+            make -C rk-bpf all CC=clang-18 LLVM_STRIP=llvm-strip-18
+          else
+            make -C rk-bpf all CC=clang LLVM_STRIP=llvm-strip
+          fi
 
       - name: Upload Compiled BPF Objects
         uses: actions/upload-artifact@v4
@@ -63,7 +69,7 @@ jobs:
   negative-control-verifier:
     name: Negative Control (Unbounded Loop Rejected by Verifier)
     needs: build-bpf
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -91,7 +97,7 @@ jobs:
   vm-kernel-matrix:
     name: VM Kernel Matrix (LSM + BTF + Selftest)
     needs: build-bpf
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -118,7 +124,7 @@ jobs:
 
   decoder-fuzz:
     name: 10-Minute Decoder Fuzzing Gate
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
