@@ -389,9 +389,12 @@ mod linux {
                 .program_mut("rk_test_connect4")
                 .ok_or_else(|| "rk_test_connect4 missing".to_string())?;
             let connect4 = <&mut CgroupSockAddr>::try_from(program).map_err(err)?;
+            // On kernels with BPF links (>= 5.7) aya attaches via bpf_link_create,
+            // which rejects any attach flags for cgroups (EINVAL) and is always
+            // multi-attach. AllowMultiple only matters for legacy prog_attach.
             connect4
-                .attach(&cgroup, CgroupAttachMode::AllowMultiple)
-                .map_err(|e| format!("attach connect4: {e}"))?;
+                .attach(&cgroup, CgroupAttachMode::Single)
+                .map_err(|e| format!("attach connect4: {e:?}"))?;
         }
 
         let exe = std::env::current_exe().map_err(|e| ctx("locate own executable", e))?;

@@ -7,7 +7,7 @@ artifact.
 
 | Kernel | Arch | BPF objects load (verifier) | Selftest | Notes |
 |---|---|---|---|---|
-| 5.15 LTS | x86_64 | CI | CI | Minimum supported kernel for enforcement |
+| 5.15 LTS | x86_64 | CI | CI | Minimum supported kernel for enforcement. Built from source in CI (see below) |
 | 6.1 LTS | x86_64 | CI | CI | |
 | 6.6 LTS | x86_64 | CI | CI | |
 | 6.12 LTS | x86_64 | CI | CI | |
@@ -62,3 +62,11 @@ can be traced to a kernel change.
 
 [vmtest]: https://github.com/danobi/vmtest
 [LVH]: https://github.com/cilium/little-vm-helper
+
+## 5.15: built from source
+
+The LVH 5.15 image is built without `CONFIG_VIRTIO_CONSOLE`, which vmtest needs
+to talk to the guest. CI rebuilds the same source (`linux-5.15.222`, verified
+against kernel.org's SHA-256) from LVH's own config with that one option added,
+and caches the resulting `bzImage`. Everything that matters to Reality Kernel
+(BPF, BTF, BPF-LSM, cgroup BPF) is identical to the LVH image.

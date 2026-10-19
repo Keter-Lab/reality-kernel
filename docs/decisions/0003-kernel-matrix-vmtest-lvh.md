@@ -19,5 +19,7 @@ line.
 
 ## Consequences
 - 6.18 stands in for "latest stable" until LVH publishes newer stable images.
+- The LVH 5.15 image lacks `CONFIG_VIRTIO_CONSOLE` (needed by vmtest); CI rebuilds
+  the same source from LVH's config plus that option, cached by digest.
 - arm64 objects are not loaded into an arm64 kernel (no KVM on hosted arm64
   runners). Tracked in `docs/kernel-matrix.md`.

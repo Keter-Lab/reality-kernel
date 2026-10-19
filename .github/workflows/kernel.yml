@@ -111,8 +111,13 @@ jobs:
         # LVH kernel images (quay.io/lvh-images/kernel-images), pinned by digest.
         # Refresh procedure: docs/kernel-matrix.md.
         include:
+          # The LVH 5.15 image lacks CONFIG_VIRTIO_CONSOLE, which vmtest needs, so the
+          # same source is rebuilt from LVH's config with that option (cached).
           - kernel: "5.15"
             digest: sha256:d7ecc651bcdec5bda7477d32d2ba583dde1ed75db31f56dd78997b3c743a27b3
+            source: "5.15.222"
+            source_url: https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.15.222.tar.xz
+            source_sha256: 4d6ec07679bd008524391cb67597106018646c6378b3953c23ec69b9259cdf84
           - kernel: "6.1"
             digest: sha256:9e883377d6112141d1508f5090a5329c94be2bca1a4016964eddf9df3c549d09
           - kernel: "6.6"
@@ -166,6 +171,35 @@ jobs:
           ls -l kernel
           echo "KERNEL_IMAGE=$(ls "$PWD"/kernel/vmlinuz-*)" >> "$GITHUB_ENV"
           grep -E '^CONFIG_(BPF_LSM|DEBUG_INFO_BTF|CGROUP_BPF|BPF_SYSCALL|SECURITY_PATH|LSM)=' kernel/config-* || true
+
+      - name: Restore source-built kernel
+        if: matrix.source
+        id: kernel-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: kernel-build/bzImage
+          key: kernel-${{ matrix.source }}-${{ matrix.digest }}-virtio-console-v1
+
+      - name: Build kernel ${{ matrix.source }} (LVH config + CONFIG_VIRTIO_CONSOLE)
+        if: matrix.source && steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y build-essential flex bison bc libelf-dev libssl-dev dwarves
+          curl -fsSL -o linux.tar.xz "${{ matrix.source_url }}"
+          echo "${{ matrix.source_sha256 }}  linux.tar.xz" | sha256sum -c -
+          tar -xf linux.tar.xz
+          cd "linux-${{ matrix.source }}"
+          cp ../kernel/config-* .config
+          scripts/config --enable VIRTIO_CONSOLE
+          make olddefconfig
+          grep -q '^CONFIG_VIRTIO_CONSOLE=y' .config
+          ../.github/scripts/run-logged.sh "kernel build" make -j"$(nproc)" bzImage
+          mkdir -p ../kernel-build
+          cp arch/x86/boot/bzImage ../kernel-build/bzImage
+
+      - name: Use source-built kernel
+        if: matrix.source
+        run: echo "KERNEL_IMAGE=$PWD/kernel-build/bzImage" >> "$GITHUB_ENV"
 
       - name: Run selftest and verifier controls in the VM
         run: |
