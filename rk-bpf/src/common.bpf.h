@@ -18,6 +18,10 @@
 
 #define RK_PAYLOAD_MASK (RK_SCRATCH_PAYLOAD_MAX - 1)
 
+#ifndef barrier_var /* provided by libbpf >= 1.0 */
+#define barrier_var(var) asm volatile("" : "+r"(var))
+#endif
+
 _Static_assert((RK_SCRATCH_PAYLOAD_MAX & RK_PAYLOAD_MASK) == 0,
                "RK_SCRATCH_PAYLOAD_MAX must be a power of two");
 
@@ -119,32 +123,46 @@ static __always_inline void rk_fill_task(struct rk_hdr *hdr)
     hdr->tgid = (__u32)(pid_tgid >> 32);
 }
 
-/* Append [__u16 len][bytes] read from kernel memory. Truncates to fit. */
+/*
+ * Append [__u16 len][bytes] read from kernel memory. Truncates to fit.
+ *
+ * Every offset and length passed to the verifier is masked and then pinned
+ * with barrier_var(): after a range check clang otherwise drops the mask as
+ * redundant, and the verifier (which tracks registers, not C semantics) sees
+ * an unbounded pointer. Caught by the VM matrix on every kernel.
+ */
 static __always_inline void rk_append_kstr(struct rk_scratch_msg *msg, const void *src, __u32 max_len)
 {
     __u32 off = msg->payload_len;
+    __u32 len_off, str_off, room;
     __u16 *len_ptr;
-    __u32 room;
     long n;
 
-    if (off + 2 >= RK_SCRATCH_PAYLOAD_MAX)
+    if (off > RK_SCRATCH_PAYLOAD_MAX - 3) /* need 2 length bytes + 1 data byte */
         return;
-    len_ptr = (__u16 *)&msg->payload[off & RK_PAYLOAD_MASK];
-    off += 2;
 
-    room = RK_SCRATCH_PAYLOAD_MAX - off;
+    len_off = off & RK_PAYLOAD_MASK;
+    barrier_var(len_off);
+    len_ptr = (__u16 *)&msg->payload[len_off];
+
+    str_off = (off + 2) & RK_PAYLOAD_MASK;
+    barrier_var(str_off);
+
+    room = RK_SCRATCH_PAYLOAD_MAX - (off + 2);
     if (max_len > room)
         max_len = room;
+    max_len &= RK_PAYLOAD_MASK;
+    barrier_var(max_len);
 
-    n = bpf_probe_read_kernel_str(&msg->payload[off & RK_PAYLOAD_MASK], max_len & RK_PAYLOAD_MASK, src);
+    n = bpf_probe_read_kernel_str(&msg->payload[str_off], max_len, src);
     if (n <= 0) {
         *len_ptr = 0;
-        msg->payload_len = off;
+        msg->payload_len = off + 2;
         return;
     }
     /* n includes the NUL terminator, which is not transmitted. */
     *len_ptr = (__u16)(n - 1);
-    msg->payload_len = off + (__u32)(n - 1);
+    msg->payload_len = off + 2 + (__u32)(n - 1);
 }
 
 /* Emit hdr + payload_len + _reserved + payload at its real size. */
@@ -154,6 +172,9 @@ static __always_inline void rk_emit(struct rk_scratch_msg *msg)
 
     if (len > RK_SCRATCH_PAYLOAD_MAX)
         len = RK_SCRATCH_PAYLOAD_MAX;
+    /* Mask pinned for the verifier as above; 4095 + 56 still fits the map value. */
+    len &= (2 * RK_SCRATCH_PAYLOAD_MAX - 1);
+    barrier_var(len);
     if (bpf_ringbuf_output(&events_ringbuf, msg, sizeof(struct rk_hdr) + 8 + len, 0) < 0)
         rk_count(RK_CNT_RINGBUF_DROP);
 }
