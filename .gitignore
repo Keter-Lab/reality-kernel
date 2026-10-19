@@ -21,7 +21,8 @@ initTelemetry.js
 *.docx
 cleanup_pending.py
 emit_telemetry*.py
-scripts/
+# Root-level one-off scripts only (not .github/scripts).
+/scripts/
 
 
 Reality_Kernel_Sponsorship_Prospectus.*

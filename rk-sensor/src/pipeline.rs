@@ -1,30 +1,22 @@
-use tracing::info;
+//! Per-record processing. Decoding failures are counted and logged, never fatal.
 
-pub async fn process_event(event_bytes: &[u8]) {
-    // Migration: In Phase 0/1, event bytes are validated via the new decoder.
-    // Legacy /proc reading and ungrounded sys_enter_execve analysis are disabled
-    // until Phase 3 lands with sched_process_exec.
-    let mut str_buf = [""; 16];
-    match crate::decoder::decode_event(event_bytes, &mut str_buf) {
-        Ok(decoded) => {
-            info!(
-                event_type = decoded.hdr.type_,
-                cgroup_id = decoded.hdr.cgroup_id,
-                pid = decoded.hdr.pid,
-                verdict = decoded.hdr.verdict,
-                "decoded valid BPF ringbuffer event"
-            );
-        }
-        Err(err) => {
-            tracing::warn!(?err, "failed to decode ringbuffer event envelope");
-        }
+use tracing::{info, warn};
+
+use crate::decoder::{self, DecodeStats};
+
+pub fn process_record(bytes: &[u8], stats: &DecodeStats) {
+    let result = decoder::decode(bytes);
+    stats.record(&result);
+    match result {
+        Ok(event) => info!(
+            event_type = event.hdr.type_,
+            verdict = event.hdr.verdict,
+            rule_id = event.hdr.rule_id,
+            policy_gen = event.hdr.policy_gen,
+            cgroup_id = event.hdr.cgroup_id,
+            pid = event.hdr.pid,
+            "event"
+        ),
+        Err(e) => warn!(error = %e, kind = e.kind(), "rejected malformed ring buffer record"),
     }
-}
-
-pub async fn emit_overflow_marker(count: u64) {
-    info!(
-        overflow_count = count,
-        marker = "RINGBUF_OVERFLOW",
-        "synthetic audit marker emitted"
-    );
 }

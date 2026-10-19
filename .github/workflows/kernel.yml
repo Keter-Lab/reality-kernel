@@ -1,0 +1,216 @@
+name: Kernel
+
+# Builds the BPF objects, embeds them in rk-sensor, and runs the selftest plus
+# the verifier controls on real kernels in VMs. No step here may be allowed to
+# fail silently: every check either passes or turns the run red.
+
+on:
+  push:
+    branches: [main, "phase-*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  VMTEST_VERSION: v0.18.0
+  VMTEST_SHA256: 63270a3f763f97f268e0ee8d3591f79b6ff17ece7b6dff8f9440207bb04b64f3
+  BPFTOOL_VERSION: v7.7.0
+  BPFTOOL_SHA256: 09150596f09356b0ff632dd7f9856e0ea86bf96b269e9bc94278d9a9432a268c
+  # Boot-time LSM list for the VMs; unknown names are ignored by older kernels.
+  VM_LSM: lockdown,capability,landlock,yama,bpf
+
+jobs:
+  bpf-build:
+    name: Build BPF objects (x86, arm64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install clang, llvm, libbpf headers
+        run: sudo apt-get update && sudo apt-get install -y clang llvm libbpf-dev make
+
+      - name: Build (-Wall -Werror)
+        run: .github/scripts/run-logged.sh "bpf build" make -C rk-bpf all-arches
+
+      - name: Check BTF sections are present (needed for CO-RE)
+        run: |
+          set -euo pipefail
+          for obj in rk-bpf/build/*/*.bpf.o; do
+            llvm-readelf -S "$obj" | grep -q '\.BTF ' || { echo "::error::$obj has no .BTF section"; exit 1; }
+            echo "ok: $obj"
+          done
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bpf-objects
+          path: rk-bpf/build/
+          if-no-files-found: error
+
+  sensor:
+    name: Build rk-sensor (${{ matrix.arch }})
+    needs: bpf-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bpf-objects
+          path: rk-bpf/build/
+
+      - name: Install libclang (bindgen) and musl tools
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev musl-tools
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Test with embedded objects
+        run: .github/scripts/run-logged.sh "rk-sensor tests (embedded)" cargo test -p rk-sensor --features embedded-bpf
+
+      - name: Release build (static, embedded objects)
+        run: .github/scripts/run-logged.sh "rk-sensor release build" cargo build --release -p rk-sensor --features embedded-bpf --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rk-sensor-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/rk-sensor
+          if-no-files-found: error
+
+  vm-matrix:
+    name: Verifier + selftest (Linux ${{ matrix.kernel }})
+    needs: sensor
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # LVH kernel images (quay.io/lvh-images/kernel-images), pinned by digest.
+        # Refresh procedure: docs/kernel-matrix.md.
+        include:
+          - kernel: "5.15"
+            digest: sha256:d7ecc651bcdec5bda7477d32d2ba583dde1ed75db31f56dd78997b3c743a27b3
+          - kernel: "6.1"
+            digest: sha256:9e883377d6112141d1508f5090a5329c94be2bca1a4016964eddf9df3c549d09
+          - kernel: "6.6"
+            digest: sha256:6a95b95c69f22dac5cb6fe81556e399c860aff38dcf8d8ff66cac18cabedab27
+          - kernel: "6.12"
+            digest: sha256:c4bcdbcc3d5e9c5094ba806f2661b2e9c870233df1bf77ff2aa5d4f6cbf6a374
+          - kernel: "6.18"
+            digest: sha256:8f08ba5cd89ce8d2796413d243e81b4b5db60db22d3c3bd62160641e04e98365
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bpf-objects
+          path: rk-bpf/build/
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rk-sensor-x86_64
+          path: bin/
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils
+
+      - name: Fetch pinned vmtest and bpftool
+        run: |
+          set -euo pipefail
+          mkdir -p tools
+          curl -fsSL -o tools/vmtest "https://github.com/danobi/vmtest/releases/download/${VMTEST_VERSION}/vmtest-x86_64"
+          echo "${VMTEST_SHA256}  tools/vmtest" | sha256sum -c -
+          curl -fsSL -o bpftool.tar.gz "https://github.com/libbpf/bpftool/releases/download/${BPFTOOL_VERSION}/bpftool-${BPFTOOL_VERSION}-amd64.tar.gz"
+          echo "${BPFTOOL_SHA256}  bpftool.tar.gz" | sha256sum -c -
+          tar -xzf bpftool.tar.gz -C tools
+          chmod +x tools/vmtest tools/bpftool bin/rk-sensor
+
+      - name: Extract kernel ${{ matrix.kernel }}
+        run: |
+          set -euo pipefail
+          image="quay.io/lvh-images/kernel-images@${{ matrix.digest }}"
+          id=$(docker create --platform linux/amd64 "$image" /bin/true)
+          docker cp "$id:/data/kernels/${{ matrix.kernel }}/boot" kernel
+          docker rm "$id"
+          ls -l kernel
+          echo "KERNEL_IMAGE=$(ls "$PWD"/kernel/vmlinuz-*)" >> "$GITHUB_ENV"
+          grep -E '^CONFIG_(BPF_LSM|DEBUG_INFO_BTF|CGROUP_BPF|BPF_SYSCALL|SECURITY_PATH|LSM)=' kernel/config-* || true
+
+      - name: Run selftest and verifier controls in the VM
+        run: |
+          set -o pipefail
+          tools/vmtest -k "$KERNEL_IMAGE" --kargs "lsm=${VM_LSM}" \
+            "bash $PWD/tests/vm/selftest.sh $PWD/bin/rk-sensor $PWD/rk-bpf/build/x86 $PWD/tools/bpftool" \
+            2>&1 | tee vm.log
+          rc=${PIPESTATUS[0]}
+          sed -n '/===RK_SELFTEST_BEGIN===/,/===RK_SELFTEST_END===/p' vm.log \
+            | sed '1d;$d' > "selftest-${{ matrix.kernel }}.json"
+          if [ "$rc" -ne 0 ]; then
+            .github/scripts/annotate.sh vm.log "Linux ${{ matrix.kernel }}"
+            python3 - "selftest-${{ matrix.kernel }}.json" <<'PY' || true
+          import json, sys
+          r = json.load(open(sys.argv[1]))
+          bad = [f"{p['object']}:{p['name']}: {p['error']}" for p in r["programs"] if not p["loaded"] and not p["probe"]]
+          bad += [f"{c['name']}: {c['detail']}" for c in r["checks"] if not c["passed"]]
+          bad += [f"missing feature: {m}" for m in r["missing_features"]]
+          print("::error title=selftest report::" + "%0A".join(bad).replace("\n", "%0A")[:60000])
+          PY
+          fi
+          exit "$rc"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: selftest-${{ matrix.kernel }}
+          path: |
+            selftest-${{ matrix.kernel }}.json
+            vm.log
+          if-no-files-found: warn
+
+  fuzz:
+    name: Decoder fuzzing (10 min)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install libclang (bindgen)
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: nightly
+
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-fuzz
+
+      - name: Fuzz the decoder
+        run: .github/scripts/run-logged.sh "decoder fuzz" cargo +nightly fuzz run decoder_fuzz -- -max_total_time=600 -rss_limit_mb=2048

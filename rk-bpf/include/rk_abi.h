@@ -1,12 +1,32 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR MIT) */
+/*
+ * rk_abi.h — single source of truth for the kernel <-> userspace contract.
+ *
+ * Consumed by the BPF programs in rk-bpf/src (after vmlinux.h) and by bindgen
+ * (rk-ebpf-common/build.rs, which defines RK_ABI_TYPES_PROVIDED). See docs/abi.md.
+ *
+ * Wire record emitted on events_ringbuf:
+ *   struct rk_hdr | __u32 payload_len | __u32 _reserved (0) | payload[payload_len]
+ * Integers are in host byte order, except IP addresses which are raw
+ * network-order bytes. Strings are [__u16 len][len bytes], no NUL, not
+ * guaranteed to be UTF-8.
+ */
 #ifndef RK_ABI_H
 #define RK_ABI_H
 
-#ifndef __VMLINUX_H__
+#if !defined(__VMLINUX_H__) && !defined(RK_ABI_TYPES_PROVIDED)
 #include <linux/types.h>
 #endif
 
 #define RK_ABI_VERSION 1
 #define RK_SCRATCH_PAYLOAD_MAX 2048
+
+/* Indexes into the per-CPU rk_counters map. Summed in userspace. */
+enum rk_counter {
+    RK_CNT_RINGBUF_DROP = 0, /* bpf_ringbuf_output failed; event lost, verdict unaffected */
+    RK_CNT_SCRATCH_MISS = 1, /* per-CPU scratch lookup failed */
+    RK_CNT_MAX          = 2,
+};
 
 enum rk_event_type {
     RK_EV_NONE        = 0, /* Rejected by userspace decoder */
@@ -65,13 +85,13 @@ struct rk_payload_exec {
     /* Trailing: str_count occurrences of: [__u16 str_len][__u8 str_bytes[str_len]] */
 };
 
-/* RK_EV_FILE_OPEN Payload (32 bytes) */
+/* RK_EV_FILE_OPEN Payload (32 bytes). file_dev uses the kernel dev_t encoding (MAJOR << 20 | MINOR). */
 struct rk_payload_file {
     __u64 file_dev;       /* offset  0 */
     __u64 file_ino;       /* offset  8 */
     __u32 open_flags;     /* offset 16 */
     __u32 mode;           /* offset 20 */
-    __u16 str_count;      /* offset 24: Number of following strings (resolved path) */
+    __u16 str_count;      /* offset 24: Number of following strings (path or name, logs only) */
     __u16 _pad;           /* offset 26 */
     __u32 _pad2;          /* offset 28: Explicit padding to 32 bytes */
     /* Trailing: str_count occurrences of: [__u16 str_len][__u8 str_bytes[str_len]] */
@@ -81,8 +101,8 @@ struct rk_payload_file {
 struct rk_payload_net {
     __u8  saddr_v6[16];   /* offset  0: IPv6 or IPv4-mapped IPv6 */
     __u8  daddr_v6[16];   /* offset 16: IPv6 or IPv4-mapped IPv6 */
-    __u16 sport;          /* offset 32 */
-    __u16 dport;          /* offset 34 */
+    __u16 sport;          /* offset 32: host byte order */
+    __u16 dport;          /* offset 34: host byte order */
     __u16 family;         /* offset 36: AF_INET or AF_INET6 */
     __u8  protocol;       /* offset 38: IPPROTO_TCP or IPPROTO_UDP */
     __u8  _pad;           /* offset 39 */

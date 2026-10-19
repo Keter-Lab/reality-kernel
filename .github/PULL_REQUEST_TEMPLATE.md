@@ -9,7 +9,7 @@ Brief summary of the changes introduced in this PR and why they are needed.
 - [ ] Documentation update
 
 ## Areas Impacted
-- [ ] `rk-ebpf-probes` (Rust / Kernel)
+- [ ] `rk-bpf` / `rk-sensor` (Kernel)
 - [ ] `core/` (Symbolic execution / static analysis)
 - [ ] `sdk/` / `rk-cli/`
 - [ ] `tests/`
