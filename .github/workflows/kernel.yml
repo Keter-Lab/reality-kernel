@@ -213,4 +213,4 @@ jobs:
           tool: cargo-fuzz
 
       - name: Fuzz the decoder
-        run: .github/scripts/run-logged.sh "decoder fuzz" cargo +nightly fuzz run decoder_fuzz -- -max_total_time=600 -rss_limit_mb=2048
+        run: .github/scripts/run-logged.sh "decoder fuzz" cargo +nightly fuzz run --target x86_64-unknown-linux-gnu decoder_fuzz -- -max_total_time=600 -rss_limit_mb=2048

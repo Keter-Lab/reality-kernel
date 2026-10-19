@@ -13,9 +13,11 @@ $(error unsupported ARCH '$(ARCH)': expected x86 or arm64)
 endif
 
 OUT := build/$(ARCH)
+# vmlinux.h is generated code: -isystem keeps its warnings out of -Werror.
 CFLAGS := -g -O2 -target bpf -std=gnu11 -Wall -Werror \
 	-D__TARGET_ARCH_$(ARCH) \
-	-Iinclude -Iinclude/vmlinux/$(ARCH) -Isrc
+	-Iinclude -Isrc \
+	-isystem include/vmlinux/$(ARCH)
 
 OBJECTS := $(OUT)/rk.bpf.o $(OUT)/rk_selftest.bpf.o $(OUT)/rk_probes.bpf.o \
 	$(OUT)/reject_infinite_loop.bpf.o
