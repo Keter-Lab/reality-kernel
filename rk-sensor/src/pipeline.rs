@@ -1,36 +1,24 @@
-use rk_engine_core::analyse;
 use tracing::info;
 
-use crate::enricher;
-use crate::event::RkEvent;
-
-pub async fn process_event(event: RkEvent) {
-    let enriched = enricher::enrich_event(event).await;
-
-    if let RkEvent::Exec(exec) = &enriched.base {
-        let command = if let Some(cmdline) = enriched.cmdline.clone() {
-            cmdline
-        } else {
-            decode_c_string(&exec.argv_summary)
-        };
-
-        let result = analyse(&command, "kernel_exec_event", 5);
-        info!(
-            pid = exec.pid,
-            verdict = result.verdict,
-            confidence = result.confidence,
-            action_id = result.action_id,
-            max_divergence = result.max_divergence,
-            "exec event analysed by rk-engine-core"
-        );
+pub async fn process_event(event_bytes: &[u8]) {
+    // Migration: In Phase 0/1, event bytes are validated via the new decoder.
+    // Legacy /proc reading and ungrounded sys_enter_execve analysis are disabled
+    // until Phase 3 lands with sched_process_exec.
+    let mut str_buf = [""; 16];
+    match crate::decoder::decode_event(event_bytes, &mut str_buf) {
+        Ok(decoded) => {
+            info!(
+                event_type = decoded.hdr.type_,
+                cgroup_id = decoded.hdr.cgroup_id,
+                pid = decoded.hdr.pid,
+                verdict = decoded.hdr.verdict,
+                "decoded valid BPF ringbuffer event"
+            );
+        }
+        Err(err) => {
+            tracing::warn!(?err, "failed to decode ringbuffer event envelope");
+        }
     }
-
-    info!(?enriched, "processed enriched kernel event");
-}
-
-fn decode_c_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).trim().to_string()
 }
 
 pub async fn emit_overflow_marker(count: u64) {

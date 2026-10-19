@@ -1,10 +1,13 @@
 mod consumer;
+mod decoder;
 mod enricher;
 mod event;
 mod loader;
 mod pipeline;
+mod selftest;
 
 use anyhow::{Context, Result};
+use std::env;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -13,6 +16,20 @@ use tracing::{error, info};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() >= 3 && args[1] == "--test-connect" {
+        let cgroup_procs = &args[2];
+        let exit_code = selftest::run_test_connect(cgroup_procs);
+        std::process::exit(exit_code);
+    }
+    if args.iter().any(|arg| arg == "--selftest") {
+        let (report, exit_code) = selftest::run_selftest();
+        let json_output = serde_json::to_string_pretty(&report)
+            .unwrap_or_else(|_| "{}".to_string());
+        println!("{}", json_output);
+        std::process::exit(exit_code);
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

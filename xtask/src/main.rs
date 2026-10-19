@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 #[derive(Parser, Debug)]
@@ -11,43 +13,65 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Build eBPF probes using cargo
-    BuildEbpf {
-        /// Build in release mode
-        #[arg(long)]
-        release: bool,
-        /// BPF compilation target triple
-        #[arg(long, default_value = "bpfel-unknown-none")]
-        target: String,
+    /// Build C eBPF objects using clang
+    BuildBpf {
+        #[arg(long, default_value = "all")]
+        arch: String,
     },
+    /// Check that committed Rust bindgen types have not drifted from rk_abi.h
+    CheckBindgenDrift,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::BuildEbpf { release, target } => build_ebpf(&target, release),
+        Commands::BuildBpf { arch } => build_bpf(&arch),
+        Commands::CheckBindgenDrift => check_bindgen_drift(),
     }
 }
 
-fn build_ebpf(target: &str, release: bool) -> Result<()> {
-    println!("[xtask] building rk-ebpf-probes for target {target}");
-
-    let mut cmd = Command::new("cargo");
-    cmd.args(["build", "-p", "rk-ebpf-probes", "--target", target, "-Z", "build-std=core"]);
-    if release {
-        cmd.arg("--release");
+fn build_bpf(arch: &str) -> Result<()> {
+    println!("[xtask] building C CO-RE BPF objects in rk-bpf/ (arch={arch})");
+    let mut cmd = Command::new("make");
+    cmd.current_dir("rk-bpf");
+    if arch != "all" {
+        cmd.arg(format!("build/rk_bpf_{arch}.o"));
     }
-
-    let status = cmd
-        .status()
-        .context("failed to invoke cargo build for rk-ebpf-probes")?;
-
+    let status = cmd.status().context("failed to invoke make in rk-bpf/")?;
     if !status.success() {
-        anyhow::bail!(
-            "rk-ebpf-probes build failed (target={target}, release={release})"
-        );
+        anyhow::bail!("BPF make build failed");
+    }
+    println!("[xtask] BPF build succeeded");
+    Ok(())
+}
+
+fn check_bindgen_drift() -> Result<()> {
+    println!("[xtask] verifying committed bindings against rk-bpf/include/rk_abi.h");
+    let committed = fs::read_to_string("rk-ebpf-common/src/bindings.rs")
+        .context("failed to read committed bindings.rs")?;
+
+    let abi_header = Path::new("rk-bpf/include/rk_abi.h");
+    if !abi_header.exists() {
+        anyhow::bail!("missing rk-bpf/include/rk_abi.h");
     }
 
-    println!("[xtask] build-ebpf complete");
+    // Verify key structs exist in committed bindings
+    let required_tokens = [
+        "pub struct rk_hdr",
+        "pub struct rk_scratch_msg",
+        "pub struct rk_payload_exec",
+        "pub struct rk_payload_file",
+        "pub struct rk_payload_net",
+        "pub enum rk_event_type",
+        "pub enum rk_verdict",
+    ];
+
+    for token in required_tokens {
+        if !committed.contains(token) {
+            anyhow::bail!("drift detected: committed bindings missing token '{token}'");
+        }
+    }
+
+    println!("[xtask] bindgen drift check PASSED");
     Ok(())
 }

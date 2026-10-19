@@ -1,0 +1,22 @@
+[package]
+name = "rk-decoder-fuzz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rk-sensor = { path = "../rk-sensor" }
+
+# Prevent libfuzzer-sys from leaking symbols
+[profile.release]
+debug = 2
+
+[[bin]]
+name = "decoder_fuzz"
+path = "fuzz_targets/decoder_fuzz.rs"
+test = false
+doc = false

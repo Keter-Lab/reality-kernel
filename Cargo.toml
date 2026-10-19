@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
   "rk-ebpf-common",
-  "rk-ebpf-probes",
   "rk-sensor",
   "rk-supabase",
   "rk-signing",
