@@ -63,7 +63,8 @@ fn run_preflight(as_json: bool) -> Result<bool> {
     let kernel_release = read_kernel_release()?;
     let (major, minor) = parse_kernel_semver(&kernel_release)
         .with_context(|| format!("could not parse kernel release '{kernel_release}'"))?;
-    let kernel_ok = major > MIN_KERNEL_MAJOR || (major == MIN_KERNEL_MAJOR && minor >= MIN_KERNEL_MINOR);
+    let kernel_ok =
+        major > MIN_KERNEL_MAJOR || (major == MIN_KERNEL_MAJOR && minor >= MIN_KERNEL_MINOR);
 
     let lsm_list = read_optional_string("/sys/kernel/security/lsm");
     let bpf_lsm_available = lsm_list
@@ -72,13 +73,8 @@ fn run_preflight(as_json: bool) -> Result<bool> {
         .unwrap_or(false);
 
     let tracing_root = detect_tracing_root();
-    let kprobe_events = tracing_root
-        .as_ref()
-        .map(|root| root.join("kprobe_events"));
-    let kprobe_fallback_available = kprobe_events
-        .as_ref()
-        .map(|p| p.exists())
-        .unwrap_or(false);
+    let kprobe_events = tracing_root.as_ref().map(|root| root.join("kprobe_events"));
+    let kprobe_fallback_available = kprobe_events.as_ref().map(|p| p.exists()).unwrap_or(false);
 
     let has_btf = Path::new("/sys/kernel/btf/vmlinux").exists();
     let ring_buffer_supported = kernel_ok && has_btf;
@@ -142,7 +138,8 @@ fn run_preflight(as_json: bool) -> Result<bool> {
         bail!("kernel < 5.8 is unsupported for Reality Kernel production agent");
     }
 
-    Ok(report.ring_buffer_supported && (report.bpf_lsm_available || report.kprobe_fallback_available))
+    Ok(report.ring_buffer_supported
+        && (report.bpf_lsm_available || report.kprobe_fallback_available))
 }
 
 fn print_human_report(report: &PreflightReport) {
@@ -150,8 +147,14 @@ fn print_human_report(report: &PreflightReport) {
     println!("  kernel release : {}", report.kernel_release);
     println!("  minimum kernel : {}", report.min_kernel);
     println!("  BPF LSM        : {}", yes_no(report.bpf_lsm_available));
-    println!("  kprobe fallback: {}", yes_no(report.kprobe_fallback_available));
-    println!("  ring buffer    : {}", yes_no(report.ring_buffer_supported));
+    println!(
+        "  kprobe fallback: {}",
+        yes_no(report.kprobe_fallback_available)
+    );
+    println!(
+        "  ring buffer    : {}",
+        yes_no(report.ring_buffer_supported)
+    );
     println!();
     println!("Capability matrix:");
     for cap in &report.capabilities {
@@ -160,7 +163,11 @@ fn print_human_report(report: &PreflightReport) {
 }
 
 fn yes_no(v: bool) -> &'static str {
-    if v { "yes" } else { "no" }
+    if v {
+        "yes"
+    } else {
+        "no"
+    }
 }
 
 fn read_kernel_release() -> Result<String> {
@@ -177,8 +184,13 @@ fn parse_kernel_semver(release: &str) -> Result<(u64, u64)> {
         .parse::<u64>()
         .context("invalid major version")?;
     let minor_raw = split.next().context("missing minor version")?;
-    let minor_digits: String = minor_raw.chars().take_while(|c| c.is_ascii_digit()).collect();
-    let minor = minor_digits.parse::<u64>().context("invalid minor version")?;
+    let minor_digits: String = minor_raw
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    let minor = minor_digits
+        .parse::<u64>()
+        .context("invalid minor version")?;
     Ok((major, minor))
 }
 

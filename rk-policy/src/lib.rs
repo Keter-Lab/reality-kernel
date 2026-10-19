@@ -42,7 +42,10 @@ pub fn verify_least_agency_policy(
         if let Some(tools) = &policy.allowed_tools {
             let allowed_tools_lower: Vec<String> = tools.iter().map(|t| t.to_lowercase()).collect();
             for b in extract_binaries(command) {
-                if !allowed_tools_lower.iter().any(|t| t == &b || glob_match(t, &b)) {
+                if !allowed_tools_lower
+                    .iter()
+                    .any(|t| t == &b || glob_match(t, &b))
+                {
                     return Some(format!(
                         "PolicyViolation: Binary '{}' is not in allowed_tools list.",
                         b
@@ -75,10 +78,32 @@ pub fn verify_least_agency_policy(
 
 fn scope_bins(scope: &str) -> &'static [&'static str] {
     match scope {
-        "fs:read" => &["ls", "ll", "la", "dir", "cat", "head", "tail", "less", "more", "view", "wc", "file", "stat", "find", "tree", "pwd", "du", "df"],
-        "sys:info" => &["echo", "printf", "date", "whoami", "id", "groups", "hostname", "uname", "uptime", "w", "ps", "top", "env", "printenv", "set", "which", "whereis", "type", "man", "help", "info", "history", "lsof", "free", "nproc"],
+        "fs:read" => &[
+            "ls", "ll", "la", "dir", "cat", "head", "tail", "less", "more", "view", "wc", "file",
+            "stat", "find", "tree", "pwd", "du", "df",
+        ],
+        "sys:info" => &[
+            "echo", "printf", "date", "whoami", "id", "groups", "hostname", "uname", "uptime", "w",
+            "ps", "top", "env", "printenv", "set", "which", "whereis", "type", "man", "help",
+            "info", "history", "lsof", "free", "nproc",
+        ],
         "git" => &["git"],
-        "network" => &["ping", "traceroute", "tracepath", "mtr", "nslookup", "dig", "host", "whois", "netstat", "ss", "ip", "ifconfig", "curl", "wget"],
+        "network" => &[
+            "ping",
+            "traceroute",
+            "tracepath",
+            "mtr",
+            "nslookup",
+            "dig",
+            "host",
+            "whois",
+            "netstat",
+            "ss",
+            "ip",
+            "ifconfig",
+            "curl",
+            "wget",
+        ],
         _ => &[],
     }
 }
@@ -96,7 +121,14 @@ fn extract_binaries(command: &str) -> Vec<String> {
             if token.contains('=') && !token.starts_with('-') {
                 continue;
             }
-            let mut bin_name = token.rsplit('/').next().unwrap_or(token).rsplit('\\').next().unwrap_or(token).to_string();
+            let mut bin_name = token
+                .rsplit('/')
+                .next()
+                .unwrap_or(token)
+                .rsplit('\\')
+                .next()
+                .unwrap_or(token)
+                .to_string();
             bin_name = bin_name.replace(['"', '\'', '`', '(', ')'], "");
             if !bin_name.is_empty() {
                 binaries.push(bin_name.to_lowercase());
@@ -109,11 +141,17 @@ fn extract_binaries(command: &str) -> Vec<String> {
 
 fn extract_domains(command: &str) -> Vec<String> {
     let mut domains = Vec::new();
-    for cap in Regex::new(r"https?://([a-zA-Z0-9][a-zA-Z0-9.\-]*)").unwrap().captures_iter(command) {
+    for cap in Regex::new(r"https?://([a-zA-Z0-9][a-zA-Z0-9.\-]*)")
+        .unwrap()
+        .captures_iter(command)
+    {
         domains.push(cap[1].to_lowercase());
     }
 
-    for cap in Regex::new(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b").unwrap().captures_iter(command) {
+    for cap in Regex::new(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
+        .unwrap()
+        .captures_iter(command)
+    {
         let ip = cap[1].to_string();
         if ip != "127.0.0.1" && ip != "0.0.0.0" && ip != "255.255.255.255" {
             domains.push(ip);
@@ -122,7 +160,10 @@ fn extract_domains(command: &str) -> Vec<String> {
 
     for word in command.split_whitespace() {
         let word = word.trim().to_lowercase();
-        if word.contains('.') && !word.chars().any(|c| "/:\\'\"()$*".contains(c)) && word.chars().any(|c| c.is_ascii_alphabetic()) {
+        if word.contains('.')
+            && !word.chars().any(|c| "/:\\'\"()$*".contains(c))
+            && word.chars().any(|c| c.is_ascii_alphabetic())
+        {
             domains.push(word);
         }
     }
@@ -142,8 +183,12 @@ fn domain_matches(domain: &str, pattern: &str) -> bool {
 }
 
 fn cidr_matches(domain_or_ip: &str, pattern: &str) -> bool {
-    let Ok(net) = pattern.parse::<IpNet>() else { return false; };
-    let Ok(ip) = domain_or_ip.parse::<IpAddr>() else { return false; };
+    let Ok(net) = pattern.parse::<IpNet>() else {
+        return false;
+    };
+    let Ok(ip) = domain_or_ip.parse::<IpAddr>() else {
+        return false;
+    };
     net.contains(&ip)
 }
 

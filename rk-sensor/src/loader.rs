@@ -143,10 +143,14 @@ fn load_program(
             };
             ("lsm", result)
         }
-        Program::CgroupSockAddr(prog) => ("cgroup_sock_addr", prog.load().map_err(|e| e.to_string())),
+        Program::CgroupSockAddr(prog) => {
+            ("cgroup_sock_addr", prog.load().map_err(|e| e.to_string()))
+        }
         _ => (
             "unsupported",
-            Err(format!("program `{name}` has a type the loader does not handle")),
+            Err(format!(
+                "program `{name}` has a type the loader does not handle"
+            )),
         ),
     }
 }
@@ -186,7 +190,12 @@ mod tests {
     fn embedded_objects_are_elf() {
         for object in Object::ALL {
             let bytes = object_bytes(object).unwrap();
-            assert_eq!(&bytes[..4], b"\x7fELF", "{} is not an ELF object", object.file_name());
+            assert_eq!(
+                &bytes[..4],
+                b"\x7fELF",
+                "{} is not an ELF object",
+                object.file_name()
+            );
         }
     }
 

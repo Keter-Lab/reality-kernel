@@ -13,8 +13,12 @@ fuzz_target!(|data: &[u8]| {
     // must yield exactly the declared count without panicking.
     if let Ok(event) = result {
         match event.payload {
-            Payload::Exec { body, strings } => assert_eq!(strings.count(), usize::from(body.str_count)),
-            Payload::File { body, strings } => assert_eq!(strings.count(), usize::from(body.str_count)),
+            Payload::Exec { body, strings } => {
+                assert_eq!(strings.count(), usize::from(body.str_count))
+            }
+            Payload::File { body, strings } => {
+                assert_eq!(strings.count(), usize::from(body.str_count))
+            }
             Payload::Net { .. } | Payload::Raw { .. } => {}
         }
     }

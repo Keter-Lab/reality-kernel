@@ -257,7 +257,11 @@ mod linux {
                 report.checks.push(Check::new(
                     "production_object_maps",
                     ok,
-                    if ok { "events_ringbuf present" } else { "events_ringbuf missing" },
+                    if ok {
+                        "events_ringbuf present"
+                    } else {
+                        "events_ringbuf missing"
+                    },
                 ));
             }
             Err(e) => report
@@ -452,7 +456,10 @@ mod linux {
             Check::new(
                 "ringbuf_records_decode",
                 records > 0 && decode_errors.is_empty(),
-                format!("{records} records, {} rejected {decode_errors:?}", decode_errors.len()),
+                format!(
+                    "{records} records, {} rejected {decode_errors:?}",
+                    decode_errors.len()
+                ),
             ),
             verdict_check("abi_roundtrip_file_open", file_result),
             verdict_check("abi_roundtrip_net_connect", net_result),
@@ -480,7 +487,12 @@ mod linux {
 
     fn verify_file(hdr: &rk_hdr, body: &rk_payload_file, expected: &ExpectedFile) -> Vec<String> {
         let mut p = Vec::new();
-        expect(&mut p, "verdict", u32::from(hdr.verdict), rk_verdict::RK_VERDICT_ALLOW);
+        expect(
+            &mut p,
+            "verdict",
+            u32::from(hdr.verdict),
+            rk_verdict::RK_VERDICT_ALLOW,
+        );
         expect(&mut p, "policy_gen", hdr.policy_gen, TEST_POLICY_GEN);
         expect(&mut p, "pid_set", hdr.pid != 0, true);
         expect(&mut p, "file_ino", body.file_ino, expected.ino);
@@ -491,7 +503,12 @@ mod linux {
 
     fn verify_net(hdr: &rk_hdr, body: &rk_payload_net) -> Vec<String> {
         let mut p = Vec::new();
-        expect(&mut p, "verdict", u32::from(hdr.verdict), rk_verdict::RK_VERDICT_DENY);
+        expect(
+            &mut p,
+            "verdict",
+            u32::from(hdr.verdict),
+            rk_verdict::RK_VERDICT_DENY,
+        );
         expect(&mut p, "rule_id", hdr.rule_id, TEST_RULE_ID);
         expect(&mut p, "dport", body.dport, TEST_PORT);
         expect(&mut p, "family", body.family, AF_INET);
@@ -549,7 +566,11 @@ mod tests {
         assert!(effective_caps("CapEff:\t0000000000000000").is_empty());
     }
 
-    fn report(programs: Vec<ProgramReport>, checks: Vec<Check>, all_features: bool) -> SelftestReport {
+    fn report(
+        programs: Vec<ProgramReport>,
+        checks: Vec<Check>,
+        all_features: bool,
+    ) -> SelftestReport {
         SelftestReport {
             sensor_version: "test",
             abi_version: 1,

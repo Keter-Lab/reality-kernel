@@ -72,8 +72,13 @@ fn build_sensor(release: bool) -> Result<()> {
     };
     build_bpf(arch)?;
     let mut cmd = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
-    cmd.current_dir(workspace_root())
-        .args(["build", "-p", "rk-sensor", "--features", "embedded-bpf"]);
+    cmd.current_dir(workspace_root()).args([
+        "build",
+        "-p",
+        "rk-sensor",
+        "--features",
+        "embedded-bpf",
+    ]);
     if release {
         cmd.arg("--release");
     }

@@ -53,5 +53,7 @@ typedef unsigned long long __u64;
         .expect("bindgen failed to process rk-bpf/include/rk_abi.h");
 
     let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("rk_abi.rs");
-    bindings.write_to_file(&out).expect("failed to write generated ABI bindings");
+    bindings
+        .write_to_file(&out)
+        .expect("failed to write generated ABI bindings");
 }

@@ -2,7 +2,9 @@
 
 // Release builds must carry their BPF objects; there is no runtime path override.
 #[cfg(all(not(debug_assertions), not(feature = "embedded-bpf")))]
-compile_error!("release builds of rk-sensor must embed the BPF objects: build with `--features embedded-bpf`");
+compile_error!(
+    "release builds of rk-sensor must embed the BPF objects: build with `--features embedded-bpf`"
+);
 
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,7 +33,10 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
         [flag] if flag == "--version" || flag == "-V" => Ok(Mode::Version),
         [flag] if flag == "--help" || flag == "-h" => Ok(Mode::Help),
         [flag, rest @ ..] if flag == selftest::CHILD_FLAG => Ok(Mode::SelftestChild(rest.to_vec())),
-        _ => Err(format!("unrecognised arguments: {}\n{USAGE}", args.join(" "))),
+        _ => Err(format!(
+            "unrecognised arguments: {}\n{USAGE}",
+            args.join(" ")
+        )),
     }
 }
 
@@ -87,8 +92,7 @@ fn main() -> ExitCode {
 fn run_daemon() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .json()
         .init();

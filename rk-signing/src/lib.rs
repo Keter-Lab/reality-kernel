@@ -40,7 +40,8 @@ impl RkSigner {
     }
 
     pub fn new(secret_key: &str) -> Self {
-        Self::try_new(secret_key).expect("CRITICAL: Failed to initialize RkSigner. RK_SECRET_KEY cannot be empty.")
+        Self::try_new(secret_key)
+            .expect("CRITICAL: Failed to initialize RkSigner. RK_SECRET_KEY cannot be empty.")
     }
 
     pub fn sign(&self, payload: &str) -> Result<String, SigningError> {
@@ -76,7 +77,12 @@ impl RkSigner {
         hex::encode(hasher.finalize())
     }
 
-    pub fn signing_payload(action_id: &str, proof_hash: &str, verdict: &str, confidence: f64) -> String {
+    pub fn signing_payload(
+        action_id: &str,
+        proof_hash: &str,
+        verdict: &str,
+        confidence: f64,
+    ) -> String {
         format!("{action_id}:{proof_hash}:{verdict}:{confidence}")
     }
 }

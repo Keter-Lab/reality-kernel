@@ -14,9 +14,9 @@ use rk_session::update_and_check_session;
 use rk_signing::RkSigner;
 use rk_supabase::{ApiKeyRow, AuditRow, RkSupabaseClient, SupabaseError};
 use rk_types::{
-    CheckRequest, CheckResponse, DirectOverrideRequest, HealthResponse, MeResponse, OverrideRequest,
-    OverrideResponse, ScanRequest, ScanResponse, ScanResult, TokenRequest, TokenResponse,
-    VersionResponse, WebhookRequest,
+    CheckRequest, CheckResponse, DirectOverrideRequest, HealthResponse, MeResponse,
+    OverrideRequest, OverrideResponse, ScanRequest, ScanResponse, ScanResult, TokenRequest,
+    TokenResponse, VersionResponse, WebhookRequest,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -104,7 +104,13 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(ErrorBody { detail: self.detail })).into_response()
+        (
+            self.status,
+            Json(ErrorBody {
+                detail: self.detail,
+            }),
+        )
+            .into_response()
     }
 }
 
@@ -419,7 +425,10 @@ struct SessionTokenPayload {
     scopes: Option<Vec<String>>,
 }
 
-async fn me(State(state): State<AppState>, headers: HeaderMap) -> Result<impl IntoResponse, ApiError> {
+async fn me(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
     let auth = auth_from_headers(&state, &headers).await?;
     if auth.is_session_token {
         return Err(ApiError::new(
@@ -550,14 +559,25 @@ async fn check(
         .unwrap_or_default();
 
     if !idempotency_key.is_empty() {
-        if let Some((payload, credit_headers)) = idempotent_get(&state, &auth.key_hash, &idempotency_key).await {
+        if let Some((payload, credit_headers)) =
+            idempotent_get(&state, &auth.key_hash, &idempotency_key).await
+        {
             return Ok(with_headers(Json(payload), credit_headers, true));
         }
     }
 
     let policy_violation = verify_policy_violation(&command, body.policy.as_ref(), &auth.scopes);
     if let Some(violation) = policy_violation {
-        let out = policy_block_flow(&state, &auth, &body, &headers, &command, &prime_intent, &violation).await?;
+        let out = policy_block_flow(
+            &state,
+            &auth,
+            &body,
+            &headers,
+            &command,
+            &prime_intent,
+            &violation,
+        )
+        .await?;
         if !idempotency_key.is_empty() {
             idempotent_put(&state, &auth.key_hash, &idempotency_key, &out.0, &out.1).await;
         }
@@ -565,7 +585,11 @@ async fn check(
     }
 
     let is_fast = rk_engine_core::is_fast_path(&command);
-    let cost = if is_fast { FAST_PATH_COST } else { FULL_ENGINE_COST };
+    let cost = if is_fast {
+        FAST_PATH_COST
+    } else {
+        FULL_ENGINE_COST
+    };
 
     if auth.limit > 0 && auth.row.credits_used + cost > auth.limit {
         return Err(ApiError::new(
@@ -575,8 +599,17 @@ async fn check(
     }
 
     let start = Instant::now();
-    let session_ledger_id = format!("{}_{}", auth.key_hash, if auth.agent_id.is_empty() { "default" } else { &auth.agent_id });
-    let (is_escalated, session_evidence) = update_and_check_session(&session_ledger_id, &command, &state.supabase).await;
+    let session_ledger_id = format!(
+        "{}_{}",
+        auth.key_hash,
+        if auth.agent_id.is_empty() {
+            "default"
+        } else {
+            &auth.agent_id
+        }
+    );
+    let (is_escalated, session_evidence) =
+        update_and_check_session(&session_ledger_id, &command, &state.supabase).await;
 
     let mut decision = analyse(&command, &prime_intent, 5);
 
@@ -712,11 +745,19 @@ async fn check(
         ed25519_pubkey: Some(state.signer.public_key_b64().to_string()),
     };
 
-    let out_json = serde_json::to_value(&out).map_err(|e| ApiError::internal_logged("check_serialize", e))?;
+    let out_json =
+        serde_json::to_value(&out).map_err(|e| ApiError::internal_logged("check_serialize", e))?;
     let credit_headers = credit_headers(auth.limit, new_used);
 
     if !idempotency_key.is_empty() {
-        idempotent_put(&state, &auth.key_hash, &idempotency_key, &out_json, &credit_headers).await;
+        idempotent_put(
+            &state,
+            &auth.key_hash,
+            &idempotency_key,
+            &out_json,
+            &credit_headers,
+        )
+        .await;
     }
 
     Ok(with_headers(Json(out_json), credit_headers, false))
@@ -732,7 +773,9 @@ async fn policy_block_flow(
     violation: &str,
 ) -> Result<(serde_json::Value, HashMap<String, String>), ApiError> {
     let ts = Utc::now().timestamp_millis();
-    let action_id = hex::encode(Sha256::digest(format!("POLICY_BLOCK:{command}:{ts}").as_bytes()))[..12]
+    let action_id = hex::encode(Sha256::digest(
+        format!("POLICY_BLOCK:{command}:{ts}").as_bytes(),
+    ))[..12]
         .to_string();
 
     let prev_hash = previous_hash(state, &auth.key_hash).await?;
@@ -822,7 +865,8 @@ async fn policy_block_flow(
         ed25519_pubkey: Some(state.signer.public_key_b64().to_string()),
     };
 
-    let body = serde_json::to_value(response).map_err(|e| ApiError::internal_logged("policy_block_serialize", e))?;
+    let body = serde_json::to_value(response)
+        .map_err(|e| ApiError::internal_logged("policy_block_serialize", e))?;
     Ok((body, credit_headers(auth.limit, new_used)))
 }
 
@@ -860,8 +904,11 @@ async fn scan(
             entry.label.clone()
         };
 
-        let policy_violation = verify_policy_violation(&command, body.policy.as_ref(), &auth.scopes);
-        let (verdict, confidence, evidence, action_id, proof_hash, cost) = if let Some(v) = policy_violation {
+        let policy_violation =
+            verify_policy_violation(&command, body.policy.as_ref(), &auth.scopes);
+        let (verdict, confidence, evidence, action_id, proof_hash, cost) = if let Some(v) =
+            policy_violation
+        {
             let cost = FAST_PATH_COST;
             if auth.limit > 0 && auth.row.credits_used + total_cost + cost > auth.limit {
                 return Err(ApiError::new(
@@ -875,13 +922,29 @@ async fn scan(
                 .await
                 .map_err(|e| ApiError::generic_supabase(e, "deduct_credits(scan/policy)"))?;
             let p = hex::encode(Sha256::digest(
-                format!("POLICY_BLOCK:{}:{}:{}", truncate(&command, 200), truncate(&intent, 200), Utc::now().timestamp_millis())
-                    .as_bytes(),
+                format!(
+                    "POLICY_BLOCK:{}:{}:{}",
+                    truncate(&command, 200),
+                    truncate(&intent, 200),
+                    Utc::now().timestamp_millis()
+                )
+                .as_bytes(),
             ));
-            ("BLOCK".to_string(), 1.0, vec![v], p[..12].to_string(), p, cost)
+            (
+                "BLOCK".to_string(),
+                1.0,
+                vec![v],
+                p[..12].to_string(),
+                p,
+                cost,
+            )
         } else {
             let is_fast = rk_engine_core::is_fast_path(&command);
-            let cost = if is_fast { FAST_PATH_COST } else { FULL_ENGINE_COST };
+            let cost = if is_fast {
+                FAST_PATH_COST
+            } else {
+                FULL_ENGINE_COST
+            };
             if auth.limit > 0 && auth.row.credits_used + total_cost + cost > auth.limit {
                 return Err(ApiError::new(
                     StatusCode::PAYMENT_REQUIRED,
@@ -903,8 +966,15 @@ async fn scan(
             }
 
             let p = hex::encode(Sha256::digest(
-                format!("{}:{}:{}:{}:{}", d.action_id, truncate(&command, 200), truncate(&intent, 200), d.verdict, d.confidence)
-                    .as_bytes(),
+                format!(
+                    "{}:{}:{}:{}:{}",
+                    d.action_id,
+                    truncate(&command, 200),
+                    truncate(&intent, 200),
+                    d.verdict,
+                    d.confidence
+                )
+                .as_bytes(),
             ));
             (d.verdict, d.confidence, d.evidence, d.action_id, p, cost)
         };
@@ -981,8 +1051,13 @@ async fn scan(
         results,
     };
 
-    let payload = serde_json::to_value(response).map_err(|e| ApiError::internal_logged("scan_serialize", e))?;
-    Ok(with_headers(Json(payload), credit_headers(auth.limit, last_used), false))
+    let payload = serde_json::to_value(response)
+        .map_err(|e| ApiError::internal_logged("scan_serialize", e))?;
+    Ok(with_headers(
+        Json(payload),
+        credit_headers(auth.limit, last_used),
+        false,
+    ))
 }
 
 async fn override_verdict(
@@ -1003,7 +1078,9 @@ async fn override_verdict(
         .get_audit_action(&auth.key_hash, &body.action_id)
         .await
         .map_err(|e| ApiError::generic_supabase(e, "get_audit_action"))?
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Action not found or access denied."))?;
+        .ok_or_else(|| {
+            ApiError::new(StatusCode::NOT_FOUND, "Action not found or access denied.")
+        })?;
 
     let verdict = if body.decision == "approved" {
         "WARN_APPROVED"
@@ -1013,12 +1090,22 @@ async fn override_verdict(
     .to_string();
 
     let override_action_id = hex::encode(Sha256::digest(
-        format!("OVERRIDE:{}:{}:{}", body.action_id, verdict, Utc::now().timestamp_millis()).as_bytes(),
+        format!(
+            "OVERRIDE:{}:{}:{}",
+            body.action_id,
+            verdict,
+            Utc::now().timestamp_millis()
+        )
+        .as_bytes(),
     ))[..12]
         .to_string();
 
     let proof_hash = hex::encode(Sha256::digest(
-        format!("{override_action_id}:override:{}:{verdict}:1.0::{}", body.action_id, orig.proof_hash).as_bytes(),
+        format!(
+            "{override_action_id}:override:{}:{verdict}:1.0::{}",
+            body.action_id, orig.proof_hash
+        )
+        .as_bytes(),
     ));
 
     let mut evidence = vec![
@@ -1034,7 +1121,12 @@ async fn override_verdict(
 
     let signature = state
         .signer
-        .sign(&RkSigner::signing_payload(&override_action_id, &proof_hash, &verdict, 1.0))
+        .sign(&RkSigner::signing_payload(
+            &override_action_id,
+            &proof_hash,
+            &verdict,
+            1.0,
+        ))
         .map_err(|e| ApiError::internal_logged("override_sign", e))?;
 
     state
@@ -1105,7 +1197,9 @@ async fn override_direct(
         .get_audit_action(&auth.key_hash, &body.action_id)
         .await
         .map_err(|e| ApiError::generic_supabase(e, "get_audit_action(direct)"))?
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Action not found or access denied."))?;
+        .ok_or_else(|| {
+            ApiError::new(StatusCode::NOT_FOUND, "Action not found or access denied.")
+        })?;
 
     let verdict = if body.decision == "approved" {
         "WARN_APPROVED"
@@ -1115,18 +1209,32 @@ async fn override_direct(
     .to_string();
 
     let override_action_id = hex::encode(Sha256::digest(
-        format!("OVERRIDE:{}:{}:{}", body.action_id, verdict, Utc::now().timestamp_millis()).as_bytes(),
+        format!(
+            "OVERRIDE:{}:{}:{}",
+            body.action_id,
+            verdict,
+            Utc::now().timestamp_millis()
+        )
+        .as_bytes(),
     ))[..12]
         .to_string();
 
     let proof_hash = hex::encode(Sha256::digest(
-        format!("{override_action_id}:direct-override:{}:{verdict}:1.0::{}", body.action_id, orig.proof_hash)
-            .as_bytes(),
+        format!(
+            "{override_action_id}:direct-override:{}:{verdict}:1.0::{}",
+            body.action_id, orig.proof_hash
+        )
+        .as_bytes(),
     ));
 
     let signature = state
         .signer
-        .sign(&RkSigner::signing_payload(&override_action_id, &proof_hash, &verdict, 1.0))
+        .sign(&RkSigner::signing_payload(
+            &override_action_id,
+            &proof_hash,
+            &verdict,
+            1.0,
+        ))
         .map_err(|e| ApiError::internal_logged("override_direct_sign", e))?;
 
     state
@@ -1156,7 +1264,9 @@ async fn override_direct(
         .await
         .map_err(|e| ApiError::generic_supabase(e, "insert_audit(direct_override)"))?;
 
-    Ok(Json(json!({"ok": true, "verdict": verdict, "override_action_id": override_action_id})))
+    Ok(Json(
+        json!({"ok": true, "verdict": verdict, "override_action_id": override_action_id}),
+    ))
 }
 
 async fn save_webhook(
@@ -1378,7 +1488,11 @@ fn remaining(limit: i64, used: i64) -> i64 {
     }
 }
 
-fn with_headers<T: IntoResponse>(payload: T, headers: HashMap<String, String>, replay: bool) -> Response {
+fn with_headers<T: IntoResponse>(
+    payload: T,
+    headers: HashMap<String, String>,
+    replay: bool,
+) -> Response {
     let mut response = payload.into_response();
     for (k, v) in headers {
         if let (Ok(name), Ok(value)) = (HeaderName::from_str(&k), HeaderValue::from_str(&v)) {
@@ -1398,9 +1512,7 @@ fn matches_fail(fail_on: &str, verdict: &str) -> bool {
     match fail_on {
         "BLOCK" => verdict == "BLOCK",
         "WARN" => ["WARN", "WARN_APPROVED", "WARN_REJECTED"].contains(&verdict),
-        "BLOCK_WARN" => {
-            ["BLOCK", "WARN", "WARN_APPROVED", "WARN_REJECTED"].contains(&verdict)
-        }
+        "BLOCK_WARN" => ["BLOCK", "WARN", "WARN_APPROVED", "WARN_REJECTED"].contains(&verdict),
         _ => verdict == "BLOCK",
     }
 }
@@ -1410,8 +1522,12 @@ fn validate_discord_webhook(url: &str) -> Result<String, ApiError> {
     if cleaned.is_empty() {
         return Ok(String::new());
     }
-    let parsed = reqwest::Url::parse(cleaned)
-        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "Webhook URL must be a valid Discord HTTPS webhook."))?;
+    let parsed = reqwest::Url::parse(cleaned).map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Webhook URL must be a valid Discord HTTPS webhook.",
+        )
+    })?;
     let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
     let allowed = [
         "discord.com",

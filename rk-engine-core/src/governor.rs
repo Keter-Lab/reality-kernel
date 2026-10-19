@@ -25,7 +25,13 @@ pub fn map_decision(decision_str: &str, max_div: f64, static_floor: f64) -> Stri
     }
 }
 
-pub fn compute_confidence(max_div: f64, worlds_b: usize, total: usize, static_floor: f64, evidence_count: usize) -> f64 {
+pub fn compute_confidence(
+    max_div: f64,
+    worlds_b: usize,
+    total: usize,
+    static_floor: f64,
+    evidence_count: usize,
+) -> f64 {
     if total == 0 {
         return static_floor.max(0.0);
     }
@@ -43,21 +49,42 @@ pub fn evaluate(
     static_floor: f64,
     evidence_count: usize,
 ) -> AnalysisResult {
-    let decision_str = basin_summary.get("decision").and_then(|v| v.as_str()).unwrap_or("SAFE");
-    let max_div = basin_summary.get("max_divergence").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let decision_str = basin_summary
+        .get("decision")
+        .and_then(|v| v.as_str())
+        .unwrap_or("SAFE");
+    let max_div = basin_summary
+        .get("max_divergence")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let evidence = basin_summary
         .get("evidence")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
-    let worlds_b = basin_summary.get("worlds_in_B").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let worlds_b = basin_summary
+        .get("worlds_in_B")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as usize;
 
     let verdict = map_decision(decision_str, max_div, static_floor);
-    let confidence = compute_confidence(max_div, worlds_b, worlds_count, static_floor, evidence_count + evidence.len());
+    let confidence = compute_confidence(
+        max_div,
+        worlds_b,
+        worlds_count,
+        static_floor,
+        evidence_count + evidence.len(),
+    );
 
     let ts = now_secs();
     let action_seed = format!("{}:{}:{}", command, prime_intent, ts);
-    let action_id = hex12(&action_seed).or_else(|| Some(Uuid::new_v4().simple().to_string()[..12].to_string())).unwrap();
+    let action_id = hex12(&action_seed)
+        .or_else(|| Some(Uuid::new_v4().simple().to_string()[..12].to_string()))
+        .unwrap();
 
     let record = serde_json::json!({
         "id": action_id,
@@ -68,7 +95,11 @@ pub fn evaluate(
         "div": max_div,
     });
     let mut hasher = Sha256::new();
-    hasher.update(serde_json::to_string(&record).unwrap_or_default().as_bytes());
+    hasher.update(
+        serde_json::to_string(&record)
+            .unwrap_or_default()
+            .as_bytes(),
+    );
     let proof_hash = hex::encode(hasher.finalize());
 
     AnalysisResult {
@@ -84,7 +115,10 @@ pub fn evaluate(
 }
 
 fn now_secs() -> f64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 fn hex12(payload: &str) -> Option<String> {

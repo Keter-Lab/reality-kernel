@@ -88,7 +88,10 @@ impl fmt::Display for DecodeError {
             DecodeError::UnknownType(t) => write!(f, "unknown event type {t}"),
             DecodeError::UnknownVerdict(v) => write!(f, "unknown verdict {v}"),
             DecodeError::BodyTooShort { needed, provided } => {
-                write!(f, "event body too short: need {needed} bytes, got {provided}")
+                write!(
+                    f,
+                    "event body too short: need {needed} bytes, got {provided}"
+                )
             }
             DecodeError::MalformedStrings => f.write_str("string tail is truncated or malformed"),
             DecodeError::TrailingBytes(n) => write!(f, "{n} unexpected trailing bytes"),
@@ -373,7 +376,10 @@ pub(crate) mod tests {
             panic!("expected exec payload");
         };
         assert_eq!(body.file_ino, 1234);
-        assert_eq!(strings.collect::<Vec<_>>(), vec![&b"bash"[..], b"/bin/bash", b"-c"]);
+        assert_eq!(
+            strings.collect::<Vec<_>>(),
+            vec![&b"bash"[..], b"/bin/bash", b"-c"]
+        );
     }
 
     #[test]
@@ -397,7 +403,10 @@ pub(crate) mod tests {
         let mut body: rk_payload_net = Zeroable::zeroed();
         body.daddr_v6 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 192, 0, 2, 1];
         body.dport = 9;
-        let rec = record(&hdr(rk_event_type::RK_EV_NET_CONNECT, 1), bytemuck::bytes_of(&body));
+        let rec = record(
+            &hdr(rk_event_type::RK_EV_NET_CONNECT, 1),
+            bytemuck::bytes_of(&body),
+        );
         assert_eq!(decode(&rec).unwrap().payload, Payload::Net { body });
     }
 
@@ -417,7 +426,10 @@ pub(crate) mod tests {
         let mut h = hdr(rk_event_type::RK_EV_EXEC, 0);
         h.abi = 2;
         let rec = record(&h, &exec_payload(&[]));
-        assert!(matches!(decode(&rec), Err(DecodeError::AbiMismatch { found: 2, .. })));
+        assert!(matches!(
+            decode(&rec),
+            Err(DecodeError::AbiMismatch { found: 2, .. })
+        ));
     }
 
     #[test]
@@ -431,14 +443,20 @@ pub(crate) mod tests {
     fn rejects_oversized_payload_len() {
         let mut rec = record(&hdr(rk_event_type::RK_EV_EXEC, 0), &[]);
         rec[48..52].copy_from_slice(&(MAX_PAYLOAD as u32 + 1).to_ne_bytes());
-        assert_eq!(decode(&rec), Err(DecodeError::PayloadTooLarge(MAX_PAYLOAD + 1)));
+        assert_eq!(
+            decode(&rec),
+            Err(DecodeError::PayloadTooLarge(MAX_PAYLOAD + 1))
+        );
     }
 
     #[test]
     fn rejects_length_mismatch() {
         let mut rec = record(&hdr(rk_event_type::RK_EV_EXEC, 0), &exec_payload(&[]));
         rec.push(0);
-        assert!(matches!(decode(&rec), Err(DecodeError::LengthMismatch { .. })));
+        assert!(matches!(
+            decode(&rec),
+            Err(DecodeError::LengthMismatch { .. })
+        ));
     }
 
     #[test]
