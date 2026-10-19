@@ -542,11 +542,19 @@ mod tests {
 
     #[test]
     fn kernel_dev_encoding() {
+        /// glibc `makedev`.
+        fn makedev(major: u64, minor: u64) -> u64 {
+            ((major & 0xfff) << 8)
+                | ((major & !0xfff) << 32)
+                | (minor & 0xff)
+                | ((minor & !0xff) << 12)
+        }
         // 8:1 (sda1) in glibc encoding is 0x801.
         assert_eq!(kernel_dev(0x801), (8 << 20) | 1);
-        // Large minor (259:65536) exercises the split minor bits.
-        let st_dev = (259u64 << 8) | (65536u64 & 0xff) | ((65536u64 & !0xff) << 12);
-        assert_eq!(kernel_dev(st_dev), (259 << 20) | 65536);
+        // Kernel dev_t has 12 major / 20 minor bits; cover both split ranges.
+        for (major, minor) in [(8, 1), (259, 65536), (4095, 255), (4095, 1_048_575)] {
+            assert_eq!(kernel_dev(makedev(major, minor)), (major << 20) | minor);
+        }
     }
 
     #[test]

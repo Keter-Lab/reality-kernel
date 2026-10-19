@@ -1,3 +1,6 @@
+//! Golden-case parity tests for rk-engine-core (test-only crate).
+#![cfg(test)]
+
 use anyhow::Context;
 use serde::Deserialize;
 use std::fs;
