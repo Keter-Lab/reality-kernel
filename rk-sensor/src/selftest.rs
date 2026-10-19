@@ -441,10 +441,10 @@ mod linux {
                             file_result = Some(verify_file(&event.hdr, &body, expected));
                         }
                     }
-                    Payload::Net { body } if body.daddr_v6 == TEST_NET_1_MAPPED => {
-                        if net_result.is_none() {
-                            net_result = Some(verify_net(&event.hdr, &body));
-                        }
+                    Payload::Net { body }
+                        if body.daddr_v6 == TEST_NET_1_MAPPED && net_result.is_none() =>
+                    {
+                        net_result = Some(verify_net(&event.hdr, &body));
                     }
                     _ => {}
                 },

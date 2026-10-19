@@ -41,7 +41,7 @@ jobs:
         run: .github/scripts/run-logged.sh rustfmt cargo fmt --all -- --check
 
       - name: clippy (warnings are errors)
-        run: .github/scripts/run-logged.sh clippy cargo clippy --workspace --all-targets -- -D warnings
+        run: .github/scripts/run-logged.sh clippy cargo clippy --workspace --all-targets --keep-going -- -D warnings
 
       - name: cargo-deny (licenses, bans, sources, advisories)
         run: .github/scripts/run-logged.sh cargo-deny cargo deny check
