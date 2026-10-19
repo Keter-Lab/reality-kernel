@@ -142,7 +142,8 @@ jobs:
           ls -l /dev/kvm
 
       - name: Install QEMU
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils
+        # vmtest kernel mode runs the host's qemu-ga inside the guest.
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils qemu-guest-agent
 
       - name: Fetch pinned vmtest and bpftool
         run: |

@@ -37,6 +37,23 @@ jobs:
       - name: Refresh Cargo.lock for workspace changes
         run: cargo update --workspace
 
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-audit
+
+      # Semver-compatible upgrades for every crate with a RustSec advisory
+      # (vulnerabilities and unsound/unmaintained warnings). Upgrades that need a
+      # manifest change still fail cargo-deny in CI and are fixed by hand.
+      - name: Upgrade crates with advisories
+        run: |
+          cargo audit --json > audit.json || true
+          jq -r '[.vulnerabilities.list[]?.package.name, (.warnings // {} | to_entries[] | .value[]?.package.name)] | unique[]' audit.json \
+            | while read -r crate; do
+                echo "cargo update -p $crate"
+                cargo update -p "$crate" || echo "::warning::could not update $crate automatically"
+              done
+          rm -f audit.json
+
       - name: Commit and push
         run: |
           if git diff --quiet; then

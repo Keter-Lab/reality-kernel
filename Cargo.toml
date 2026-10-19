@@ -45,7 +45,7 @@ thiserror = "2"
 regex = "1"
 shell-words = "1"
 unicode-normalization = "0.1"
-lru = "0.16"
+lru = "0.18"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
