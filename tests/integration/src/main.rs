@@ -17,7 +17,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use aya::maps::{MapData, PerCpuArray, RingBuf};
 use aya::Btf;
-use rk_ebpf_common::rk_counter;
+use rk_ebpf_common::{rk_counter, rk_exec_flag, rk_verdict};
+use rk_sensor::decoder::Payload;
 use serde::{Deserialize, Serialize};
 
 /// A child that does not exit within this time is killed and fails its test,
@@ -82,6 +83,17 @@ proto = ["tcp", "udp"]
 cidr = "fd99::/64"
 proto = ["tcp", "udp"]
 
+[profiles.enforce-profile.exec]
+default = "deny"
+allow = [
+    "/bin/true",
+    "/bin/sh",
+    "/run/rk-test/allowed_script.sh",
+    "/run/rk-test/denied_interp_script.sh",
+    "/run/rk-test/symlink_bin",
+    "/run/rk-test/replaced_bin",
+]
+
 [profiles.audit-profile]
 mode = "audit"
 network.default = "allow"
@@ -90,6 +102,15 @@ network.default = "allow"
 cidr = "10.99.0.0/24"
 proto = ["tcp", "udp"]
 
+[profiles.audit-profile.exec]
+default = "deny"
+
+[profiles.unlinked-profile]
+mode = "enforce"
+network.default = "allow"
+exec.default = "allow"
+exec.allow_unlinked = true
+
 [[bindings]]
 cgroup = "rk.slice/enforce"
 profile = "enforce-profile"
@@ -97,6 +118,10 @@ profile = "enforce-profile"
 [[bindings]]
 cgroup = "rk.slice/audit"
 profile = "audit-profile"
+
+[[bindings]]
+cgroup = "rk.slice/unlinked"
+profile = "unlinked-profile"
 "#;
 
 const POLICY_B: &str = r#"
@@ -125,6 +150,18 @@ proto = ["tcp", "udp"]
 cidr = "fd99::/64"
 proto = ["tcp", "udp"]
 
+[profiles.enforce-profile.exec]
+default = "deny"
+allow = [
+    "/bin/true",
+    "/bin/sh",
+    "/run/rk-test/allowed_script.sh",
+    "/run/rk-test/denied_interp_script.sh",
+    "/run/rk-test/symlink_bin",
+    "/run/rk-test/replaced_bin",
+    "/run/rk-test/reload_bin",
+]
+
 [profiles.audit-profile]
 mode = "audit"
 network.default = "allow"
@@ -133,6 +170,15 @@ network.default = "allow"
 cidr = "10.99.0.0/24"
 proto = ["tcp", "udp"]
 
+[profiles.audit-profile.exec]
+default = "deny"
+
+[profiles.unlinked-profile]
+mode = "enforce"
+network.default = "allow"
+exec.default = "allow"
+exec.allow_unlinked = true
+
 [[bindings]]
 cgroup = "rk.slice/enforce"
 profile = "enforce-profile"
@@ -140,6 +186,10 @@ profile = "enforce-profile"
 [[bindings]]
 cgroup = "rk.slice/audit"
 profile = "audit-profile"
+
+[[bindings]]
+cgroup = "rk.slice/unlinked"
+profile = "unlinked-profile"
 "#;
 
 fn main() {
@@ -223,8 +273,8 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         }
     }
 
-    if let Err(e) = rk_sensor::policy::attach_network(&mut ebpf, cgroup_slice) {
-        checks.push(TestCheck::fail("attach_network", format!("{e:#}")));
+    if let Err(e) = rk_sensor::policy::attach_all(&mut ebpf, cgroup_slice) {
+        checks.push(TestCheck::fail("attach_all", format!("{e:#}")));
         return;
     }
 
@@ -644,7 +694,586 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         ))
     });
 
-    // Drop rk.bpf.o instance before loading rk_emitfail.bpf.o
+    // ------------------------------------------------------------------------
+    // Phase 3 process execution tests (docs/design/phase-3.md §7)
+    // ------------------------------------------------------------------------
+
+    run_test(checks, "exec_enforce_unlisted_denied", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["eperm", "/run/rk-test/unlisted_bin"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+        })?;
+        if ev.rule_id != 0 {
+            anyhow::bail!("expected rule_id == 0, got {}", ev.rule_id);
+        }
+        if (ev.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0 {
+            anyhow::bail!("expected RK_EXEC_DECISION flag set");
+        }
+        Ok("unlisted executable denied with EPERM; emitted decision deny event with rule 0".into())
+    });
+
+    run_test(checks, "exec_enforce_listed_runs", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+        let expected_true_rule_id = engine
+            .policy()
+            .and_then(|p| {
+                p.origins
+                    .iter()
+                    .find(|o| o.profile == "enforce-profile" && o.origin.contains("/bin/true"))
+                    .map(|o| o.id)
+            })
+            .context("rule for /bin/true not found in origins")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["ok", "/bin/true"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+        })?;
+        if ev.rule_id != expected_true_rule_id {
+            anyhow::bail!(
+                "expected rule_id == {expected_true_rule_id}, got {}",
+                ev.rule_id
+            );
+        }
+        Ok(format!(
+            "listed executable /bin/true ran successfully; emitted allow record with rule_id={expected_true_rule_id}"
+        ))
+    });
+
+    run_test(checks, "exec_audit_reports_would_deny", || {
+        let audit_cgroup_id = engine
+            .cgroup_id("rk.slice/audit")
+            .context("cgroup rk.slice/audit not bound")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/audit",
+            "exec_cmd",
+            &["ok", "/bin/true"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == audit_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY as u8
+        })?;
+        if ev.rule_id != 0 {
+            anyhow::bail!("expected rule_id == 0, got {}", ev.rule_id);
+        }
+        if !ev.filename.ends_with("/true") {
+            anyhow::bail!("expected filename ending in /true, got {}", ev.filename);
+        }
+        if (ev.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0 {
+            anyhow::bail!("expected RK_EXEC_DECISION flag set");
+        }
+        Ok(format!(
+            "unlisted exec in audit mode ran successfully; emitted audit-would-deny event with rule_id=0, cgroup_id={audit_cgroup_id}, filename={}",
+            ev.filename
+        ))
+    });
+
+    run_test(checks, "exec_records_full_argv", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+        let expected_sh_rule_id = engine
+            .policy()
+            .and_then(|p| {
+                p.origins
+                    .iter()
+                    .find(|o| o.profile == "enforce-profile" && o.origin.contains("/bin/sh"))
+                    .map(|o| o.id)
+            })
+            .context("rule for /bin/sh not found in origins")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["ok", "/bin/sh", "-c", "echo a b"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+        })?;
+        if ev.rule_id != expected_sh_rule_id {
+            anyhow::bail!(
+                "expected rule_id == {expected_sh_rule_id}, got {}",
+                ev.rule_id
+            );
+        }
+        let expected_argv = vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "echo a b".to_string(),
+        ];
+        if ev.argv != expected_argv {
+            anyhow::bail!(
+                "argv mismatch: expected {:?}, got {:?}",
+                expected_argv,
+                ev.argv
+            );
+        }
+        Ok(format!(
+            "exec record carried exact argv {:?} with rule_id={expected_sh_rule_id}",
+            ev.argv
+        ))
+    });
+
+    run_test(checks, "exec_records_truncation_flag", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+        let expected_true_rule_id = engine
+            .policy()
+            .and_then(|p| {
+                p.origins
+                    .iter()
+                    .find(|o| o.profile == "enforce-profile" && o.origin.contains("/bin/true"))
+                    .map(|o| o.id)
+            })
+            .context("rule for /bin/true not found in origins")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_large_argv",
+            &["/bin/true"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+        })?;
+        if ev.rule_id != expected_true_rule_id {
+            anyhow::bail!(
+                "expected rule_id == {expected_true_rule_id}, got {}",
+                ev.rule_id
+            );
+        }
+        if (ev.flags & rk_exec_flag::RK_EXEC_ARGV_TRUNCATED as u32) == 0 {
+            anyhow::bail!(
+                "expected RK_EXEC_ARGV_TRUNCATED flag set in flags={:#x}",
+                ev.flags
+            );
+        }
+        Ok(format!(
+            "exec record with oversized argv set RK_EXEC_ARGV_TRUNCATED (flags={:#x})",
+            ev.flags
+        ))
+    });
+
+    run_test(checks, "exec_reload_atomic", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+
+        drain_ringbuf(&mut ring)?;
+        let drops_start = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
+
+        let mut deny_gens = HashSet::new();
+        let mut allow_gens = HashSet::new();
+
+        deny_gens.insert(engine.generation());
+
+        let current_exe = std::env::current_exe().context("current_exe")?;
+        let procs = "/sys/fs/cgroup/rk.slice/enforce/cgroup.procs";
+
+        let child = Command::new(&current_exe)
+            .arg(workloads::CHILD_FLAG)
+            .arg(procs)
+            .arg("exec_reload_workload")
+            .arg("/run/rk-test/reload_bin")
+            .arg("250")
+            .arg("25000") // 25ms pace ~ 6s in guest VM
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("spawn exec_reload_workload child")?;
+
+        // Parent alternates A and B at least 6 times
+        for i in 0..6 {
+            if i % 2 == 0 {
+                engine.apply_text(&mut ebpf, POLICY_B)?;
+                allow_gens.insert(engine.generation());
+            } else {
+                engine.apply_text(&mut ebpf, POLICY_TEXT)?;
+                deny_gens.insert(engine.generation());
+            }
+        }
+
+        let output = wait_with_deadline(child, "exec_reload_workload child", CHILD_DEADLINE)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!(
+                "child failed with exit {:?}: {}",
+                output.status.code(),
+                stderr.trim()
+            );
+        }
+
+        #[derive(Deserialize)]
+        struct ChildCounts {
+            eperm: u64,
+            ok: u64,
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let counts: ChildCounts = serde_json::from_str(stdout.trim())
+            .with_context(|| format!("failed to parse child output: {stdout}"))?;
+
+        if counts.eperm + counts.ok < 200 {
+            anyhow::bail!(
+                "child performed {} execs, expected >= 200",
+                counts.eperm + counts.ok
+            );
+        }
+
+        let rb = &mut ring;
+        let mut deny_events = 0u64;
+        let mut allow_events = 0u64;
+        let drain_start = Instant::now();
+
+        while let Some(item) = rb.next() {
+            if drain_start.elapsed() > DRAIN_DEADLINE {
+                anyhow::bail!(
+                    "ring buffer still producing after {}s while reading exec reload events",
+                    DRAIN_DEADLINE.as_secs()
+                );
+            }
+            if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                if ev.hdr.cgroup_id == enforce_cgroup_id
+                    && ev.hdr.type_ == rk_ebpf_common::rk_event_type::RK_EV_EXEC as u16
+                {
+                    let gen = ev.hdr.policy_gen;
+                    let verdict = ev.hdr.verdict;
+                    if deny_gens.contains(&gen) {
+                        if verdict != rk_verdict::RK_VERDICT_DENY as u8 {
+                            anyhow::bail!(
+                                "event for deny gen {gen} had non-deny verdict {verdict}"
+                            );
+                        }
+                        deny_events += 1;
+                    } else if allow_gens.contains(&gen) {
+                        if verdict != rk_verdict::RK_VERDICT_ALLOW as u8 {
+                            anyhow::bail!(
+                                "event for allow gen {gen} had non-allow verdict {verdict}"
+                            );
+                        }
+                        allow_events += 1;
+                    } else {
+                        anyhow::bail!("event has unexpected policy_gen {gen}");
+                    }
+                }
+            }
+        }
+
+        let drops_end = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
+        let drops = drops_end.saturating_sub(drops_start);
+        if drops > 0 {
+            anyhow::bail!("expected zero drops during exec atomic reload, got {drops}");
+        }
+
+        if counts.eperm != deny_events {
+            anyhow::bail!(
+                "child EPERM count ({}) != deny events count ({})",
+                counts.eperm,
+                deny_events
+            );
+        }
+        if counts.ok != allow_events {
+            anyhow::bail!(
+                "child OK count ({}) != allow events count ({})",
+                counts.ok,
+                allow_events
+            );
+        }
+        if deny_events == 0 || allow_events == 0 {
+            anyhow::bail!(
+                "did not observe both generations (deny={}, allow={})",
+                deny_events,
+                allow_events
+            );
+        }
+
+        Ok(format!(
+            "{} execs over 6 flips: {} denied, {} allowed; 1:1 match with events, 0 drops",
+            counts.eperm + counts.ok,
+            deny_events,
+            allow_events
+        ))
+    });
+
+    run_test(checks, "exec_script_requires_interpreter", || {
+        // 1. Script is allowed, but interpreter is denied -> EPERM
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["eperm", "/run/rk-test/denied_interp_script.sh"],
+        )?;
+        // 2. Interpreter is allowed, but script is unlisted -> EPERM
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["eperm", "/run/rk-test/unlisted_script.sh"],
+        )?;
+        // 3. Both script and interpreter are allowed -> OK
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["ok", "/run/rk-test/allowed_script.sh"],
+        )?;
+        Ok("scripts require both script and interpreter allowed; denied if either is unlisted".into())
+    });
+
+    run_test(checks, "exec_unlinked_denied", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "memfd_exec",
+            &["eperm", "/bin/true"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+        })?;
+        if (ev.flags & rk_exec_flag::RK_EXEC_UNLINKED as u32) == 0 {
+            anyhow::bail!("expected RK_EXEC_UNLINKED flag set");
+        }
+        Ok("unlinked executable (memfd) denied with EPERM in enforce mode; RK_EXEC_UNLINKED flag recorded".into())
+    });
+
+    run_test(checks, "exec_unlinked_override_allows", || {
+        let unlinked_cgroup_id = engine
+            .cgroup_id("rk.slice/unlinked")
+            .context("cgroup rk.slice/unlinked not bound")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/unlinked",
+            "memfd_exec",
+            &["ok", "/bin/true"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == unlinked_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+        })?;
+        if (ev.flags & rk_exec_flag::RK_EXEC_UNLINKED as u32) == 0 {
+            anyhow::bail!("expected RK_EXEC_UNLINKED flag set");
+        }
+        Ok("unlinked executable (memfd) allowed under exec.allow_unlinked=true; RK_EXEC_UNLINKED flag recorded".into())
+    });
+
+    run_test(checks, "exec_symlink_resolves_to_target", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+        let expected_symlink_rule_id = engine
+            .policy()
+            .and_then(|p| {
+                p.origins
+                    .iter()
+                    .find(|o| o.profile == "enforce-profile" && o.origin.contains("symlink_bin"))
+                    .map(|o| o.id)
+            })
+            .context("rule for symlink_bin not found in origins")?;
+
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["ok", "/run/rk-test/symlink_bin"],
+        )?;
+
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+        })?;
+        if ev.rule_id != expected_symlink_rule_id {
+            anyhow::bail!(
+                "expected rule_id == {expected_symlink_rule_id}, got {}",
+                ev.rule_id
+            );
+        }
+        Ok(format!(
+            "symlink resolved to target at apply time and was permitted with rule_id={expected_symlink_rule_id}"
+        ))
+    });
+
+    run_test(checks, "exec_replaced_binary_denied_until_reload", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+        let expected_replaced_rule_id = engine
+            .policy()
+            .and_then(|p| {
+                p.origins
+                    .iter()
+                    .find(|o| o.profile == "enforce-profile" && o.origin.contains("replaced_bin"))
+                    .map(|o| o.id)
+            })
+            .context("rule for replaced_bin not found in origins")?;
+
+        // 1. Initial binary runs OK
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["ok", "/run/rk-test/replaced_bin"],
+        )?;
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+        })?;
+        if ev.rule_id != expected_replaced_rule_id {
+            anyhow::bail!("expected rule_id == {expected_replaced_rule_id}, got {}", ev.rule_id);
+        }
+
+        // 2. Replace binary via atomic rename (new inode)
+        fs::copy("/bin/true", "/run/rk-test/replaced_new")?;
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata("/run/rk-test/replaced_new")?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions("/run/rk-test/replaced_new", perms)?;
+        fs::rename("/run/rk-test/replaced_new", "/run/rk-test/replaced_bin")?;
+
+        // 3. Execution of replaced binary fails with EPERM (new inode not in map)
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["eperm", "/run/rk-test/replaced_bin"],
+        )?;
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+        })?;
+        if ev.rule_id != 0 {
+            anyhow::bail!("expected rule_id == 0 for replaced inode, got {}", ev.rule_id);
+        }
+
+        // 4. Policy reload re-resolves the new inode
+        engine.apply_text(&mut ebpf, POLICY_TEXT)?;
+
+        // 5. Execution succeeds again after reload
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["ok", "/run/rk-test/replaced_bin"],
+        )?;
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+        })?;
+        if ev.rule_id != expected_replaced_rule_id {
+            anyhow::bail!("expected rule_id == {expected_replaced_rule_id} after reload, got {}", ev.rule_id);
+        }
+
+        Ok("replaced binary denied due to inode change until policy reload re-resolved it".into())
+    });
+
+    run_test(checks, "exec_quarantine_blocks_exec_and_network", || {
+        let enforce_cgroup_id = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("cgroup rk.slice/enforce not bound")?;
+
+        drain_ringbuf(&mut ring)?;
+        // 1. Move enforce cgroup into quarantine
+        engine.quarantine(&mut ebpf, "rk.slice/enforce")?;
+
+        // 2. Previously allowed binary is denied with EPERM
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["eperm", "/bin/true"],
+        )?;
+        let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
+            e.cgroup_id == enforce_cgroup_id
+                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+        })?;
+        if ev.rule_id != 0 {
+            anyhow::bail!("expected rule_id == 0 in quarantine, got {}", ev.rule_id);
+        }
+
+        // 3. Previously allowed network connection is denied with EPERM
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["127.0.0.1:8080", "eperm"],
+        )?;
+
+        // 4. Release enforce cgroup from quarantine
+        engine.release(&mut ebpf, "rk.slice/enforce")?;
+
+        // 5. Allowed binary runs again
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "exec_cmd",
+            &["ok", "/bin/true"],
+        )?;
+
+        // 6. Allowed network connection succeeds again
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["127.0.0.1:8080", "ok"],
+        )?;
+
+        Ok("quarantine immediately blocked exec and network; release restored them".into())
+    });
+
+    run_test(checks, "exec_ungoverned_untouched", || {
+        spawn_child(
+            "/sys/fs/cgroup/ungoverned",
+            "exec_cmd",
+            &["ok", "/run/rk-test/unlisted_bin"],
+        )?;
+        Ok("processes outside rk.slice can execute unlisted binaries without hindrance".into())
+    });
+
+    run_test(checks, "exec_unbound_sibling_untouched", || {
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/ungoverned-sibling",
+            "exec_cmd",
+            &["ok", "/run/rk-test/unlisted_bin"],
+        )?;
+        Ok("unbound sibling inside rk.slice can execute unlisted binaries without hindrance".into())
+    });
+
+    // Drop ring and rk.bpf.o instance before loading rk_emitfail.bpf.o
+    drop(ring);
     drop(ebpf);
 
     // 2. Run verdict suite against rk_emitfail.bpf.o
@@ -666,7 +1295,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             }
         }
 
-        rk_sensor::policy::attach_network(&mut ebpf_fail, cgroup_slice)?;
+        rk_sensor::policy::attach_all(&mut ebpf_fail, cgroup_slice)?;
         let mut engine_fail = rk_sensor::policy::PolicyEngine::default();
         engine_fail.apply_text(&mut ebpf_fail, POLICY_TEXT)?;
 
@@ -716,6 +1345,76 @@ fn drain_ringbuf(rb: &mut RingBuf<MapData>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct CapturedExecEvent {
+    verdict: u8,
+    rule_id: u32,
+    cgroup_id: u64,
+    #[allow(dead_code)]
+    policy_gen: u64,
+    flags: u32,
+    filename: String,
+    argv: Vec<String>,
+}
+
+#[cfg(target_os = "linux")]
+fn poll_exec_event<F>(
+    rb: &mut RingBuf<MapData>,
+    timeout: Duration,
+    predicate: F,
+) -> Result<CapturedExecEvent>
+where
+    F: Fn(&CapturedExecEvent) -> bool,
+{
+    let start = Instant::now();
+    let mut records = 0u64;
+    while start.elapsed() < timeout {
+        while let Some(item) = rb.next() {
+            records += 1;
+            if start.elapsed() > DRAIN_DEADLINE {
+                anyhow::bail!("timed out after {records} records while waiting for exec event");
+            }
+            if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                if ev.hdr.type_ == rk_ebpf_common::rk_event_type::RK_EV_EXEC as u16 {
+                    if let Payload::Exec { body, mut strings } = ev.payload {
+                        let filename = strings
+                            .next()
+                            .and_then(|b| std::str::from_utf8(b).ok())
+                            .unwrap_or_default()
+                            .to_string();
+                        let argv = strings
+                            .next()
+                            .map(|blob| {
+                                blob.split(|&b| b == 0)
+                                    .filter(|s| !s.is_empty())
+                                    .filter_map(|s| std::str::from_utf8(s).ok().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        let cap = CapturedExecEvent {
+                            verdict: ev.hdr.verdict,
+                            rule_id: ev.hdr.rule_id,
+                            cgroup_id: ev.hdr.cgroup_id,
+                            policy_gen: ev.hdr.policy_gen,
+                            flags: body.flags,
+                            filename,
+                            argv,
+                        };
+                        if predicate(&cap) {
+                            return Ok(cap);
+                        }
+                    }
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    anyhow::bail!(
+        "timeout waiting for matching exec event after {:.2}s ({records} records seen)",
+        timeout.as_secs_f32()
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -781,6 +1480,21 @@ fn run_verdict_suite() -> Result<()> {
         "/sys/fs/cgroup/rk.slice/enforce",
         "io_uring_connect",
         &["10.99.0.1:80"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "exec_cmd",
+        &["eperm", "/run/rk-test/unlisted_bin"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "exec_cmd",
+        &["ok", "/bin/true"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "memfd_exec",
+        &["eperm", "/bin/true"],
     )?;
     Ok(())
 }
@@ -881,8 +1595,48 @@ fn setup_environment() {
     // Create cgroups
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/enforce");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/audit");
+    let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/unlinked");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/ungoverned-sibling");
     let _ = fs::create_dir_all("/sys/fs/cgroup/ungoverned");
+
+    // Prepare test directory and binaries for exec policy tests
+    let test_dir = Path::new("/run/rk-test");
+    let _ = fs::create_dir_all(test_dir);
+    let _ = Command::new("mount")
+        .args(["-t", "tmpfs", "-o", "exec", "tmpfs", "/run/rk-test"])
+        .status();
+
+    let _ = fs::copy("/bin/true", "/run/rk-test/unlisted_bin");
+    let _ = fs::copy("/bin/true", "/run/rk-test/symlink_target_bin");
+    let _ = fs::copy("/bin/true", "/run/rk-test/replaced_bin");
+    let _ = fs::copy("/bin/true", "/run/rk-test/reload_bin");
+    let _ = fs::copy("/bin/sh", "/run/rk-test/unlisted_interp");
+
+    let _ = fs::remove_file("/run/rk-test/symlink_bin");
+    let _ = std::os::unix::fs::symlink(
+        "/run/rk-test/symlink_target_bin",
+        "/run/rk-test/symlink_bin",
+    );
+
+    let _ = fs::write("/run/rk-test/allowed_script.sh", "#!/bin/sh\nexit 0\n");
+    let _ = fs::write("/run/rk-test/unlisted_script.sh", "#!/bin/sh\nexit 0\n");
+    let _ = fs::write(
+        "/run/rk-test/denied_interp_script.sh",
+        "#!/run/rk-test/unlisted_interp\nexit 0\n",
+    );
+
+    if let Ok(entries) = fs::read_dir(test_dir) {
+        for entry in entries.flatten() {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    let mut perms = meta.permissions();
+                    perms.set_mode(0o755);
+                    let _ = fs::set_permissions(entry.path(), perms);
+                }
+            }
+        }
+    }
 
     // Spawn background TCP & UDP listeners
     start_tcp_listener("127.0.0.1:8080");
