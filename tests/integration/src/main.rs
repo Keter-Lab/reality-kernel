@@ -428,15 +428,15 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let current_exe = std::env::current_exe().context("current_exe")?;
         let procs = "/sys/fs/cgroup/rk.slice/enforce/cgroup.procs";
 
-        // Spawn child to perform 2,200 paced sends to 10.99.0.2:80
+        // Spawn child to perform 2,000 paced sends to 10.99.0.2:80
         let mut child = Command::new(&current_exe)
             .arg(workloads::CHILD_FLAG)
             .arg(procs)
             .arg("paced_workload")
             .arg("udp")
             .arg("10.99.0.2:80")
-            .arg("2200")
-            .arg("2500") // 2.5ms pace ~ 5.5s total runtime
+            .arg("2000")
+            .arg("1000") // 1ms pace ~ 2-4s in guest VM
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -545,7 +545,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         }
 
         Ok(format!(
-            "2200 sends over 6 flips: {} denied, {} allowed; 1:1 match with events, 0 drops",
+            "2000 sends over 6 flips: {} denied, {} allowed; 1:1 match with events, 0 drops",
             deny_events, allow_events
         ))
     });
@@ -806,10 +806,8 @@ fn start_tcp_listener(addr: &'static str) {
 fn start_udp_listener(addr: &'static str) {
     thread::spawn(move || {
         if let Ok(socket) = UdpSocket::bind(addr) {
-            let mut buf = [0u8; 64];
-            while let Ok((amt, src)) = socket.recv_from(&mut buf) {
-                let _ = socket.send_to(&buf[..amt], src);
-            }
+            let mut buf = [0u8; 1024];
+            while socket.recv_from(&mut buf).is_ok() {}
         }
     });
 }

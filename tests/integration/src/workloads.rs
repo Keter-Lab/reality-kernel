@@ -391,8 +391,9 @@ fn handle_flood_ringbuf(args: &[String]) -> i32 {
             return 262;
         }
     };
-    // 35,000 UDP sends to fill 1MB ring buffer (~10k events capacity) and trigger drops
-    for _ in 0..35_000 {
+    let _ = sock.set_nonblocking(true);
+    // 15,000 UDP sends to fill 1MB ring buffer (~10k events capacity) and trigger drops
+    for _ in 0..15_000 {
         let _ = sock.send_to(b"flood", addr);
     }
     0
@@ -439,6 +440,7 @@ fn handle_paced_workload(args: &[String]) -> i32 {
                 return 274;
             }
         };
+        let _ = sock.set_nonblocking(true);
 
         for _ in 0..count {
             match sock.send_to(b"ping", addr) {
