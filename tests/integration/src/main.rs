@@ -621,7 +621,9 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             .context("missing events_ringbuf")?;
         let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
         if rb.next().is_some() {
-            anyhow::bail!("expected no events in ring buffer with emit failing, but found at least one");
+            anyhow::bail!(
+                "expected no events in ring buffer with emit failing, but found at least one"
+            );
         }
 
         Ok(format!(
@@ -632,11 +634,9 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
 #[cfg(target_os = "linux")]
 fn get_counter(ebpf: &aya::Ebpf, key: u32) -> Result<u64> {
-    let map = ebpf
-        .map("rk_counters")
-        .context("rk_counters map missing")?;
-    let counters = PerCpuArray::<_, u64>::try_from(map)
-        .context("open rk_counters as PerCpuArray")?;
+    let map = ebpf.map("rk_counters").context("rk_counters map missing")?;
+    let counters =
+        PerCpuArray::<_, u64>::try_from(map).context("open rk_counters as PerCpuArray")?;
     let per_cpu = counters.get(&key, 0).context("get counter key")?;
     Ok(per_cpu.iter().sum::<u64>())
 }
