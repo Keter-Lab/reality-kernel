@@ -1,9 +1,13 @@
-use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+//! Workspace automation: `cargo xtask <command>`.
+
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use anyhow::{bail, Context, Result};
+use clap::{Parser, Subcommand};
+
 #[derive(Parser, Debug)]
-#[command(name = "xtask", version, about = "Workspace automation tasks")]
+#[command(name = "xtask", about = "Reality Kernel workspace automation")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -11,43 +15,72 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Build eBPF probes using cargo
-    BuildEbpf {
-        /// Build in release mode
+    /// Build the CO-RE BPF objects with clang (rk-bpf/build/<arch>/).
+    BuildBpf {
+        /// x86, arm64, or all.
+        #[arg(long, default_value = "all")]
+        arch: String,
+    },
+    /// Build BPF objects for the host arch, then rk-sensor with them embedded.
+    BuildSensor {
         #[arg(long)]
         release: bool,
-        /// BPF compilation target triple
-        #[arg(long, default_value = "bpfel-unknown-none")]
-        target: String,
     },
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
-    match cli.command {
-        Commands::BuildEbpf { release, target } => build_ebpf(&target, release),
+    match Cli::parse().command {
+        Commands::BuildBpf { arch } => build_bpf(&arch),
+        Commands::BuildSensor { release } => build_sensor(release),
     }
 }
 
-fn build_ebpf(target: &str, release: bool) -> Result<()> {
-    println!("[xtask] building rk-ebpf-probes for target {target}");
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
 
-    let mut cmd = Command::new("cargo");
-    cmd.args(["build", "-p", "rk-ebpf-probes", "--target", target, "-Z", "build-std=core"]);
+fn run(cmd: &mut Command) -> Result<()> {
+    let status = cmd
+        .status()
+        .with_context(|| format!("failed to run {cmd:?}"))?;
+    if !status.success() {
+        bail!("{cmd:?} failed with {status}");
+    }
+    Ok(())
+}
+
+fn build_bpf(arch: &str) -> Result<()> {
+    let target = match arch {
+        "all" => "all-arches".to_string(),
+        "x86" | "arm64" => format!("ARCH={arch}"),
+        other => bail!("unsupported arch `{other}`: expected x86, arm64 or all"),
+    };
+    run(Command::new("make")
+        .arg("-C")
+        .arg(workspace_root().join("rk-bpf"))
+        .arg(target))
+}
+
+fn build_sensor(release: bool) -> Result<()> {
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x86",
+        "aarch64" => "arm64",
+        other => bail!("unsupported host arch `{other}`"),
+    };
+    build_bpf(arch)?;
+    let mut cmd = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
+    cmd.current_dir(workspace_root()).args([
+        "build",
+        "-p",
+        "rk-sensor",
+        "--features",
+        "embedded-bpf",
+    ]);
     if release {
         cmd.arg("--release");
     }
-
-    let status = cmd
-        .status()
-        .context("failed to invoke cargo build for rk-ebpf-probes")?;
-
-    if !status.success() {
-        anyhow::bail!(
-            "rk-ebpf-probes build failed (target={target}, release={release})"
-        );
-    }
-
-    println!("[xtask] build-ebpf complete");
-    Ok(())
+    run(&mut cmd)
 }

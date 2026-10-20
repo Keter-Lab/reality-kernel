@@ -1,0 +1,26 @@
+[package]
+name = "rk-decoder-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Standalone workspace: cargo-fuzz needs nightly and sanitizer flags that must
+# not leak into the main workspace.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rk-sensor = { path = "../rk-sensor" }
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "decoder_fuzz"
+path = "fuzz_targets/decoder_fuzz.rs"
+test = false
+doc = false
+bench = false

@@ -176,8 +176,8 @@ impl RkSupabaseClient {
 
     pub async fn insert_audit(&self, row: AuditRow) -> Result<(), SupabaseError> {
         let endpoint = format!("{}/rest/v1/audit_log", self.url);
-        let body = serde_json::to_value(&row)
-            .map_err(|e| SupabaseError::Serialization(e.to_string()))?;
+        let body =
+            serde_json::to_value(&row).map_err(|e| SupabaseError::Serialization(e.to_string()))?;
         let send_res = self.request_with_retry("POST", &endpoint, Some(body)).await;
         if let Err(err) = &send_res {
             self.append_to_wal(&row).await?;
@@ -189,13 +189,19 @@ impl RkSupabaseClient {
     pub async fn deduct_credits(&self, key_hash: &str, cost: i64) -> Result<i64, SupabaseError> {
         let endpoint = format!("{}/rest/v1/rpc/deduct_credits", self.url);
         let body = serde_json::json!({"p_key_hash": key_hash, "p_cost": cost});
-        let value = self.request_with_retry("POST", &endpoint, Some(body)).await?;
-        value
-            .as_i64()
-            .ok_or_else(|| SupabaseError::Serialization("deduct_credits response is not int".into()))
+        let value = self
+            .request_with_retry("POST", &endpoint, Some(body))
+            .await?;
+        value.as_i64().ok_or_else(|| {
+            SupabaseError::Serialization("deduct_credits response is not int".into())
+        })
     }
 
-    pub async fn recent_audit(&self, key_hash: &str, limit: usize) -> Result<Vec<AuditRow>, SupabaseError> {
+    pub async fn recent_audit(
+        &self,
+        key_hash: &str,
+        limit: usize,
+    ) -> Result<Vec<AuditRow>, SupabaseError> {
         let endpoint = format!(
             "{}/rest/v1/audit_log?key_hash=eq.{}&order=ts.desc&limit={}",
             self.url, key_hash, limit
@@ -204,7 +210,11 @@ impl RkSupabaseClient {
         serde_json::from_value(value).map_err(|e| SupabaseError::Serialization(e.to_string()))
     }
 
-    pub async fn get_audit_action(&self, key_hash: &str, action_id: &str) -> Result<Option<AuditRow>, SupabaseError> {
+    pub async fn get_audit_action(
+        &self,
+        key_hash: &str,
+        action_id: &str,
+    ) -> Result<Option<AuditRow>, SupabaseError> {
         let endpoint = format!(
             "{}/rest/v1/audit_log?key_hash=eq.{}&action_id=eq.{}&select=*",
             self.url, key_hash, action_id
@@ -215,7 +225,11 @@ impl RkSupabaseClient {
         Ok(rows.into_iter().next())
     }
 
-    pub async fn purge_old_audit(&self, key_hash: &str, cutoff_iso: &str) -> Result<(), SupabaseError> {
+    pub async fn purge_old_audit(
+        &self,
+        key_hash: &str,
+        cutoff_iso: &str,
+    ) -> Result<(), SupabaseError> {
         let endpoint = format!(
             "{}/rest/v1/audit_log?key_hash=eq.{}&ts=lt.{}",
             self.url, key_hash, cutoff_iso
@@ -225,7 +239,10 @@ impl RkSupabaseClient {
     }
 
     pub async fn get_api_key(&self, key_hash: &str) -> Result<Option<ApiKeyRow>, SupabaseError> {
-        let endpoint = format!("{}/rest/v1/api_keys?key_hash=eq.{}&select=*", self.url, key_hash);
+        let endpoint = format!(
+            "{}/rest/v1/api_keys?key_hash=eq.{}&select=*",
+            self.url, key_hash
+        );
         let value = self.request_with_retry("GET", &endpoint, None).await?;
         let rows: Vec<ApiKeyRow> = serde_json::from_value(value)
             .map_err(|e| SupabaseError::Serialization(e.to_string()))?;
@@ -238,11 +255,15 @@ impl RkSupabaseClient {
         patch: serde_json::Value,
     ) -> Result<(), SupabaseError> {
         let endpoint = format!("{}/rest/v1/api_keys?key_hash=eq.{}", self.url, key_hash);
-        self.request_with_retry("PATCH", &endpoint, Some(patch)).await?;
+        self.request_with_retry("PATCH", &endpoint, Some(patch))
+            .await?;
         Ok(())
     }
 
-    pub async fn get_session_state(&self, session_id: &str) -> Result<Option<SessionState>, SupabaseError> {
+    pub async fn get_session_state(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<SessionState>, SupabaseError> {
         let endpoint = format!(
             "{}/rest/v1/session_states?session_id=eq.{}&select=*",
             self.url, session_id
@@ -255,9 +276,10 @@ impl RkSupabaseClient {
 
     pub async fn upsert_session_state(&self, state: &SessionState) -> Result<(), SupabaseError> {
         let endpoint = format!("{}/rest/v1/session_states", self.url);
-        let body = serde_json::to_value(state)
-            .map_err(|e| SupabaseError::Serialization(e.to_string()))?;
-        self.request_with_retry("POST", &endpoint, Some(body)).await?;
+        let body =
+            serde_json::to_value(state).map_err(|e| SupabaseError::Serialization(e.to_string()))?;
+        self.request_with_retry("POST", &endpoint, Some(body))
+            .await?;
         Ok(())
     }
 
@@ -273,8 +295,8 @@ impl RkSupabaseClient {
             .open(WAL_PATH)
             .await
             .map_err(|e| SupabaseError::Wal(e.to_string()))?;
-        let line = serde_json::to_string(row)
-            .map_err(|e| SupabaseError::Serialization(e.to_string()))?;
+        let line =
+            serde_json::to_string(row).map_err(|e| SupabaseError::Serialization(e.to_string()))?;
         f.write_all(line.as_bytes())
             .await
             .map_err(|e| SupabaseError::Wal(e.to_string()))?;
@@ -310,7 +332,11 @@ impl RkSupabaseClient {
             .header("Content-Type", "application/json")
             .header("Prefer", "return=representation");
 
-            let req = if let Some(ref b) = body { req.json(b) } else { req };
+            let req = if let Some(ref b) = body {
+                req.json(b)
+            } else {
+                req
+            };
             match req.send().await {
                 Ok(resp) => {
                     if resp.status().is_success() {

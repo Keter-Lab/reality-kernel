@@ -1,21 +1,35 @@
 [package]
 name = "rk-sensor"
+description = "Reality Kernel host sensor: loads the BPF objects, drains events, runs the selftest"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
 
 [[bin]]
 name = "rk-sensor"
 path = "src/main.rs"
 
+[features]
+default = []
+# Embed rk-bpf/build/<arch>/*.bpf.o into the binary. Required for release builds.
+embedded-bpf = []
+
 [dependencies]
 anyhow.workspace = true
 aya.workspace = true
-aya-log.workspace = true
-bytemuck = { version = "1", features = ["derive"] }
-rk-ebpf-common = { path = "../rk-ebpf-common", features = ["user"] }
-rk-engine-core = { path = "../rk-engine-core" }
+bytemuck.workspace = true
+rk-ebpf-common = { path = "../rk-ebpf-common" }
+serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

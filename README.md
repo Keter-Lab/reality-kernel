@@ -11,7 +11,7 @@
 **Never trust an LLM to police itself. Intercept rogue syscalls at the Linux kernel boundary in < 1ms.**
 
 [![PyPI](https://img.shields.io/pypi/v/realitykernel?style=flat-square&color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/realitykernel/)
-[![Rust](https://img.shields.io/badge/rust-1.80%2B-orange?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![eBPF / LSM](https://img.shields.io/badge/linux-5.15%2B%20(eBPF%2FLSM)-green?style=flat-square&logo=linux&logoColor=white)](https://kernel.org)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/Keter-Lab/reality-kernel/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Keter-Lab/reality-kernel/actions)
@@ -157,21 +157,21 @@ Reality Kernel is architected as a modular Rust workspace:
 
 ```text
 reality-kernel/
-├── rk-ebpf-probes/    # Kernel-space eBPF C/Rust probes (Aya framework)
-├── rk-ebpf-common/    # Shared structs and event definitions between kernel & user
+├── rk-bpf/            # Kernel-space BPF programs (C, libbpf CO-RE) and the ABI header
+├── rk-ebpf-common/    # Rust ABI types generated from rk-bpf/include/rk_abi.h
 ├── rk-engine-core/    # Superposition intent mapping & fast-path policy evaluator
 ├── rk-sensor/         # In-kernel ring buffer consumer & telemetry dispatcher
 ├── rk-policy/         # Capability manifests & manifest parsing
 ├── rk-signing/        # Ed25519 cryptographic attestation & SHA-256 state chaining
 ├── rk-types/          # Strongly-typed boundary schemas
 ├── sdk/               # Python client SDK (published on PyPI)
-└── xtask/             # Build automation for cross-compiling eBPF probes
+└── xtask/             # Build automation (BPF objects, embedded sensor build)
 ```
 
 ### Prerequisites
-* Rust 1.80+ (`nightly` required for compiling BPF probes)
+* Rust 1.85+ (stable), clang/LLVM, libbpf headers, libclang (for bindgen)
 * Linux kernel 5.15+ with `CONFIG_BPF_LSM=y` and `CONFIG_DEBUG_INFO_BTF=y`
-* `bpf-linker` (`cargo install bpf-linker`)
+* Kernel support matrix verified in CI: [docs/kernel-matrix.md](docs/kernel-matrix.md)
 
 ### Compiling the Engine & Probes
 
@@ -183,8 +183,8 @@ cd reality-kernel
 # 2. Build user-space crates
 cargo build --workspace
 
-# 3. Build eBPF probes
-cargo xtask build-ebpf --release
+# 3. Build the BPF objects and a sensor with them embedded
+cargo xtask build-sensor --release
 
 # 4. Run parity and unit test suite
 cargo test

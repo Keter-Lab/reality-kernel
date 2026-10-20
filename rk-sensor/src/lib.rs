@@ -1,3 +1,7 @@
-pub fn phase2_scaffold_marker() -> &'static str {
-    "rk-sensor phase2 scaffold"
-}
+//! Reality Kernel host sensor.
+
+pub mod consumer;
+pub mod decoder;
+pub mod loader;
+pub mod pipeline;
+pub mod selftest;

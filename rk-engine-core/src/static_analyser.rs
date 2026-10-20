@@ -23,7 +23,10 @@ pub fn evaluate_command_class(
     let stripped_command = command.replace('\\', "");
 
     for (idx, pat) in critical_patterns().iter().enumerate() {
-        if Regex::new(&format!("(?i){pat}")).unwrap().is_match(&stripped_command) {
+        if Regex::new(&format!("(?i){pat}"))
+            .unwrap()
+            .is_match(&stripped_command)
+        {
             threat_class = "CRITICAL".to_string();
             static_floor = 1.0;
             evidence.push(format!("Static: CRITICAL violation (pattern {idx})"));
@@ -32,7 +35,10 @@ pub fn evaluate_command_class(
     }
 
     for (idx, pat) in elevated_patterns().iter().enumerate() {
-        if Regex::new(&format!("(?i){pat}")).unwrap().is_match(&stripped_command) {
+        if Regex::new(&format!("(?i){pat}"))
+            .unwrap()
+            .is_match(&stripped_command)
+        {
             threat_class = "ELEVATED".to_string();
             static_floor = static_floor.max(0.70);
             evidence.push(format!("Static: ELEVATED capability (pattern {idx})"));
@@ -41,7 +47,10 @@ pub fn evaluate_command_class(
 
     if threat_class == "BENIGN" {
         for (idx, pat) in moderate_patterns().iter().enumerate() {
-            if Regex::new(&format!("(?i){pat}")).unwrap().is_match(&stripped_command) {
+            if Regex::new(&format!("(?i){pat}"))
+                .unwrap()
+                .is_match(&stripped_command)
+            {
                 threat_class = "MODERATE".to_string();
                 static_floor = static_floor.max(0.45);
                 evidence.push(format!("Static: MODERATE capability (pattern {idx})"));
@@ -54,17 +63,26 @@ pub fn evaluate_command_class(
             "MODERATE" => {
                 threat_class = "ELEVATED".to_string();
                 static_floor = static_floor.max(0.70);
-                evidence.push("Static: Threat escalated MODERATE→ELEVATED due to Unicode evasion attempt".to_string());
+                evidence.push(
+                    "Static: Threat escalated MODERATE→ELEVATED due to Unicode evasion attempt"
+                        .to_string(),
+                );
             }
             "ELEVATED" => {
                 threat_class = "CRITICAL".to_string();
                 static_floor = 1.0;
-                evidence.push("Static: Threat escalated ELEVATED→CRITICAL due to Unicode evasion attempt".to_string());
+                evidence.push(
+                    "Static: Threat escalated ELEVATED→CRITICAL due to Unicode evasion attempt"
+                        .to_string(),
+                );
             }
             "BENIGN" if unicode_evidence.is_some() => {
                 threat_class = "MODERATE".to_string();
                 static_floor = static_floor.max(0.45);
-                evidence.push("Static: Unicode obfuscation on benign command — elevated to MODERATE".to_string());
+                evidence.push(
+                    "Static: Unicode obfuscation on benign command — elevated to MODERATE"
+                        .to_string(),
+                );
             }
             _ => {}
         }

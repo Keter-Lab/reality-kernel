@@ -1,0 +1,66 @@
+name: Autofix
+
+# On phase branches, applies mechanical fixes (rustfmt, Cargo.lock) and pushes
+# them as a separate commit. Contributors without a local Rust toolchain rely on
+# this. Never runs on main or on pull requests from forks.
+
+on:
+  push:
+    branches: ["phase-*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autofix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  autofix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - name: rustfmt
+        run: |
+          cargo fmt --all
+          cargo fmt --manifest-path fuzz/Cargo.toml --all
+
+      - name: Refresh Cargo.lock for workspace changes
+        run: cargo update --workspace
+
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-audit
+
+      # Semver-compatible upgrades for every crate with a RustSec advisory
+      # (vulnerabilities and unsound/unmaintained warnings). Upgrades that need a
+      # manifest change still fail cargo-deny in CI and are fixed by hand.
+      - name: Upgrade crates with advisories
+        run: |
+          cargo audit --json > audit.json || true
+          jq -r '[.vulnerabilities.list[]?.package.name, (.warnings // {} | to_entries[] | .value[]?.package.name)] | unique[]' audit.json \
+            | while read -r crate; do
+                echo "cargo update -p $crate"
+                cargo update -p "$crate" || echo "::warning::could not update $crate automatically"
+              done
+          rm -f audit.json
+
+      - name: Commit and push
+        run: |
+          if git diff --quiet; then
+            echo "nothing to fix"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: autofix (rustfmt, Cargo.lock)"
+          git push

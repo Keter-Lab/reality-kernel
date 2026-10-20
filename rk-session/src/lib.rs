@@ -32,10 +32,24 @@ pub async fn update_and_check_session(
     let cmd_lower = command.to_lowercase();
 
     let is_read = has_any_word(&cmd_lower, &["cat", "ls", "head", "tail", "grep", "find"]);
-    let is_sensitive = [".env", "/etc/passwd", "/etc/shadow", "id_rsa", "secret", "credential", "token", "base64"]
-        .iter()
-        .any(|w| cmd_lower.contains(w));
-    let is_network = has_any_word(&cmd_lower, &["curl", "wget", "nc", "scp", "rsync", "ssh", "telnet", "ftp", "sftp"]);
+    let is_sensitive = [
+        ".env",
+        "/etc/passwd",
+        "/etc/shadow",
+        "id_rsa",
+        "secret",
+        "credential",
+        "token",
+        "base64",
+    ]
+    .iter()
+    .any(|w| cmd_lower.contains(w));
+    let is_network = has_any_word(
+        &cmd_lower,
+        &[
+            "curl", "wget", "nc", "scp", "rsync", "ssh", "telnet", "ftp", "sftp",
+        ],
+    );
 
     if is_read {
         state.cumulative_reads += 1;
@@ -50,7 +64,9 @@ pub async fn update_and_check_session(
         }
     }
 
-    state.recent_commands.push(command.chars().take(100).collect());
+    state
+        .recent_commands
+        .push(command.chars().take(100).collect());
     if state.recent_commands.len() > 10 {
         state.recent_commands = state.recent_commands[state.recent_commands.len() - 10..].to_vec();
     }
@@ -109,7 +125,11 @@ async fn apply_existing_state(
 }
 
 fn has_any_word(text: &str, words: &[&str]) -> bool {
-    words.iter().any(|w| Regex::new(&format!(r"\b{}\b", regex::escape(w))).unwrap().is_match(text))
+    words.iter().any(|w| {
+        Regex::new(&format!(r"\b{}\b", regex::escape(w)))
+            .unwrap()
+            .is_match(text)
+    })
 }
 
 fn now_secs() -> f64 {

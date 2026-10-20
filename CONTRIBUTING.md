@@ -13,11 +13,10 @@ We are committed to providing a friendly, safe, and welcoming environment for ev
 ## Development Setup
 
 ### 1. Prerequisites
-- **Rust Toolchain:** Install latest stable Rust and nightly (required for compiling eBPF probes):
+- **Toolchain:** stable Rust, clang/LLVM and libbpf headers (BPF objects), libclang (bindgen):
   ```bash
   rustup toolchain install stable
-  rustup toolchain install nightly --component rust-src
-  cargo install bpf-linker
+  sudo apt-get install -y clang llvm libbpf-dev libclang-dev   # Debian/Ubuntu
   ```
 - **Linux Environment:** Linux 5.15+ kernel with BTF enabled (`CONFIG_DEBUG_INFO_BTF=y`).
 - **Python:** 3.10+ for SDK testing (`pip install -e sdk/`).
@@ -27,8 +26,8 @@ We are committed to providing a friendly, safe, and welcoming environment for ev
 # Build user-space crates
 cargo build --workspace
 
-# Build kernel eBPF probes
-cargo xtask build-ebpf
+# Build the BPF objects (rk-bpf/build/<arch>/) and a sensor with them embedded
+cargo xtask build-sensor
 
 # Run tests
 cargo test

@@ -10,7 +10,7 @@ assignees: ''
 A clear and concise description of what the bug is.
 
 **Component Affected**
-- [ ] eBPF Kernel Probes (`rk-ebpf-probes`)
+- [ ] eBPF Kernel Probes (`rk-bpf`)
 - [ ] Symbolic Execution Engine (`core/engine.py` / `core/effect_engine.py`)
 - [ ] Basin Mapper / Sandbox Delta (`core/basin_mapper.py`)
 - [ ] CLI / SDK (`rk-cli` / `sdk`)

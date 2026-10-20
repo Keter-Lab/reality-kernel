@@ -19,7 +19,7 @@ We take the security of Reality Kernel, its eBPF kernel probes, and symbolic exe
 3. Include the following details:
    - Type of vulnerability (e.g., eBPF probe bypass, symbolic execution evasion, fast-path escape).
    - Step-by-step reproduction instructions or proof-of-concept (PoC) script.
-   - Affected components (`core/engine.py`, `rk-ebpf-probes`, `api`, etc.).
+   - Affected components (`core/engine.py`, `rk-bpf`, `api`, etc.).
    - Potential impact on host isolation or agent execution.
 
 ### Response Timeline

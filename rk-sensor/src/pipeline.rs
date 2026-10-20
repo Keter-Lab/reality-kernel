@@ -1,42 +1,22 @@
-use rk_engine_core::analyse;
-use tracing::info;
+//! Per-record processing. Decoding failures are counted and logged, never fatal.
 
-use crate::enricher;
-use crate::event::RkEvent;
+use tracing::{info, warn};
 
-pub async fn process_event(event: RkEvent) {
-    let enriched = enricher::enrich_event(event).await;
+use crate::decoder::{self, DecodeStats};
 
-    if let RkEvent::Exec(exec) = &enriched.base {
-        let command = if let Some(cmdline) = enriched.cmdline.clone() {
-            cmdline
-        } else {
-            decode_c_string(&exec.argv_summary)
-        };
-
-        let result = analyse(&command, "kernel_exec_event", 5);
-        info!(
-            pid = exec.pid,
-            verdict = result.verdict,
-            confidence = result.confidence,
-            action_id = result.action_id,
-            max_divergence = result.max_divergence,
-            "exec event analysed by rk-engine-core"
-        );
+pub fn process_record(bytes: &[u8], stats: &DecodeStats) {
+    let result = decoder::decode(bytes);
+    stats.record(&result);
+    match result {
+        Ok(event) => info!(
+            event_type = event.hdr.type_,
+            verdict = event.hdr.verdict,
+            rule_id = event.hdr.rule_id,
+            policy_gen = event.hdr.policy_gen,
+            cgroup_id = event.hdr.cgroup_id,
+            pid = event.hdr.pid,
+            "event"
+        ),
+        Err(e) => warn!(error = %e, kind = e.kind(), "rejected malformed ring buffer record"),
     }
-
-    info!(?enriched, "processed enriched kernel event");
-}
-
-fn decode_c_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).trim().to_string()
-}
-
-pub async fn emit_overflow_marker(count: u64) {
-    info!(
-        overflow_count = count,
-        marker = "RINGBUF_OVERFLOW",
-        "synthetic audit marker emitted"
-    );
 }

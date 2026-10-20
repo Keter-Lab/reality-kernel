@@ -20,41 +20,137 @@ static FAST_CACHE: OnceLock<Mutex<LruCache<String, bool>>> = OnceLock::new();
 fn fast_path_patterns() -> Vec<&'static str> {
     vec![
         r"^(ls|ll|la|dir)\b",
-        r"^(wc|wc\s+-[lwc]+)\b", r"^(file|stat|lstat)\b", r"^(find)\b", r"^(tree)\b", r"^(pwd)\b", r"^(du\s|df\s|df\b)",
+        r"^(wc|wc\s+-[lwc]+)\b",
+        r"^(file|stat|lstat)\b",
+        r"^(find)\b",
+        r"^(tree)\b",
+        r"^(pwd)\b",
+        r"^(du\s|df\s|df\b)",
         r"^(cut|sort|uniq|tr|paste|join)\b",
-        r"^(diff|cmp|comm)\b", r"^(jq)\b", r"^(yq)\b", r"^(csvkit|csvstat|csvlook)\b",
-        r"^(echo)\b", r"^(printf)\b", r"^(date)\b", r"^(whoami|id|groups|logname)\b", r"^(hostname|uname)\b", r"^(uptime|w)\b", r"^(ps\s|ps\b)",
-        r"^(top\s+-b|top\s+-n)", r"^(which|whereis|type)\b", r"^(man|help|info)\b", r"^(history)\b", r"^(lsof\b)",
-        r"^(lscpu|lshw|lspci|lsusb|lsblk)\b", r"^(free\b)", r"^(vmstat|iostat|sar)\b", r"^(ulimit\s+-[asSn])", r"^(nproc)\b",
-        r"^(curl|wget)\s+https?://[a-zA-Z0-9.-]+/?\s*$", r"^curl\s+.*--version\s*$", r"^curl\s+http://localhost:\d+/health",
-        r"^(pip\s+(list|show|freeze))", r"^(npm\s+(list|ls|info|view))", r"^(yarn\s+(list|info))", r"^(apt\s+(list|show|search))", r"^(dpkg\s+-[lL])", r"^(rpm\s+-q)", r"^(brew\s+(list|info|search))", r"^(gem\s+(list|info))",
-        r"--version\s*$", r"--help\s*$", r"-h\s*$", r"^(python3?|node|ruby|go|java|php)\s+--version",
-        r"^git\s+(status|log|diff|show|branch|tag|remote\s+-v)", r"^git\s+(describe|rev-parse|shortlog|blame|stash\s+list)",
-        r"^git\s+(ls-files|ls-tree|cat-file)", r"^git\s+(config\s+--list|config\s+--get)",
-        r"^docker\s+(ps|images|inspect|logs|stats\s+--no-stream|info|version)", r"^docker\s+(network|volume)\s+(ls|inspect)",
-        r"^(kubectl|k)\s+(get|describe|logs|top)\b", r"^(SELECT\s)", r"^(SHOW\s+(TABLES|DATABASES|COLUMNS|INDEX|STATUS))", r"^(DESCRIBE\s|EXPLAIN\s+SELECT)",
-        r"^\\(d|dt|di|l|c)\b", r"^aws\s+\S+\s+(list|describe|get|show)\b", r"^gcloud\s+\S+\s+(list|describe)\b", r"^az\s+\S+\s+(list|show)\b",
+        r"^(diff|cmp|comm)\b",
+        r"^(jq)\b",
+        r"^(yq)\b",
+        r"^(csvkit|csvstat|csvlook)\b",
+        r"^(echo)\b",
+        r"^(printf)\b",
+        r"^(date)\b",
+        r"^(whoami|id|groups|logname)\b",
+        r"^(hostname|uname)\b",
+        r"^(uptime|w)\b",
+        r"^(ps\s|ps\b)",
+        r"^(top\s+-b|top\s+-n)",
+        r"^(which|whereis|type)\b",
+        r"^(man|help|info)\b",
+        r"^(history)\b",
+        r"^(lsof\b)",
+        r"^(lscpu|lshw|lspci|lsusb|lsblk)\b",
+        r"^(free\b)",
+        r"^(vmstat|iostat|sar)\b",
+        r"^(ulimit\s+-[asSn])",
+        r"^(nproc)\b",
+        r"^(curl|wget)\s+https?://[a-zA-Z0-9.-]+/?\s*$",
+        r"^curl\s+.*--version\s*$",
+        r"^curl\s+http://localhost:\d+/health",
+        r"^(pip\s+(list|show|freeze))",
+        r"^(npm\s+(list|ls|info|view))",
+        r"^(yarn\s+(list|info))",
+        r"^(apt\s+(list|show|search))",
+        r"^(dpkg\s+-[lL])",
+        r"^(rpm\s+-q)",
+        r"^(brew\s+(list|info|search))",
+        r"^(gem\s+(list|info))",
+        r"--version\s*$",
+        r"--help\s*$",
+        r"-h\s*$",
+        r"^(python3?|node|ruby|go|java|php)\s+--version",
+        r"^git\s+(status|log|diff|show|branch|tag|remote\s+-v)",
+        r"^git\s+(describe|rev-parse|shortlog|blame|stash\s+list)",
+        r"^git\s+(ls-files|ls-tree|cat-file)",
+        r"^git\s+(config\s+--list|config\s+--get)",
+        r"^docker\s+(ps|images|inspect|logs|stats\s+--no-stream|info|version)",
+        r"^docker\s+(network|volume)\s+(ls|inspect)",
+        r"^(kubectl|k)\s+(get|describe|logs|top)\b",
+        r"^(SELECT\s)",
+        r"^(SHOW\s+(TABLES|DATABASES|COLUMNS|INDEX|STATUS))",
+        r"^(DESCRIBE\s|EXPLAIN\s+SELECT)",
+        r"^\\(d|dt|di|l|c)\b",
+        r"^aws\s+\S+\s+(list|describe|get|show)\b",
+        r"^gcloud\s+\S+\s+(list|describe)\b",
+        r"^az\s+\S+\s+(list|show)\b",
     ]
 }
 
 fn forced_slow_patterns() -> Vec<&'static str> {
     vec![
-        r"\|", r"&&", r";", r";;", r"`", r"\$\(", r"[><]", r"&", r"[\r\n]", r"\\n", r"\\r",
-        r"rm\s", r"dd\s", r"mkfs", r"DROP\s", r"DELETE\s+FROM",
-        r"chmod", r"chown", r"crontab", r"authorized_keys", r"scp\s", r"rsync\s", r"nc\s", r"ncat\s", r"socat\s", r"openssl\s+s_client",
-        r"bash\s+-i", r"python.*-c\s", r"eval\(", r"exec\(",
-        r"\.env", r"\.pem", r"\.key", r"\.docker", r"\.aws", r"\.kube", r"\.ssh", r"\.netrc", r"\.git-credentials", r"\.gitconfig",
-        r"id_rsa", r"id_ed25519", r"id_ecdsa", r"id_dsa", r"/etc/passwd", r"/etc/shadow", r"/etc/master\.passwd",
-        r"secret", r"credential", r"api[_-]?key", r"password", r"token", r"/proc/", r"/sys/", r"/etc/sudoers",
-        r"^(env|printenv)\b", r"^\s*set\b",
-        r"169\.254", r"2852039166", r"0xa9fe", r"\[::ffff:169\.254",
-        r"metadata\.google\.internal", r"instance-data", r"localhost", r"127\.0\.0\.1", r"0\.0\.0\.0",
-        r"-(delete|fprint|fprint0|fprintf|fls)\b", r"sort\s+.*(-o\b|--output)",
+        r"\|",
+        r"&&",
+        r";",
+        r";;",
+        r"`",
+        r"\$\(",
+        r"[><]",
+        r"&",
+        r"[\r\n]",
+        r"\\n",
+        r"\\r",
+        r"rm\s",
+        r"dd\s",
+        r"mkfs",
+        r"DROP\s",
+        r"DELETE\s+FROM",
+        r"chmod",
+        r"chown",
+        r"crontab",
+        r"authorized_keys",
+        r"scp\s",
+        r"rsync\s",
+        r"nc\s",
+        r"ncat\s",
+        r"socat\s",
+        r"openssl\s+s_client",
+        r"bash\s+-i",
+        r"python.*-c\s",
+        r"eval\(",
+        r"exec\(",
+        r"\.env",
+        r"\.pem",
+        r"\.key",
+        r"\.docker",
+        r"\.aws",
+        r"\.kube",
+        r"\.ssh",
+        r"\.netrc",
+        r"\.git-credentials",
+        r"\.gitconfig",
+        r"id_rsa",
+        r"id_ed25519",
+        r"id_ecdsa",
+        r"id_dsa",
+        r"/etc/passwd",
+        r"/etc/shadow",
+        r"/etc/master\.passwd",
+        r"secret",
+        r"credential",
+        r"api[_-]?key",
+        r"password",
+        r"token",
+        r"/proc/",
+        r"/sys/",
+        r"/etc/sudoers",
+        r"^(env|printenv)\b",
+        r"^\s*set\b",
+        r"169\.254",
+        r"2852039166",
+        r"0xa9fe",
+        r"\[::ffff:169\.254",
+        r"metadata\.google\.internal",
+        r"instance-data",
+        r"localhost",
+        r"127\.0\.0\.1",
+        r"0\.0\.0\.0",
+        r"-(delete|fprint|fprint0|fprintf|fls)\b",
+        r"sort\s+.*(-o\b|--output)",
     ]
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    s.chars().take(n).collect()
 }
 
 pub fn is_fast_path(command: &str) -> bool {
@@ -66,16 +162,23 @@ pub fn is_fast_path(command: &str) -> bool {
         return false;
     }
     let cmd = trimmed.to_string();
-    let cache = FAST_CACHE.get_or_init(|| {
-        Mutex::new(LruCache::new(NonZeroUsize::new(4096).expect("non zero")))
-    });
+    let cache = FAST_CACHE
+        .get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(4096).expect("non zero"))));
     if let Ok(mut locked) = cache.lock() {
         if let Some(v) = locked.get(&cmd) {
             return *v;
         }
-        let forced = forced_slow_patterns().iter().any(|p| Regex::new(&format!("(?i){p}")).unwrap().is_match(&cmd));
-        let mut fast = !forced && fast_path_patterns().iter().any(|p| Regex::new(&format!("(?i){p}")).unwrap().is_match(&cmd));
-        if fast && Regex::new(r"(?i)^find\b").unwrap().is_match(&cmd) && cmd.to_lowercase().contains("-exec ") {
+        let forced = forced_slow_patterns()
+            .iter()
+            .any(|p| Regex::new(&format!("(?i){p}")).unwrap().is_match(&cmd));
+        let mut fast = !forced
+            && fast_path_patterns()
+                .iter()
+                .any(|p| Regex::new(&format!("(?i){p}")).unwrap().is_match(&cmd));
+        if fast
+            && Regex::new(r"(?i)^find\b").unwrap().is_match(&cmd)
+            && cmd.to_lowercase().contains("-exec ")
+        {
             fast = false;
         }
         locked.put(cmd, fast);
@@ -90,7 +193,11 @@ pub fn analyse(command: &str, prime_intent: &str, n_worlds: usize) -> AnalysisRe
         return AnalysisResult {
             verdict: "BLOCK".into(),
             confidence: 1.0,
-            evidence: vec![format!("Command length ({}) exceeds safety cap ({})", command.len(), MAX_COMMAND_LEN)],
+            evidence: vec![format!(
+                "Command length ({}) exceeds safety cap ({})",
+                command.len(),
+                MAX_COMMAND_LEN
+            )],
             worlds_evaluated: 0,
             worlds_in_basin_b: 0,
             max_divergence: 1.0,
@@ -102,7 +209,11 @@ pub fn analyse(command: &str, prime_intent: &str, n_worlds: usize) -> AnalysisRe
         return AnalysisResult {
             verdict: "BLOCK".into(),
             confidence: 1.0,
-            evidence: vec![format!("Intent length ({}) exceeds safety cap ({})", prime_intent.len(), MAX_INTENT_LEN)],
+            evidence: vec![format!(
+                "Intent length ({}) exceeds safety cap ({})",
+                prime_intent.len(),
+                MAX_INTENT_LEN
+            )],
             worlds_evaluated: 0,
             worlds_in_basin_b: 0,
             max_divergence: 1.0,
@@ -130,7 +241,8 @@ pub fn analyse(command: &str, prime_intent: &str, n_worlds: usize) -> AnalysisRe
     let effect_graph = effect_engine::compute_effect_graph(&normalized, &prime_intent);
     let (mut threat_class, static_floor, static_evidence) =
         static_analyser::evaluate_command_class(&normalized, Some(&unicode_evidence));
-    let effect_threat = effect_engine::effect_to_threat_class(effect_graph.worst_effect).to_string();
+    let effect_threat =
+        effect_engine::effect_to_threat_class(effect_graph.worst_effect).to_string();
 
     let order = ["BENIGN", "MODERATE", "ELEVATED", "CRITICAL"];
     let idx = |v: &str| order.iter().position(|x| *x == v).unwrap_or(0);
@@ -144,7 +256,7 @@ pub fn analyse(command: &str, prime_intent: &str, n_worlds: usize) -> AnalysisRe
     all_pre_evidence.extend(static_evidence.clone());
 
     if threat_class == "CRITICAL" {
-        let mut basin_summary = serde_json::json!({
+        let basin_summary = serde_json::json!({
             "decision": "BLOCK",
             "max_divergence": 1.0,
             "evidence": all_pre_evidence,
@@ -179,18 +291,28 @@ pub fn analyse(command: &str, prime_intent: &str, n_worlds: usize) -> AnalysisRe
 
     let alive: Vec<_> = worlds.into_iter().filter(|w| w.alive).collect();
     let delta = effect_engine::effect_to_sandbox_delta(&effect_graph);
-    let basin_results: Vec<_> = alive.iter().map(|w| basin_mapper::check_basin(w, &delta)).collect();
+    let basin_results: Vec<_> = alive
+        .iter()
+        .map(|w| basin_mapper::check_basin(w, &delta))
+        .collect();
     let mut basin_summary = basin_mapper::aggregate_basin_results(&basin_results);
 
-    if let Some(e) = basin_summary.get_mut("evidence").and_then(|v| v.as_array_mut()) {
+    if let Some(e) = basin_summary
+        .get_mut("evidence")
+        .and_then(|v| v.as_array_mut())
+    {
         for ev in all_pre_evidence.clone() {
             e.push(serde_json::Value::String(ev));
         }
     }
 
     if effect_graph.effect_divergence > 0.0 {
-        let current = basin_summary.get("max_divergence").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        basin_summary["max_divergence"] = serde_json::Value::from(current.max(effect_graph.effect_divergence));
+        let current = basin_summary
+            .get("max_divergence")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        basin_summary["max_divergence"] =
+            serde_json::Value::from(current.max(effect_graph.effect_divergence));
     }
 
     let combined_floor = effect_graph.divergence_floor.max(static_floor);
