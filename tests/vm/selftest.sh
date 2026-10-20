@@ -14,6 +14,7 @@ set -u
 sensor="$1"
 bpf_dir="$2"
 bpftool="$3"
+integration="${4:-}"
 rc=0
 
 mountpoint -q /sys/kernel/security || mount -t securityfs securityfs /sys/kernel/security
@@ -51,6 +52,15 @@ else
     echo "FAIL positive control: bpftool could not load rk_selftest.bpf.o:"
     tail -n 40 <<<"$pos_log"
     rc=1
+fi
+
+if [ -n "$integration" ] && [ -x "$integration" ]; then
+    echo "===RK_INTEGRATION_BEGIN==="
+    "$integration"
+    integ_rc=$?
+    echo "===RK_INTEGRATION_END==="
+    echo "rk-integration exit code: $integ_rc"
+    [ "$integ_rc" -eq 0 ] || rc=1
 fi
 
 exit "$rc"
