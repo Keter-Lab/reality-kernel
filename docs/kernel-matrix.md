@@ -33,6 +33,22 @@ artifact.
    - Positive control: `bpftool` must load `rk_selftest.bpf.o`, so a broken
      bpftool can never make the negative control pass.
 
+## Evidence for the Phase 0 acceptance criteria
+
+- **A verifier-rejected program turns CI red.** On 2026-10-20 a throwaway branch
+  added an unbounded loop (`rk_test_reject_proof`) to `rk_selftest.bpf.c`. clang
+  compiled it and the build jobs passed. In every VM the selftest reported the
+  program as not loaded, with the verifier's own message ("infinite loop detected
+  at insn 6"), and exited 1. The bpftool positive control also failed, and the
+  jobs went red:
+  <https://github.com/Keter-Lab/reality-kernel/actions/runs/39379014299/job/118484170101>.
+  The branch was then deleted.
+- **A selftest report is uploaded per kernel**: the `selftest-<kernel>` artifacts
+  of every `Kernel` workflow run.
+- **No runtime override for the BPF object path**: `rk-sensor` refuses to compile
+  in release without `embedded-bpf`, and `main::tests::no_object_path_flag`
+  checks that no CLI flag accepts an object path.
+
 ## Kernel images
 
 Kernels come from the [LVH] image set (`quay.io/lvh-images/kernel-images`),
@@ -50,8 +66,15 @@ can be traced to a kernel change.
 ## Kernel features reported by the selftest
 
 `kernel_features` in the report lists the result of each probe in
-`rk-bpf/src/rk_probes.bpf.c`. Phase 2 uses
-`sockaddr_cgroup_id` to choose how network hooks identify the governed cgroup.
+`rk-bpf/src/rk_probes.bpf.c`. Measured in CI on 2026-10-20:
+
+| Feature | 5.15 | 6.1 | 6.6 | 6.12 | 6.18 |
+|---|---|---|---|---|---|
+| `sockaddr_cgroup_id` (`bpf_get_current_cgroup_id` in `cgroup/connect4`) | yes | yes | yes | yes | yes |
+| `sockaddr_pid_tgid` (`bpf_get_current_pid_tgid` in `cgroup/connect4`) | yes | yes | yes | yes | yes |
+
+Phase 2 therefore identifies the governed cgroup directly in the network hooks
+on every supported kernel.
 
 ## Known gaps
 
