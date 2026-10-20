@@ -206,5 +206,15 @@ int BPF_PROG(rk_net_socket_create, int family, int type, int protocol, int kern,
         rk_emit(msg);
     }
 
-    return rk_enforced_deny(&g, action) ? -RK_EPERM : 0;
+    /*
+     * LSM programs must return a value the verifier can prove is in [-4095, 0].
+     * Without the barrier clang folds this into an arithmetic negation of the
+     * 0/1 result, whose range newer verifiers (6.12) cannot bound.
+     */
+    int deny = rk_enforced_deny(&g, action);
+
+    barrier_var(deny);
+    if (deny)
+        return -RK_EPERM;
+    return 0;
 }
