@@ -297,13 +297,14 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
         let mut found_audit = false;
         let mut rule_id = 0;
-        let mut str_buf = [""; 16];
 
         let start = std::time::Instant::now();
         while start.elapsed() < Duration::from_millis(500) {
             while let Some(item) = rb.next() {
-                if let Ok(ev) = rk_sensor::decoder::decode_event(item.as_ref(), &mut str_buf) {
-                    if ev.hdr.verdict == rk_ebpf_common::RK_VERDICT_AUDIT {
+                if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                    if ev.hdr.verdict
+                        == rk_ebpf_common::rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY as u8
+                    {
                         found_audit = true;
                         rule_id = ev.hdr.rule_id;
                         break;
