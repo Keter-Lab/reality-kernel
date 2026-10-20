@@ -361,7 +361,9 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             .context("cgroup rk.slice/audit not bound in engine")?;
 
         // Drain ring buffer first to cleanly observe the audit event
+        progress!("audit: draining ring buffer");
         drain_ringbuf(&mut ebpf)?;
+        progress!("audit: drained; running audit child");
 
         // In audit mode, connect succeeds
         spawn_child(
@@ -370,6 +372,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             &["10.99.0.1:80", "ok"],
         )?;
 
+        progress!("audit: child finished; reading events");
         // Read ring buffer to verify audit event matches rule_id and cgroup_id
         let map = ebpf
             .map_mut("events_ringbuf")
@@ -380,9 +383,39 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let mut matched_cgroup_id = 0;
 
         let start = std::time::Instant::now();
+        // Diagnostics for a stream that never ends: how many records, a few
+        // samples, and how many repeat an already-seen timestamp (which would
+        // mean the consumer position is not advancing).
+        let mut records = 0u64;
+        let mut repeats = 0u64;
+        let mut seen_ts = HashSet::new();
+        let mut samples: Vec<String> = Vec::new();
         while start.elapsed() < Duration::from_millis(500) {
             while let Some(item) = rb.next() {
+                records += 1;
+                if start.elapsed() > DRAIN_DEADLINE {
+                    anyhow::bail!(
+                        "events never stopped while waiting for the audit event: {records} records \
+                         ({repeats} repeated timestamps) in {}s; first records: {}",
+                        DRAIN_DEADLINE.as_secs(),
+                        samples.join("; ")
+                    );
+                }
                 if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                    if !seen_ts.insert(ev.hdr.ts_ns) {
+                        repeats += 1;
+                    }
+                    if samples.len() < 8 {
+                        samples.push(format!(
+                            "type={} verdict={} rule={} cgroup={} tgid={} gen={}",
+                            ev.hdr.type_,
+                            ev.hdr.verdict,
+                            ev.hdr.rule_id,
+                            ev.hdr.cgroup_id,
+                            ev.hdr.tgid,
+                            ev.hdr.policy_gen
+                        ));
+                    }
                     if ev.hdr.verdict
                         == rk_ebpf_common::rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY as u8
                     {
@@ -409,7 +442,8 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             ))
         } else {
             anyhow::bail!(
-                "audit event mismatch: expected rule_id={expected_rule_id}, cgroup_id={expected_cgroup_id}; got rule_id={matched_rule_id}, cgroup_id={matched_cgroup_id}"
+                "audit event mismatch: expected rule_id={expected_rule_id}, cgroup_id={expected_cgroup_id}; got rule_id={matched_rule_id}, cgroup_id={matched_cgroup_id}; {records} records seen: {}",
+                samples.join("; ")
             )
         }
     });
