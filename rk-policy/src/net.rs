@@ -1086,7 +1086,7 @@ mod tests {
                 let id = p.profiles[0].id;
                 for (b, c3, d, port, proto) in queries {
                     let addr = IpAddr::V4(Ipv4Addr::new(10, b, c3, d));
-                    prop_assert_eq!(c.lookup(id, addr, port, proto), evaluate(&p, id, addr, port, proto), "{addr} port {port} proto {proto}");
+                    prop_assert_eq!(c.lookup(id, addr, port, proto), evaluate(&p, id, addr, port, proto), "{} port {} proto {}", addr, port, proto);
                 }
             }
         }

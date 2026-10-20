@@ -55,7 +55,6 @@ static __always_inline int rk_net_match(void *trie, const struct rk_net_key *key
         return 0;
     n = rule->nranges;
 
-#pragma clang loop unroll(full)
     for (int i = 0; i < RK_NET_MAX_RANGES; i++) {
         if ((__u32)i >= n)
             break;
