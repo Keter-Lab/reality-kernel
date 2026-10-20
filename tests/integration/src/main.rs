@@ -6,6 +6,7 @@
 mod bpf;
 mod workloads;
 
+use std::collections::HashSet;
 use std::fs;
 use std::net::{TcpListener, UdpSocket};
 use std::path::Path;
@@ -14,9 +15,10 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use aya::maps::RingBuf;
+use aya::maps::{PerCpuArray, RingBuf};
 use aya::Btf;
-use serde::Serialize;
+use rk_ebpf_common::rk_counter;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TestCheck {
@@ -59,6 +61,49 @@ proto = ["tcp", "udp"]
 
 [[profiles.enforce-profile.network.deny]]
 cidr = "10.99.0.0/24"
+proto = ["tcp", "udp"]
+
+[[profiles.enforce-profile.network.deny]]
+cidr = "fd99::/64"
+proto = ["tcp", "udp"]
+
+[profiles.audit-profile]
+mode = "audit"
+network.default = "allow"
+
+[[profiles.audit-profile.network.deny]]
+cidr = "10.99.0.0/24"
+proto = ["tcp", "udp"]
+
+[[bindings]]
+cgroup = "rk.slice/enforce"
+profile = "enforce-profile"
+
+[[bindings]]
+cgroup = "rk.slice/audit"
+profile = "audit-profile"
+"#;
+
+const POLICY_B: &str = r#"
+[profiles.enforce-profile]
+mode = "enforce"
+network.default = "deny"
+network.include = ["cloud-metadata"]
+
+[[profiles.enforce-profile.network.allow]]
+cidr = "127.0.0.0/8"
+proto = ["tcp", "udp"]
+
+[[profiles.enforce-profile.network.allow]]
+cidr = "::1/128"
+proto = ["tcp", "udp"]
+
+[[profiles.enforce-profile.network.allow]]
+cidr = "10.99.0.2/32"
+proto = ["tcp", "udp"]
+
+[[profiles.enforce-profile.network.deny]]
+cidr = "10.99.0.1/32"
 proto = ["tcp", "udp"]
 
 [[profiles.enforce-profile.network.deny]]
@@ -284,19 +329,38 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
     });
 
     run_test(checks, "net_audit_reports_rule_id", || {
+        let expected_rule_id = engine
+            .policy()
+            .and_then(|p| {
+                p.origins
+                    .iter()
+                    .find(|o| o.profile == "audit-profile")
+                    .map(|o| o.id)
+            })
+            .context("audit-profile rule not found in policy origins")?;
+
+        let expected_cgroup_id = engine
+            .cgroup_id("rk.slice/audit")
+            .context("cgroup rk.slice/audit not bound in engine")?;
+
+        // Drain ring buffer first to cleanly observe the audit event
+        drain_ringbuf(&mut ebpf)?;
+
         // In audit mode, connect succeeds
         spawn_child(
             "/sys/fs/cgroup/rk.slice/audit",
             "tcp_connect",
             &["10.99.0.1:80", "ok"],
         )?;
-        // Drain ring buffer to verify audit event
+
+        // Read ring buffer to verify audit event matches rule_id and cgroup_id
         let map = ebpf
             .map_mut("events_ringbuf")
             .context("missing events_ringbuf")?;
         let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
         let mut found_audit = false;
-        let mut rule_id = 0;
+        let mut matched_rule_id = 0;
+        let mut matched_cgroup_id = 0;
 
         let start = std::time::Instant::now();
         while start.elapsed() < Duration::from_millis(500) {
@@ -305,9 +369,14 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
                     if ev.hdr.verdict
                         == rk_ebpf_common::rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY as u8
                     {
-                        found_audit = true;
-                        rule_id = ev.hdr.rule_id;
-                        break;
+                        matched_rule_id = ev.hdr.rule_id;
+                        matched_cgroup_id = ev.hdr.cgroup_id;
+                        if ev.hdr.rule_id == expected_rule_id
+                            && ev.hdr.cgroup_id == expected_cgroup_id
+                        {
+                            found_audit = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -317,13 +386,13 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             thread::sleep(Duration::from_millis(10));
         }
 
-        if found_audit && rule_id > 0 {
+        if found_audit {
             Ok(format!(
-                "audit allowed and emitted event with rule_id={rule_id}"
+                "audit allowed and emitted event with rule_id={expected_rule_id}, cgroup_id={expected_cgroup_id}"
             ))
         } else {
             anyhow::bail!(
-                "audit event not found or rule_id==0 (found={found_audit}, rule_id={rule_id})"
+                "audit event mismatch: expected rule_id={expected_rule_id}, cgroup_id={expected_cgroup_id}; got rule_id={matched_rule_id}, cgroup_id={matched_cgroup_id}"
             )
         }
     });
@@ -332,61 +401,183 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         spawn_child(
             "/sys/fs/cgroup/ungoverned",
             "tcp_connect",
-            &["127.0.0.1:8080", "ok"],
+            &["10.99.0.1:80", "ok"],
         )?;
-        Ok("processes outside rk.slice untouched".into())
+        Ok("processes outside rk.slice can connect to 10.99.0.1:80 without hindrance".into())
     });
 
     run_test(checks, "net_unbound_sibling_untouched", || {
         spawn_child(
             "/sys/fs/cgroup/rk.slice/ungoverned-sibling",
             "tcp_connect",
-            &["127.0.0.1:8080", "ok"],
+            &["10.99.0.1:80", "ok"],
         )?;
-        Ok("unbound sibling inside rk.slice untouched".into())
-    });
-
-    run_test(checks, "net_verdicts_independent_of_telemetry", || {
-        spawn_child(
-            "/sys/fs/cgroup/rk.slice/enforce",
-            "blast_connect",
-            &["10.99.0.1:80"],
-        )?;
-        Ok("burst connections all denied with EPERM despite ringbuf overflow".into())
+        Ok("unbound sibling inside rk.slice can connect to 10.99.0.1:80 without hindrance".into())
     });
 
     run_test(checks, "net_reload_atomic", || {
-        // Test atomic reload between two generations
-        let policy_b = r#"
-[profiles.enforce-profile]
-mode = "enforce"
-network.default = "deny"
+        drain_ringbuf(&mut ebpf)?;
+        let drops_start = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
 
-[[profiles.enforce-profile.network.allow]]
-cidr = "127.0.0.0/8"
-proto = ["tcp", "udp"]
+        let mut deny_gens = HashSet::new();
+        let mut allow_gens = HashSet::new();
 
-[[profiles.enforce-profile.network.deny]]
-cidr = "10.99.0.2/32"
-proto = ["tcp", "udp"]
+        // Baseline active policy is POLICY_TEXT (A, deny)
+        deny_gens.insert(engine.generation());
 
-[[bindings]]
-cgroup = "rk.slice/enforce"
-profile = "enforce-profile"
-"#;
-        engine.apply_text(&mut ebpf, policy_b)?;
+        let current_exe = std::env::current_exe().context("current_exe")?;
+        let procs = "/sys/fs/cgroup/rk.slice/enforce/cgroup.procs";
+
+        // Spawn child to perform 2,200 paced sends to 10.99.0.2:80
+        let mut child = Command::new(&current_exe)
+            .arg(workloads::CHILD_FLAG)
+            .arg(procs)
+            .arg("paced_workload")
+            .arg("udp")
+            .arg("10.99.0.2:80")
+            .arg("2200")
+            .arg("2500") // 2.5ms pace ~ 5.5s total runtime
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .context("spawn paced_workload child")?;
+        let child_pid = child.id();
+
+        // Parent alternates A and B at least 6 times
+        for i in 0..6 {
+            if i % 2 == 0 {
+                engine.apply_text(&mut ebpf, POLICY_B)?;
+                allow_gens.insert(engine.generation());
+            } else {
+                engine.apply_text(&mut ebpf, POLICY_TEXT)?;
+                deny_gens.insert(engine.generation());
+            }
+        }
+
+        let output = child
+            .wait_with_output()
+            .context("wait for paced_workload child")?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!(
+                "child failed with exit {:?}: {}",
+                output.status.code(),
+                stderr.trim()
+            );
+        }
+
+        #[derive(Deserialize)]
+        struct ChildCounts {
+            eperm: u64,
+            ok: u64,
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let counts: ChildCounts = serde_json::from_str(stdout.trim())
+            .with_context(|| format!("failed to parse child output: {stdout}"))?;
+
+        if counts.eperm + counts.ok < 2000 {
+            anyhow::bail!(
+                "child performed {} sends, expected >= 2000",
+                counts.eperm + counts.ok
+            );
+        }
+
+        // Drain events from ring buffer
+        let map = ebpf
+            .map_mut("events_ringbuf")
+            .context("missing events_ringbuf")?;
+        let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
+        let mut deny_events = 0u64;
+        let mut allow_events = 0u64;
+
+        while let Some(item) = rb.next() {
+            if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                if ev.hdr.tgid == child_pid {
+                    let gen = ev.hdr.policy_gen;
+                    let verdict = ev.hdr.verdict;
+                    if deny_gens.contains(&gen) {
+                        if verdict != rk_ebpf_common::rk_verdict::RK_VERDICT_DENY as u8 {
+                            anyhow::bail!(
+                                "event for deny gen {gen} had non-deny verdict {verdict}"
+                            );
+                        }
+                        deny_events += 1;
+                    } else if allow_gens.contains(&gen) {
+                        if verdict != rk_ebpf_common::rk_verdict::RK_VERDICT_ALLOW as u8 {
+                            anyhow::bail!(
+                                "event for allow gen {gen} had non-allow verdict {verdict}"
+                            );
+                        }
+                        allow_events += 1;
+                    } else {
+                        anyhow::bail!("event has unexpected policy_gen {gen}");
+                    }
+                }
+            }
+        }
+
+        let drops_end = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
+        let drops = drops_end.saturating_sub(drops_start);
+        if drops > 0 {
+            anyhow::bail!("expected zero drops during atomic reload, got {drops}");
+        }
+
+        if counts.eperm != deny_events {
+            anyhow::bail!(
+                "child EPERM count ({}) != deny events count ({})",
+                counts.eperm,
+                deny_events
+            );
+        }
+        if counts.ok != allow_events {
+            anyhow::bail!(
+                "child OK count ({}) != allow events count ({})",
+                counts.ok,
+                allow_events
+            );
+        }
+        if deny_events == 0 || allow_events == 0 {
+            anyhow::bail!(
+                "did not observe both generations (deny={}, allow={})",
+                deny_events,
+                allow_events
+            );
+        }
+
+        Ok(format!(
+            "2200 sends over 6 flips: {} denied, {} allowed; 1:1 match with events, 0 drops",
+            deny_events, allow_events
+        ))
+    });
+
+    run_test(checks, "net_verdicts_independent_of_telemetry", || {
+        // Don't drain the ring buffer; flood it until it drops
         spawn_child(
             "/sys/fs/cgroup/rk.slice/enforce",
-            "tcp_connect",
-            &["10.99.0.2:80", "eperm"],
+            "flood_ringbuf",
+            &["10.99.0.1:80"],
         )?;
-        engine.apply_text(&mut ebpf, POLICY_TEXT)?;
+
+        let drops = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
+        if drops == 0 {
+            anyhow::bail!("expected RK_CNT_RINGBUF_DROP > 0 after flood, got 0");
+        }
+
+        // Assert denied connects still get EPERM
         spawn_child(
             "/sys/fs/cgroup/rk.slice/enforce",
             "tcp_connect",
             &["10.99.0.1:80", "eperm"],
         )?;
-        Ok("atomic reload flipped generation cleanly without mixed state".into())
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "udp_connect",
+            &["10.99.0.1:80", "eperm"],
+        )?;
+
+        Ok(format!(
+            "ring buffer overflowed with {drops} drops; denied connects still return EPERM"
+        ))
     });
 
     // Drop rk.bpf.o instance before loading rk_emitfail.bpf.o
@@ -400,37 +591,131 @@ profile = "enforce-profile"
         };
 
         let mut ebpf_fail = rk_sensor::loader::open_bytes(emitfail_bytes, "rk_emitfail.bpf.o")?;
-        let _reports = rk_sensor::loader::load_programs(
+        let reports = rk_sensor::loader::load_programs(
             rk_sensor::loader::Object::Production,
             &mut ebpf_fail,
             btf.as_ref(),
         );
+        for r in &reports {
+            if !r.loaded {
+                anyhow::bail!("{}: failed to load: {:?}", r.name, r.error);
+            }
+        }
 
         rk_sensor::policy::attach_network(&mut ebpf_fail, cgroup_slice)?;
         let mut engine_fail = rk_sensor::policy::PolicyEngine::default();
         engine_fail.apply_text(&mut ebpf_fail, POLICY_TEXT)?;
 
-        // Verify that verdicts STILL hold when emit fails
-        spawn_child(
-            "/sys/fs/cgroup/rk.slice/enforce",
-            "tcp_connect",
-            &["10.99.0.1:80", "eperm"],
-        )?;
-        spawn_child(
-            "/sys/fs/cgroup/rk.slice/enforce",
-            "tcp_connect",
-            &["127.0.0.1:8080", "ok"],
-        )?;
-        spawn_child(
-            "/sys/fs/cgroup/rk.slice/enforce",
-            "udp_connect",
-            &["10.99.0.1:80", "eperm"],
-        )?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "raw_socket", &[])?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "packet_socket", &[])?;
+        // Run the same full verdict list as the normal suite
+        run_verdict_suite()?;
 
-        Ok("verdicts strictly enforced with EPERM despite forced emit failure".into())
+        // Assert RK_CNT_SCRATCH_MISS > 0
+        let scratch_miss = get_counter(&ebpf_fail, rk_counter::RK_CNT_SCRATCH_MISS)?;
+        if scratch_miss == 0 {
+            anyhow::bail!("expected RK_CNT_SCRATCH_MISS > 0, got 0");
+        }
+
+        // Assert no events reached the ring buffer
+        let map = ebpf_fail
+            .map_mut("events_ringbuf")
+            .context("missing events_ringbuf")?;
+        let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
+        if rb.next().is_some() {
+            anyhow::bail!("expected no events in ring buffer with emit failing, but found at least one");
+        }
+
+        Ok(format!(
+            "all verdicts enforced with emit failing; {scratch_miss} scratch misses recorded and 0 events reached ringbuf"
+        ))
     });
+}
+
+#[cfg(target_os = "linux")]
+fn get_counter(ebpf: &aya::Ebpf, key: u32) -> Result<u64> {
+    let map = ebpf
+        .map("rk_counters")
+        .context("rk_counters map missing")?;
+    let counters = PerCpuArray::<_, u64>::try_from(map)
+        .context("open rk_counters as PerCpuArray")?;
+    let per_cpu = counters.get(&key, 0).context("get counter key")?;
+    Ok(per_cpu.iter().sum::<u64>())
+}
+
+#[cfg(target_os = "linux")]
+fn drain_ringbuf(ebpf: &mut aya::Ebpf) -> Result<()> {
+    let map = ebpf
+        .map_mut("events_ringbuf")
+        .context("missing events_ringbuf")?;
+    let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
+    while rb.next().is_some() {}
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn run_verdict_suite() -> Result<()> {
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "tcp_connect",
+        &["10.99.0.1:80", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "tcp_connect",
+        &["127.0.0.1:8080", "ok"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "tcp_connect",
+        &["[fd99::1]:80", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "tcp_connect",
+        &["[::1]:8080", "ok"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "udp_connect",
+        &["10.99.0.1:80", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "udp_connect",
+        &["[fd99::1]:80", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "udp_sendmsg",
+        &["10.99.0.1:80", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "udp_sendmsg",
+        &["[fd99::1]:80", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "tcp_connect",
+        &["[::ffff:10.99.0.1]:80", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "tcp_connect",
+        &["[64:ff9b::10.99.0.1]:80", "eperm"],
+    )?;
+    spawn_child("/sys/fs/cgroup/rk.slice/enforce", "raw_socket", &[])?;
+    spawn_child("/sys/fs/cgroup/rk.slice/enforce", "packet_socket", &[])?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "tcp_fastopen",
+        &["10.99.0.1:80"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "io_uring_connect",
+        &["10.99.0.1:80"],
+    )?;
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -496,12 +781,14 @@ fn setup_environment() {
     start_tcp_listener("[::1]:8080");
     start_tcp_listener("10.99.0.1:80");
     start_tcp_listener("10.99.0.1:8080");
+    start_tcp_listener("10.99.0.2:80");
     start_tcp_listener("[fd99::1]:80");
     start_tcp_listener("[fd99::1]:8080");
 
     start_udp_listener("127.0.0.1:8080");
     start_udp_listener("[::1]:8080");
     start_udp_listener("10.99.0.1:80");
+    start_udp_listener("10.99.0.2:80");
     start_udp_listener("[fd99::1]:80");
 }
 

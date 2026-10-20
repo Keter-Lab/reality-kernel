@@ -31,6 +31,8 @@ pub fn run_child(args: &[String]) -> i32 {
         "tcp_fastopen" => handle_tcp_fastopen(rest),
         "io_uring_connect" => handle_io_uring_connect(rest),
         "blast_connect" => handle_blast_connect(rest),
+        "flood_ringbuf" => handle_flood_ringbuf(rest),
+        "paced_workload" => handle_paced_workload(rest),
         other => {
             eprintln!("[child] unknown workload: {other}");
             203
@@ -369,5 +371,104 @@ fn handle_blast_connect(args: &[String]) -> i32 {
             }
         }
     }
+    0
+}
+
+fn handle_flood_ringbuf(args: &[String]) -> i32 {
+    let addr_str = if !args.is_empty() {
+        &args[0]
+    } else {
+        "10.99.0.1:80"
+    };
+    let addr: SocketAddr = match addr_str.parse() {
+        Ok(a) => a,
+        Err(_) => return 261,
+    };
+    let sock = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[child] udp bind failed: {e}");
+            return 262;
+        }
+    };
+    // 35,000 UDP sends to fill 1MB ring buffer (~10k events capacity) and trigger drops
+    for _ in 0..35_000 {
+        let _ = sock.send_to(b"flood", addr);
+    }
+    0
+}
+
+fn handle_paced_workload(args: &[String]) -> i32 {
+    if args.len() < 4 {
+        eprintln!("[child] paced_workload expects <proto> <addr> <count> <pace_us>");
+        return 270;
+    }
+    let proto = &args[0];
+    let addr_str = &args[1];
+    let count: usize = match args[2].parse() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[child] invalid count {}: {e}", args[2]);
+            return 271;
+        }
+    };
+    let pace_us: u64 = match args[3].parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[child] invalid pace_us {}: {e}", args[3]);
+            return 272;
+        }
+    };
+
+    let addr: SocketAddr = match addr_str.parse() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("[child] invalid addr {addr_str}: {e}");
+            return 273;
+        }
+    };
+
+    let mut eperm_count = 0u64;
+    let mut ok_count = 0u64;
+
+    if proto == "udp" {
+        let sock = match UdpSocket::bind("0.0.0.0:0") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[child] udp bind failed: {e}");
+                return 274;
+            }
+        };
+
+        for _ in 0..count {
+            match sock.send_to(b"ping", addr) {
+                Ok(_) => ok_count += 1,
+                Err(e) if e.raw_os_error() == Some(libc::EPERM) => eperm_count += 1,
+                Err(e) => {
+                    eprintln!("[child] unexpected send_to error: {e}");
+                    return 275;
+                }
+            }
+            if pace_us > 0 {
+                std::thread::sleep(Duration::from_micros(pace_us));
+            }
+        }
+    } else {
+        for _ in 0..count {
+            match TcpStream::connect_timeout(&addr, Duration::from_millis(50)) {
+                Ok(_) => ok_count += 1,
+                Err(e) if e.raw_os_error() == Some(libc::EPERM) => eperm_count += 1,
+                Err(e) => {
+                    eprintln!("[child] unexpected tcp connect error: {e}");
+                    return 276;
+                }
+            }
+            if pace_us > 0 {
+                std::thread::sleep(Duration::from_micros(pace_us));
+            }
+        }
+    }
+
+    println!("{{\"eperm\":{eperm_count},\"ok\":{ok_count}}}");
     0
 }

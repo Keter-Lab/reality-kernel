@@ -54,13 +54,18 @@ else
     rc=1
 fi
 
-if [ -n "$integration" ] && [ -x "$integration" ]; then
-    echo "===RK_INTEGRATION_BEGIN==="
-    "$integration"
-    integ_rc=$?
-    echo "===RK_INTEGRATION_END==="
-    echo "rk-integration exit code: $integ_rc"
-    [ "$integ_rc" -eq 0 ] || rc=1
+if [ -n "$integration" ]; then
+    if [ -x "$integration" ]; then
+        echo "===RK_INTEGRATION_BEGIN==="
+        "$integration"
+        integ_rc=$?
+        echo "===RK_INTEGRATION_END==="
+        echo "rk-integration exit code: $integ_rc"
+        [ "$integ_rc" -eq 0 ] || rc=1
+    else
+        echo "FAIL integration binary given but not executable: $integration"
+        rc=1
+    fi
 fi
 
 exit "$rc"
