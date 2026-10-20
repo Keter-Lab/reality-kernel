@@ -508,11 +508,9 @@ fn setup_environment() {
 fn start_tcp_listener(addr: &'static str) {
     thread::spawn(move || {
         if let Ok(listener) = TcpListener::bind(addr) {
-            for stream in listener.incoming() {
-                if let Ok(mut s) = stream {
-                    use std::io::Write;
-                    let _ = s.write_all(b"OK\n");
-                }
+            for mut s in listener.incoming().flatten() {
+                use std::io::Write;
+                let _ = s.write_all(b"OK\n");
             }
         }
     });
