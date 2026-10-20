@@ -15,7 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use aya::maps::{PerCpuArray, RingBuf};
+use aya::maps::{MapData, PerCpuArray, RingBuf};
 use aya::Btf;
 use rk_ebpf_common::rk_counter;
 use serde::{Deserialize, Serialize};
@@ -234,6 +234,18 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         return;
     }
 
+    // Open the ring buffer exactly once and share the reader across tests. With
+    // aya 0.13, a second RingBuf opened on a partly consumed ring starts from a
+    // stale producer cache and reads stale ring memory forever (the cause of the
+    // multi-hour hangs). rk-sensor's consumer also opens it once.
+    let mut ring = match rk_sensor::consumer::take_ring(&mut ebpf) {
+        Ok(ring) => ring,
+        Err(e) => {
+            checks.push(TestCheck::fail("ringbuf_open", format!("{e:#}")));
+            return;
+        }
+    };
+
     // Run each named test in §7
     run_test(checks, "net_enforce_tcp_v4", || {
         spawn_child(
@@ -351,7 +363,9 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             .and_then(|p| {
                 p.origins
                     .iter()
-                    .find(|o| o.profile == "audit-profile")
+                    .find(|o| {
+                        o.profile == "audit-profile" && o.origin.starts_with("network.deny[0]")
+                    })
                     .map(|o| o.id)
             })
             .context("audit-profile rule not found in policy origins")?;
@@ -362,7 +376,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
         // Drain ring buffer first to cleanly observe the audit event
         progress!("audit: draining ring buffer");
-        drain_ringbuf(&mut ebpf)?;
+        drain_ringbuf(&mut ring)?;
         progress!("audit: drained; running audit child");
 
         // In audit mode, connect succeeds
@@ -374,10 +388,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
         progress!("audit: child finished; reading events");
         // Read ring buffer to verify audit event matches rule_id and cgroup_id
-        let map = ebpf
-            .map_mut("events_ringbuf")
-            .context("missing events_ringbuf")?;
-        let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
+        let rb = &mut ring;
         let mut found_audit = false;
         let mut matched_rule_id = 0;
         let mut matched_cgroup_id = 0;
@@ -467,7 +478,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
     });
 
     run_test(checks, "net_reload_atomic", || {
-        drain_ringbuf(&mut ebpf)?;
+        drain_ringbuf(&mut ring)?;
         let drops_start = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
 
         let mut deny_gens = HashSet::new();
@@ -532,10 +543,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         }
 
         // Drain events from ring buffer
-        let map = ebpf
-            .map_mut("events_ringbuf")
-            .context("missing events_ringbuf")?;
-        let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
+        let rb = &mut ring;
         let mut deny_events = 0u64;
         let mut allow_events = 0u64;
         let drain_start = Instant::now();
@@ -672,10 +680,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         }
 
         // Assert no events reached the ring buffer
-        let map = ebpf_fail
-            .map_mut("events_ringbuf")
-            .context("missing events_ringbuf")?;
-        let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
+        let mut rb = rk_sensor::consumer::take_ring(&mut ebpf_fail)?;
         if rb.next().is_some() {
             anyhow::bail!(
                 "expected no events in ring buffer with emit failing, but found at least one"
@@ -698,11 +703,7 @@ fn get_counter(ebpf: &aya::Ebpf, key: u32) -> Result<u64> {
 }
 
 #[cfg(target_os = "linux")]
-fn drain_ringbuf(ebpf: &mut aya::Ebpf) -> Result<()> {
-    let map = ebpf
-        .map_mut("events_ringbuf")
-        .context("missing events_ringbuf")?;
-    let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
+fn drain_ringbuf(rb: &mut RingBuf<MapData>) -> Result<()> {
     let start = Instant::now();
     let mut records = 0u64;
     while rb.next().is_some() {

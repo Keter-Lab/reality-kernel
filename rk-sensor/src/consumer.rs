@@ -15,6 +15,10 @@ use crate::pipeline;
 
 /// Takes ownership of the ring buffer so the rest of `ebpf` stays usable (for
 /// example by the policy engine).
+///
+/// Open the ring buffer **once** per loaded object and keep that reader. With
+/// aya 0.13, a second `RingBuf` opened on a partly consumed ring starts from a
+/// stale producer-position cache and reads stale ring memory indefinitely.
 pub fn take_ring(ebpf: &mut Ebpf) -> Result<RingBuf<MapData>> {
     let map = ebpf
         .take_map("events_ringbuf")
