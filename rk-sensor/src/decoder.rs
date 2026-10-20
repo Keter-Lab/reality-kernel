@@ -11,8 +11,8 @@ use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use rk_ebpf_common::{
-    rk_event_type, rk_hdr, rk_payload_exec, rk_payload_file, rk_payload_net, rk_verdict,
-    RK_ABI_VERSION, RK_ENVELOPE_LEN, RK_SCRATCH_PAYLOAD_MAX,
+    rk_event_type, rk_hdr, rk_payload_exec, rk_payload_file, rk_payload_net, rk_payload_sock,
+    rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN, RK_SCRATCH_PAYLOAD_MAX,
 };
 
 const HDR_LEN: usize = core::mem::size_of::<rk_hdr>();
@@ -119,6 +119,10 @@ pub enum Payload<'a> {
     },
     Net {
         body: rk_payload_net,
+    },
+    /// A governed raw or packet `socket()` call.
+    Sock {
+        body: rk_payload_sock,
     },
     /// Event types whose body is not defined yet (unlink, rename, fork, exit,
     /// tamper). Bytes are passed through for logging only.
@@ -269,6 +273,13 @@ pub fn decode(bytes: &[u8]) -> Result<Event<'_>, DecodeError> {
             }
             Payload::Net { body }
         }
+        rk_event_type::RK_EV_SOCK_CREATE => {
+            let (body, tail) = read_body::<rk_payload_sock>(payload)?;
+            if !tail.is_empty() {
+                return Err(DecodeError::TrailingBytes(tail.len()));
+            }
+            Payload::Sock { body }
+        }
         rk_event_type::RK_EV_UNLINK
         | rk_event_type::RK_EV_RENAME
         | rk_event_type::RK_EV_FORK
@@ -408,6 +419,28 @@ pub(crate) mod tests {
             bytemuck::bytes_of(&body),
         );
         assert_eq!(decode(&rec).unwrap().payload, Payload::Net { body });
+    }
+
+    #[test]
+    fn decodes_sock_create() {
+        let body = rk_payload_sock {
+            family: 17,
+            type_: 3,
+            protocol: 768,
+            ..Zeroable::zeroed()
+        };
+        let rec = record(
+            &hdr(
+                rk_event_type::RK_EV_SOCK_CREATE,
+                rk_verdict::RK_VERDICT_DENY,
+            ),
+            bytemuck::bytes_of(&body),
+        );
+        assert_eq!(decode(&rec).unwrap().payload, Payload::Sock { body });
+        let mut long = bytemuck::bytes_of(&body).to_vec();
+        long.push(0);
+        let rec = record(&hdr(rk_event_type::RK_EV_SOCK_CREATE, 0), &long);
+        assert_eq!(decode(&rec), Err(DecodeError::TrailingBytes(1)));
     }
 
     #[test]

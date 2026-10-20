@@ -39,6 +39,7 @@ enum rk_event_type {
     RK_EV_EXIT        = 7,
     RK_EV_TAMPER      = 8,
     RK_EV_SENDMSG     = 9,
+    RK_EV_SOCK_CREATE = 10,
 };
 
 enum rk_verdict {
@@ -107,6 +108,102 @@ struct rk_payload_net {
     __u8  protocol;       /* offset 38: IPPROTO_TCP or IPPROTO_UDP */
     __u8  _pad;           /* offset 39 */
 };
+
+/* RK_EV_SOCK_CREATE Payload (16 bytes): a governed socket() call. */
+struct rk_payload_sock {
+    __u16 family;         /* offset  0: AF_* */
+    __u16 _pad;           /* offset  2 */
+    __u32 type;           /* offset  4: SOCK_* (flags already masked) */
+    __u32 protocol;       /* offset  8 */
+    __u32 _pad2;          /* offset 12 */
+};
+
+/*
+ * ------------------------------------------------------------------------
+ * Policy maps (written by rk-sensor from rk-policy output; read by hooks).
+ * See docs/design/phase-2.md §4.
+ * ------------------------------------------------------------------------
+ */
+#define RK_MAX_PROFILES   1024
+#define RK_POLICY_SLOTS   2
+#define RK_NET_MAX_RANGES 8
+
+enum rk_mode {
+    RK_MODE_AUDIT   = 0,
+    RK_MODE_ENFORCE = 1,
+};
+
+enum rk_action {
+    RK_ACTION_ALLOW = 0,
+    RK_ACTION_DENY  = 1,
+};
+
+/* rk_net_range.proto_mask bits */
+enum rk_proto_bit {
+    RK_PROTO_TCP   = 1,
+    RK_PROTO_UDP   = 2,
+    RK_PROTO_OTHER = 4,
+    RK_PROTO_ANY   = 7,
+};
+
+/* rk_profile.flags bits */
+enum rk_profile_flag {
+    RK_PROFILE_DENY_RAW_SOCKETS = 1,
+};
+
+/* rk_cgroup_profile value: cgroup id -> profile id (stable across reloads). */
+struct rk_binding {
+    __u32 profile;        /* offset 0 */
+    __u32 _pad;           /* offset 4 */
+};
+
+/* rk_profiles value, indexed by slot * RK_MAX_PROFILES + profile. */
+struct rk_profile {
+    __u8  mode;           /* offset 0: enum rk_mode */
+    __u8  net_default;    /* offset 1: enum rk_action */
+    __u16 flags;          /* offset 2: enum rk_profile_flag */
+    __u32 _pad;           /* offset 4 */
+    __u64 policy_gen;     /* offset 8: 0 = slot entry never written */
+};
+
+/*
+ * LPM trie key for rk_net_deny / rk_net_allow. scope = slot << 31 | profile,
+ * prefixlen = 32 + CIDR length over the 16-byte (IPv4-mapped) address.
+ */
+struct rk_net_key {
+    __u32 prefixlen;      /* offset 0 */
+    __u32 scope;          /* offset 4 */
+    __u8  addr[16];       /* offset 8: network byte order */
+};
+
+/* One port/protocol range of a compiled rule. Ports in host byte order. */
+struct rk_net_range {
+    __u32 rule_id;        /* offset 0 */
+    __u16 port_lo;        /* offset 4 */
+    __u16 port_hi;        /* offset 6 */
+    __u8  proto_mask;     /* offset 8: enum rk_proto_bit */
+    __u8  _pad[3];        /* offset 9 */
+};
+
+/*
+ * LPM trie value: the ranges of the matched prefix followed by those of every
+ * covering shorter prefix (flattened by rk-policy), most specific first.
+ */
+struct rk_net_rule {
+    __u32 nranges;        /* offset 0: <= RK_NET_MAX_RANGES */
+    struct rk_net_range ranges[RK_NET_MAX_RANGES]; /* offset 4 */
+};
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(sizeof(struct rk_payload_sock) == 16, "payload_sock size");
+_Static_assert(sizeof(struct rk_binding) == 8, "binding size");
+_Static_assert(sizeof(struct rk_profile) == 16, "profile size");
+_Static_assert(__builtin_offsetof(struct rk_profile, policy_gen) == 8, "profile policy_gen");
+_Static_assert(sizeof(struct rk_net_key) == 24, "net_key size");
+_Static_assert(__builtin_offsetof(struct rk_net_key, addr) == 8, "net_key addr");
+_Static_assert(sizeof(struct rk_net_range) == 12, "net_range size");
+_Static_assert(sizeof(struct rk_net_rule) == 4 + 12 * RK_NET_MAX_RANGES, "net_rule size");
+#endif
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert(sizeof(struct rk_hdr) == 48, "rk_hdr size");

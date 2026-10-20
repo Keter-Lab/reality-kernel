@@ -20,8 +20,9 @@ CFLAGS := -g -O2 -target bpf -std=gnu11 -Wall -Werror \
 	-isystem include/vmlinux/$(ARCH)
 
 OBJECTS := $(OUT)/rk.bpf.o $(OUT)/rk_selftest.bpf.o $(OUT)/rk_probes.bpf.o \
+	$(OUT)/rk_emitfail.bpf.o \
 	$(OUT)/reject_infinite_loop.bpf.o
-HEADERS := include/rk_abi.h include/vmlinux/$(ARCH)/vmlinux.h src/common.bpf.h
+HEADERS := include/rk_abi.h include/vmlinux/$(ARCH)/vmlinux.h src/common.bpf.h src/net.bpf.c
 
 all: $(OBJECTS)
 
@@ -33,6 +34,14 @@ all-arches:
 $(OUT)/%.bpf.o: src/%.bpf.c $(HEADERS)
 	@mkdir -p $(OUT)
 	$(CLANG) $(CFLAGS) -c $< -o $@
+	$(LLVM_STRIP) -g $@
+
+# Test-only variant of rk.bpf.o in which every event emission fails; used by
+# tests/integration to prove verdicts never depend on telemetry. Never embedded
+# in rk-sensor.
+$(OUT)/rk_emitfail.bpf.o: src/rk.bpf.c $(HEADERS)
+	@mkdir -p $(OUT)
+	$(CLANG) $(CFLAGS) -DRK_TEST_FORCE_EMIT_FAIL -c $< -o $@
 	$(LLVM_STRIP) -g $@
 
 $(OUT)/reject_infinite_loop.bpf.o: test/reject_infinite_loop.bpf.c $(HEADERS)

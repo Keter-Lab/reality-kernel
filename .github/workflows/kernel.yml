@@ -93,18 +93,25 @@ jobs:
         run: .github/scripts/run-logged.sh "rk-sensor tests (embedded)" cargo test -p rk-sensor --features embedded-bpf
 
       - name: Release build (static, embedded objects)
-        run: .github/scripts/run-logged.sh "rk-sensor release build" cargo build --release -p rk-sensor --features embedded-bpf --target ${{ matrix.target }}
+        run: |
+          .github/scripts/run-logged.sh "rk-sensor release build" cargo build --release -p rk-sensor --features embedded-bpf --target ${{ matrix.target }}
+          .github/scripts/run-logged.sh "rk-integration release build" cargo build --release -p rk-integration --features embedded-bpf --target ${{ matrix.target }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rk-sensor-${{ matrix.arch }}
-          path: target/${{ matrix.target }}/release/rk-sensor
+          path: |
+            target/${{ matrix.target }}/release/rk-sensor
+            target/${{ matrix.target }}/release/rk-integration
           if-no-files-found: error
 
   vm-matrix:
     name: Verifier + selftest (Linux ${{ matrix.kernel }})
     needs: sensor
     runs-on: ubuntu-24.04
+    # Covers a cold 5.15 kernel build (~20 min). A hang inside the VM is cut
+    # off much earlier by the `timeout` around vmtest.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -159,7 +166,7 @@ jobs:
           curl -fsSL -o bpftool.tar.gz "https://github.com/libbpf/bpftool/releases/download/${BPFTOOL_VERSION}/bpftool-${BPFTOOL_VERSION}-amd64.tar.gz"
           echo "${BPFTOOL_SHA256}  bpftool.tar.gz" | sha256sum -c -
           tar -xzf bpftool.tar.gz -C tools
-          chmod +x tools/vmtest tools/bpftool bin/rk-sensor
+          chmod +x tools/vmtest tools/bpftool bin/rk-sensor bin/rk-integration
 
       - name: Extract kernel ${{ matrix.kernel }}
         run: |
@@ -204,21 +211,35 @@ jobs:
       - name: Run selftest and verifier controls in the VM
         run: |
           set -o pipefail
-          tools/vmtest -k "$KERNEL_IMAGE" --kargs "lsm=${VM_LSM}" \
-            "bash $PWD/tests/vm/selftest.sh $PWD/bin/rk-sensor $PWD/rk-bpf/build/x86 $PWD/tools/bpftool" \
+          # The whole VM session normally takes ~2 minutes; fail fast on a hang.
+          timeout --kill-after=30 900 tools/vmtest -k "$KERNEL_IMAGE" --kargs "lsm=${VM_LSM}" \
+            "bash $PWD/tests/vm/selftest.sh $PWD/bin/rk-sensor $PWD/rk-bpf/build/x86 $PWD/tools/bpftool $PWD/bin/rk-integration" \
             2>&1 | tee vm.log
           rc=${PIPESTATUS[0]}
           sed -n '/===RK_SELFTEST_BEGIN===/,/===RK_SELFTEST_END===/p' vm.log \
             | sed '1d;$d' > "selftest-${{ matrix.kernel }}.json"
+          sed -n '/===RK_INTEGRATION_BEGIN===/,/===RK_INTEGRATION_END===/p' vm.log \
+            | sed '1d;$d' > "integration-${{ matrix.kernel }}.json"
           if [ "$rc" -ne 0 ]; then
             .github/scripts/annotate.sh vm.log "Linux ${{ matrix.kernel }}"
-            python3 - "selftest-${{ matrix.kernel }}.json" <<'PY' || true
-          import json, sys
-          r = json.load(open(sys.argv[1]))
-          bad = [f"{p['object']}:{p['name']}: {p['error']}" for p in r["programs"] if not p["loaded"] and not p["probe"]]
-          bad += [f"{c['name']}: {c['detail']}" for c in r["checks"] if not c["passed"]]
-          bad += [f"missing feature: {m}" for m in r["missing_features"]]
-          print("::error title=selftest report::" + "%0A".join(bad).replace("\n", "%0A")[:60000])
+            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" <<'PY'
+          import json, os, sys
+          for fname in sys.argv[1:]:
+            if os.path.exists(fname) and os.path.getsize(fname) > 0:
+              try:
+                data = json.load(open(fname))
+                if isinstance(data, list):
+                  bad = [f"{c['name']}: {c['detail']}" for c in data if not c.get("passed", False)]
+                elif isinstance(data, dict):
+                  bad = [f"{p['object']}:{p['name']}: {p['error']}" for p in data.get("programs", []) if not p.get("loaded", False) and not p.get("probe", False)]
+                  bad += [f"{c['name']}: {c['detail']}" for c in data.get("checks", []) if not c.get("passed", False)]
+                  bad += [f"missing feature: {m}" for m in data.get("missing_features", [])]
+                else:
+                  bad = []
+                if bad:
+                  print("::error title=" + fname + "::" + "%0A".join(bad).replace("\n", "%0A")[:60000])
+              except Exception as e:
+                print(f"::error title={fname} parse error::{e}")
           PY
           fi
           exit "$rc"
@@ -229,6 +250,7 @@ jobs:
           name: selftest-${{ matrix.kernel }}
           path: |
             selftest-${{ matrix.kernel }}.json
+            integration-${{ matrix.kernel }}.json
             vm.log
           if-no-files-found: warn
 

@@ -68,6 +68,21 @@ const _: () = {
     assert!(offset_of!(rk_payload_net, dport) == 34);
     assert!(offset_of!(rk_payload_net, family) == 36);
     assert!(offset_of!(rk_payload_net, protocol) == 38);
+
+    assert!(size_of::<rk_payload_sock>() == 16);
+    assert!(offset_of!(rk_payload_sock, type_) == 4);
+    assert!(offset_of!(rk_payload_sock, protocol) == 8);
+
+    // Policy maps.
+    assert!(size_of::<rk_binding>() == 8);
+    assert!(size_of::<rk_profile>() == 16);
+    assert!(offset_of!(rk_profile, policy_gen) == 8);
+    assert!(size_of::<rk_net_key>() == 24);
+    assert!(offset_of!(rk_net_key, scope) == 4);
+    assert!(offset_of!(rk_net_key, addr) == 8);
+    assert!(size_of::<rk_net_range>() == 12);
+    assert!(offset_of!(rk_net_range, proto_mask) == 8);
+    assert!(size_of::<rk_net_rule>() == 4 + 12 * RK_NET_MAX_RANGES as usize);
 };
 
 #[cfg(test)]
@@ -81,6 +96,12 @@ mod tests {
         assert_eq!(rk_event_type::RK_EV_SENDMSG, 9);
         assert_eq!(rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY, 2);
         assert_eq!(rk_counter::RK_CNT_MAX, 2);
+        assert_eq!(rk_event_type::RK_EV_SOCK_CREATE, 10);
+        assert_eq!(RK_MAX_PROFILES, 1024);
+        assert_eq!(RK_POLICY_SLOTS, 2);
+        assert_eq!(rk_proto_bit::RK_PROTO_ANY, 7);
+        assert_eq!(rk_mode::RK_MODE_ENFORCE, 1);
+        assert_eq!(rk_action::RK_ACTION_DENY, 1);
     }
 
     #[test]

@@ -19,7 +19,7 @@ fuzz_target!(|data: &[u8]| {
             Payload::File { body, strings } => {
                 assert_eq!(strings.count(), usize::from(body.str_count))
             }
-            Payload::Net { .. } | Payload::Raw { .. } => {}
+            Payload::Net { .. } | Payload::Sock { .. } | Payload::Raw { .. } => {}
         }
     }
 });

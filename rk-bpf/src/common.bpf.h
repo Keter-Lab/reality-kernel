@@ -62,6 +62,29 @@ struct {
     __uint(max_entries, 1024);
 } monitored_cgroups SEC(".maps");
 
+/* Policy maps (docs/design/phase-2.md §4). Written only by rk-sensor. */
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, __u64);
+    __type(value, struct rk_binding);
+    __uint(max_entries, 4096);
+} rk_cgroup_profile SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, __u32);
+    __type(value, struct rk_profile);
+    __uint(max_entries, RK_POLICY_SLOTS * RK_MAX_PROFILES);
+} rk_profiles SEC(".maps");
+
+/* Commit point of a policy apply: which generation slot is live. */
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, __u32);
+    __type(value, __u32);
+    __uint(max_entries, 1);
+} rk_active_slot SEC(".maps");
+
 static __always_inline void rk_count(__u32 idx)
 {
     __u64 *val = bpf_map_lookup_elem(&rk_counters, &idx);
@@ -78,11 +101,86 @@ static __always_inline __u64 rk_governed_gen(__u64 cgroup_id)
     return gen ? *gen : 0;
 }
 
+/* The governance context of one decision (steps 1-3 of the decision path). */
+struct rk_gov {
+    __u64 cgroup_id;
+    __u64 policy_gen;
+    __u32 scope;          /* slot << 31 | profile: LPM key prefix */
+    __u8  mode;
+    __u8  net_default;
+    __u16 flags;
+};
+
+/*
+ * Returns 0 for an ungoverned task (fast path: one hash lookup). A cgroup bound
+ * to a profile whose slot entry was never written is a configuration error and
+ * fails closed: ENFORCE, default deny, raw sockets denied, no rule matches.
+ */
+static __always_inline int rk_governance(struct rk_gov *g)
+{
+    __u64 cg = bpf_get_current_cgroup_id();
+    struct rk_binding *binding;
+    struct rk_profile *prof;
+    __u32 zero = 0, slot = 0, idx, profile;
+    __u32 *active;
+
+    binding = bpf_map_lookup_elem(&rk_cgroup_profile, &cg);
+    if (!binding)
+        return 0;
+
+    active = bpf_map_lookup_elem(&rk_active_slot, &zero);
+    if (active)
+        slot = *active & 1;
+    profile = binding->profile;
+
+    g->cgroup_id = cg;
+    if (profile >= RK_MAX_PROFILES)
+        goto fail_closed;
+    idx = slot * RK_MAX_PROFILES + profile;
+    prof = bpf_map_lookup_elem(&rk_profiles, &idx);
+    if (!prof || prof->policy_gen == 0)
+        goto fail_closed;
+
+    g->policy_gen = prof->policy_gen;
+    g->scope = (slot << 31) | profile;
+    g->mode = prof->mode;
+    g->net_default = prof->net_default;
+    g->flags = prof->flags;
+    return 1;
+
+fail_closed:
+    g->policy_gen = 0;
+    g->scope = 0xffffffff; /* no trie entry uses this scope */
+    g->mode = RK_MODE_ENFORCE;
+    g->net_default = RK_ACTION_DENY;
+    g->flags = RK_PROFILE_DENY_RAW_SOCKETS;
+    return 1;
+}
+
+/* Verdict reported in events: AUDIT turns a deny into audit-would-deny. */
+static __always_inline __u8 rk_reported_verdict(const struct rk_gov *g, __u8 action)
+{
+    if (action != RK_ACTION_DENY)
+        return RK_VERDICT_ALLOW;
+    return g->mode == RK_MODE_ENFORCE ? RK_VERDICT_DENY : RK_VERDICT_AUDIT_WOULD_DENY;
+}
+
+static __always_inline int rk_enforced_deny(const struct rk_gov *g, __u8 action)
+{
+    return action == RK_ACTION_DENY && g->mode == RK_MODE_ENFORCE;
+}
+
 static __always_inline struct rk_scratch_msg *rk_scratch(void)
 {
     __u32 zero = 0;
-    struct rk_scratch_buf *buf = bpf_map_lookup_elem(&scratch_map, &zero);
+    struct rk_scratch_buf *buf;
 
+#ifdef RK_TEST_FORCE_EMIT_FAIL
+    /* Test-only build (rk_emitfail.bpf.o): every emission fails. */
+    rk_count(RK_CNT_SCRATCH_MISS);
+    return 0;
+#endif
+    buf = bpf_map_lookup_elem(&scratch_map, &zero);
     if (!buf) {
         rk_count(RK_CNT_SCRATCH_MISS);
         return 0;

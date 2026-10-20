@@ -6,20 +6,26 @@ compile_error!(
     "release builds of rk-sensor must embed the BPF objects: build with `--features embedded-bpf`"
 );
 
+use std::path::Path;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use rk_sensor::loader::{self, Object};
+use rk_sensor::policy::{self, PolicyEngine};
 use rk_sensor::{consumer, selftest};
-use tracing::info;
+use tokio::signal::unix::{signal, SignalKind};
+use tracing::{error, info, warn};
 
-const USAGE: &str = "usage: rk-sensor [--selftest | --version | --help]";
+const USAGE: &str = "usage: rk-sensor [--policy FILE | --selftest | --version | --help]";
+
+/// Policy file read at start and on SIGHUP when `--policy` is not given.
+const DEFAULT_POLICY: &str = "/etc/rk/policy.toml";
 
 #[derive(Debug, PartialEq, Eq)]
 enum Mode {
-    Run,
+    Run { policy: Option<String> },
     Selftest,
     SelftestChild(Vec<String>),
     Version,
@@ -28,7 +34,10 @@ enum Mode {
 
 fn parse_args(args: &[String]) -> Result<Mode, String> {
     match args {
-        [] => Ok(Mode::Run),
+        [] => Ok(Mode::Run { policy: None }),
+        [flag, file] if flag == "--policy" => Ok(Mode::Run {
+            policy: Some(file.clone()),
+        }),
         [flag] if flag == "--selftest" => Ok(Mode::Selftest),
         [flag] if flag == "--version" || flag == "-V" => Ok(Mode::Version),
         [flag] if flag == "--help" || flag == "-h" => Ok(Mode::Help),
@@ -79,7 +88,7 @@ fn main() -> ExitCode {
             }
             exit_code(report.exit_code)
         }
-        Mode::Run => match run_daemon() {
+        Mode::Run { policy } => match run_daemon(policy.as_deref().unwrap_or(DEFAULT_POLICY)) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("rk-sensor: {e:#}");
@@ -89,7 +98,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_daemon() -> Result<()> {
+fn run_daemon(policy_path: &str) -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
@@ -113,21 +122,50 @@ fn run_daemon() -> Result<()> {
                 failed.error.as_deref().unwrap_or("unknown error")
             );
         }
-        info!(
-            programs = programs.len(),
-            "rk-sensor started; this release has no enforcing hooks"
-        );
+        let cgroup_root = Path::new(policy::CGROUP_FS).join(rk_policy::net::CGROUP_ROOT);
+        let attached = policy::attach_network(&mut ebpf, &cgroup_root)?;
+        info!(?attached, "network hooks attached");
+
+        let mut engine = PolicyEngine::default();
+        apply_policy_file(&mut engine, &mut ebpf, policy_path);
 
         let stop = Arc::new(AtomicBool::new(false));
-        let stop_on_signal = stop.clone();
-        tokio::spawn(async move {
-            if tokio::signal::ctrl_c().await.is_ok() {
-                stop_on_signal.store(true, Ordering::Relaxed);
-            }
-        });
+        let ring = consumer::take_ring(&mut ebpf)?;
+        let consumer = tokio::spawn(consumer::consume_loop(ring, stop.clone()));
 
-        consumer::consume_loop(&mut ebpf, stop).await
+        let mut hangup = signal(SignalKind::hangup()).context("install SIGHUP handler")?;
+        let mut terminate = signal(SignalKind::terminate()).context("install SIGTERM handler")?;
+        loop {
+            tokio::select! {
+                _ = hangup.recv() => apply_policy_file(&mut engine, &mut ebpf, policy_path),
+                _ = terminate.recv() => break,
+                _ = tokio::signal::ctrl_c() => break,
+            }
+        }
+
+        stop.store(true, Ordering::Relaxed);
+        consumer.await.context("consumer task panicked")??;
+        info!("rk-sensor stopped");
+        Ok(())
     })
+}
+
+/// Applies the policy file atomically. A missing or invalid file leaves the
+/// active policy unchanged and is logged; it never stops the sensor.
+fn apply_policy_file(engine: &mut PolicyEngine, ebpf: &mut aya::Ebpf, path: &str) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) => {
+            warn!(path, error = %e, "policy file not readable; active policy unchanged");
+            return;
+        }
+    };
+    match engine.apply_text(ebpf, &text) {
+        Ok(report) => info!(path, ?report, "policy applied"),
+        Err(e) => {
+            error!(path, error = %format!("{e:#}"), "policy rejected; active policy unchanged")
+        }
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +178,13 @@ mod tests {
 
     #[test]
     fn parses_known_modes() {
-        assert_eq!(parse_args(&args(&[])), Ok(Mode::Run));
+        assert_eq!(parse_args(&args(&[])), Ok(Mode::Run { policy: None }));
+        assert_eq!(
+            parse_args(&args(&["--policy", "/etc/rk/p.toml"])),
+            Ok(Mode::Run {
+                policy: Some("/etc/rk/p.toml".into())
+            })
+        );
         assert_eq!(parse_args(&args(&["--selftest"])), Ok(Mode::Selftest));
         assert_eq!(parse_args(&args(&["-V"])), Ok(Mode::Version));
         assert_eq!(

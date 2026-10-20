@@ -14,6 +14,7 @@ set -u
 sensor="$1"
 bpf_dir="$2"
 bpftool="$3"
+integration="${4:-}"
 rc=0
 
 mountpoint -q /sys/kernel/security || mount -t securityfs securityfs /sys/kernel/security
@@ -51,6 +52,21 @@ else
     echo "FAIL positive control: bpftool could not load rk_selftest.bpf.o:"
     tail -n 40 <<<"$pos_log"
     rc=1
+fi
+
+if [ -n "$integration" ]; then
+    if [ -x "$integration" ]; then
+        # rk-integration prints its own report markers on stdout; its per-test
+        # progress goes to stderr, merged here so the CI log shows where a
+        # run stopped.
+        "$integration" 2>&1
+        integ_rc=$?
+        echo "rk-integration exit code: $integ_rc"
+        [ "$integ_rc" -eq 0 ] || rc=1
+    else
+        echo "FAIL integration binary given but not executable: $integration"
+        rc=1
+    fi
 fi
 
 exit "$rc"
