@@ -174,44 +174,84 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
     // Run each named test in §7
     run_test(checks, "net_enforce_tcp_v4", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["10.99.0.1:80", "eperm"])?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["127.0.0.1:8080", "ok"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["10.99.0.1:80", "eperm"],
+        )?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["127.0.0.1:8080", "ok"],
+        )?;
         Ok("10.99.0.1 denied with EPERM, 127.0.0.1 allowed".into())
     });
 
     run_test(checks, "net_enforce_tcp_v6", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["[fd99::1]:80", "eperm"])?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["[::1]:8080", "ok"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["[fd99::1]:80", "eperm"],
+        )?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["[::1]:8080", "ok"],
+        )?;
         Ok("[fd99::1] denied with EPERM, [::1] allowed".into())
     });
 
     run_test(checks, "net_enforce_udp_connect_v4", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "udp_connect", &["10.99.0.1:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "udp_connect",
+            &["10.99.0.1:80", "eperm"],
+        )?;
         Ok("udp connect to 10.99.0.1:80 denied with EPERM".into())
     });
 
     run_test(checks, "net_enforce_udp_connect_v6", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "udp_connect", &["[fd99::1]:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "udp_connect",
+            &["[fd99::1]:80", "eperm"],
+        )?;
         Ok("udp connect to [fd99::1]:80 denied with EPERM".into())
     });
 
     run_test(checks, "net_enforce_udp_sendmsg_v4", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "udp_sendmsg", &["10.99.0.1:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "udp_sendmsg",
+            &["10.99.0.1:80", "eperm"],
+        )?;
         Ok("udp send_to to 10.99.0.1:80 denied with EPERM".into())
     });
 
     run_test(checks, "net_enforce_udp_sendmsg_v6", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "udp_sendmsg", &["[fd99::1]:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "udp_sendmsg",
+            &["[fd99::1]:80", "eperm"],
+        )?;
         Ok("udp send_to to [fd99::1]:80 denied with EPERM".into())
     });
 
     run_test(checks, "net_enforce_v4_mapped", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["[::ffff:10.99.0.1]:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["[::ffff:10.99.0.1]:80", "eperm"],
+        )?;
         Ok("connect to [::ffff:10.99.0.1]:80 denied with EPERM".into())
     });
 
     run_test(checks, "net_nat64_equivalence", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["[64:ff9b::10.99.0.1]:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["[64:ff9b::10.99.0.1]:80", "eperm"],
+        )?;
         Ok("NAT64 connect to [64:ff9b::10.99.0.1]:80 denied with EPERM".into())
     });
 
@@ -226,20 +266,34 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
     });
 
     run_test(checks, "net_tcp_fastopen_denied", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_fastopen", &["10.99.0.1:80"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_fastopen",
+            &["10.99.0.1:80"],
+        )?;
         Ok("TCP Fast Open sendto denied with EPERM".into())
     });
 
     run_test(checks, "net_io_uring_connect_denied", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "io_uring_connect", &["10.99.0.1:80"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "io_uring_connect",
+            &["10.99.0.1:80"],
+        )?;
         Ok("io_uring IORING_OP_CONNECT denied with EPERM".into())
     });
 
     run_test(checks, "net_audit_reports_rule_id", || {
         // In audit mode, connect succeeds
-        spawn_child("/sys/fs/cgroup/rk.slice/audit", "tcp_connect", &["10.99.0.1:80", "ok"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/audit",
+            "tcp_connect",
+            &["10.99.0.1:80", "ok"],
+        )?;
         // Drain ring buffer to verify audit event
-        let map = ebpf.map_mut("events_ringbuf").context("missing events_ringbuf")?;
+        let map = ebpf
+            .map_mut("events_ringbuf")
+            .context("missing events_ringbuf")?;
         let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
         let mut found_audit = false;
         let mut rule_id = 0;
@@ -263,24 +317,40 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         }
 
         if found_audit && rule_id > 0 {
-            Ok(format!("audit allowed and emitted event with rule_id={rule_id}"))
+            Ok(format!(
+                "audit allowed and emitted event with rule_id={rule_id}"
+            ))
         } else {
-            anyhow::bail!("audit event not found or rule_id==0 (found={found_audit}, rule_id={rule_id})")
+            anyhow::bail!(
+                "audit event not found or rule_id==0 (found={found_audit}, rule_id={rule_id})"
+            )
         }
     });
 
     run_test(checks, "net_ungoverned_untouched", || {
-        spawn_child("/sys/fs/cgroup/ungoverned", "tcp_connect", &["127.0.0.1:8080", "ok"])?;
+        spawn_child(
+            "/sys/fs/cgroup/ungoverned",
+            "tcp_connect",
+            &["127.0.0.1:8080", "ok"],
+        )?;
         Ok("processes outside rk.slice untouched".into())
     });
 
     run_test(checks, "net_unbound_sibling_untouched", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/ungoverned-sibling", "tcp_connect", &["127.0.0.1:8080", "ok"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/ungoverned-sibling",
+            "tcp_connect",
+            &["127.0.0.1:8080", "ok"],
+        )?;
         Ok("unbound sibling inside rk.slice untouched".into())
     });
 
     run_test(checks, "net_verdicts_independent_of_telemetry", || {
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "blast_connect", &["10.99.0.1:80"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "blast_connect",
+            &["10.99.0.1:80"],
+        )?;
         Ok("burst connections all denied with EPERM despite ringbuf overflow".into())
     });
 
@@ -304,9 +374,17 @@ cgroup = "rk.slice/enforce"
 profile = "enforce-profile"
 "#;
         engine.apply_text(&mut ebpf, policy_b)?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["10.99.0.2:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["10.99.0.2:80", "eperm"],
+        )?;
         engine.apply_text(&mut ebpf, POLICY_TEXT)?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["10.99.0.1:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["10.99.0.1:80", "eperm"],
+        )?;
         Ok("atomic reload flipped generation cleanly without mixed state".into())
     });
 
