@@ -614,7 +614,10 @@ fn handle_exec_reload_workload(args: &[String]) -> i32 {
                 let mut status: libc::c_int = 0;
                 let waited = libc::waitpid(pid, &mut status, 0);
                 if waited < 0 {
-                    eprintln!("[child] waitpid failed: {}", std::io::Error::last_os_error());
+                    eprintln!(
+                        "[child] waitpid failed: {}",
+                        std::io::Error::last_os_error()
+                    );
                     return 297;
                 }
                 if libc::WIFEXITED(status) {

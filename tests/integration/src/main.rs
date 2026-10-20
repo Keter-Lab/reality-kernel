@@ -711,8 +711,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         )?;
 
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
-            e.cgroup_id == enforce_cgroup_id
-                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+            e.cgroup_id == enforce_cgroup_id && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
         })?;
         if ev.rule_id != 0 {
             anyhow::bail!("expected rule_id == 0, got {}", ev.rule_id);
@@ -1044,7 +1043,10 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             "exec_cmd",
             &["ok", "/run/rk-test/allowed_script.sh"],
         )?;
-        Ok("scripts require both script and interpreter allowed; denied if either is unlisted".into())
+        Ok(
+            "scripts require both script and interpreter allowed; denied if either is unlisted"
+                .into(),
+        )
     });
 
     run_test(checks, "exec_unlinked_denied", || {
@@ -1060,8 +1062,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         )?;
 
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
-            e.cgroup_id == enforce_cgroup_id
-                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+            e.cgroup_id == enforce_cgroup_id && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
         })?;
         if (ev.flags & rk_exec_flag::RK_EXEC_UNLINKED as u32) == 0 {
             anyhow::bail!("expected RK_EXEC_UNLINKED flag set");
@@ -1156,7 +1157,10 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
                 && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
         })?;
         if ev.rule_id != expected_replaced_rule_id {
-            anyhow::bail!("expected rule_id == {expected_replaced_rule_id}, got {}", ev.rule_id);
+            anyhow::bail!(
+                "expected rule_id == {expected_replaced_rule_id}, got {}",
+                ev.rule_id
+            );
         }
 
         // 2. Replace binary via atomic rename (new inode)
@@ -1175,11 +1179,13 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             &["eperm", "/run/rk-test/replaced_bin"],
         )?;
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
-            e.cgroup_id == enforce_cgroup_id
-                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+            e.cgroup_id == enforce_cgroup_id && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
         })?;
         if ev.rule_id != 0 {
-            anyhow::bail!("expected rule_id == 0 for replaced inode, got {}", ev.rule_id);
+            anyhow::bail!(
+                "expected rule_id == 0 for replaced inode, got {}",
+                ev.rule_id
+            );
         }
 
         // 4. Policy reload re-resolves the new inode
@@ -1198,7 +1204,10 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
                 && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
         })?;
         if ev.rule_id != expected_replaced_rule_id {
-            anyhow::bail!("expected rule_id == {expected_replaced_rule_id} after reload, got {}", ev.rule_id);
+            anyhow::bail!(
+                "expected rule_id == {expected_replaced_rule_id} after reload, got {}",
+                ev.rule_id
+            );
         }
 
         Ok("replaced binary denied due to inode change until policy reload re-resolved it".into())
@@ -1220,8 +1229,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             &["eperm", "/bin/true"],
         )?;
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
-            e.cgroup_id == enforce_cgroup_id
-                && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
+            e.cgroup_id == enforce_cgroup_id && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
         })?;
         if ev.rule_id != 0 {
             anyhow::bail!("expected rule_id == 0 in quarantine, got {}", ev.rule_id);
@@ -1269,7 +1277,10 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             "exec_cmd",
             &["ok", "/run/rk-test/unlisted_bin"],
         )?;
-        Ok("unbound sibling inside rk.slice can execute unlisted binaries without hindrance".into())
+        Ok(
+            "unbound sibling inside rk.slice can execute unlisted binaries without hindrance"
+                .into(),
+        )
     });
 
     // Drop ring and rk.bpf.o instance before loading rk_emitfail.bpf.o
