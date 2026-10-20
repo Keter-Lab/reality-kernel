@@ -56,10 +56,11 @@ fi
 
 if [ -n "$integration" ]; then
     if [ -x "$integration" ]; then
-        echo "===RK_INTEGRATION_BEGIN==="
-        "$integration"
+        # rk-integration prints its own report markers on stdout; its per-test
+        # progress goes to stderr, merged here so the CI log shows where a
+        # run stopped.
+        "$integration" 2>&1
         integ_rc=$?
-        echo "===RK_INTEGRATION_END==="
         echo "rk-integration exit code: $integ_rc"
         [ "$integ_rc" -eq 0 ] || rc=1
     else

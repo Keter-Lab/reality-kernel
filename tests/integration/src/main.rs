@@ -10,15 +10,30 @@ use std::collections::HashSet;
 use std::fs;
 use std::net::{TcpListener, UdpSocket};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command, Output, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use aya::maps::{PerCpuArray, RingBuf};
 use aya::Btf;
 use rk_ebpf_common::rk_counter;
 use serde::{Deserialize, Serialize};
+
+/// A child that does not exit within this time is killed and fails its test,
+/// so one stuck workload can never hang the whole suite.
+const CHILD_DEADLINE: Duration = Duration::from_secs(60);
+/// Upper bound for reading the ring buffer until it is empty.
+const DRAIN_DEADLINE: Duration = Duration::from_secs(5);
+
+/// Progress goes to stderr so the CI log shows where a run stopped; stdout
+/// carries only the JSON report.
+macro_rules! progress {
+    ($($arg:tt)*) => {{
+        eprint!("[rk-integration] ");
+        eprintln!($($arg)*);
+    }};
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TestCheck {
@@ -172,7 +187,9 @@ fn output_results(checks: &[TestCheck]) {
 
 #[cfg(target_os = "linux")]
 fn run_suite(checks: &mut Vec<TestCheck>) {
+    progress!("setup: addresses, cgroups, listeners");
     setup_environment();
+    progress!("setup: loading rk.bpf.o");
 
     // 1. Run main verdict suite against rk.bpf.o
     let rk_bytes = match bpf::rk_bpf_bytes() {
@@ -454,9 +471,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             }
         }
 
-        let output = child
-            .wait_with_output()
-            .context("wait for paced_workload child")?;
+        let output = wait_with_deadline(child, "paced_workload child", CHILD_DEADLINE)?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!(
@@ -489,8 +504,15 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
         let mut deny_events = 0u64;
         let mut allow_events = 0u64;
+        let drain_start = Instant::now();
 
         while let Some(item) = rb.next() {
+            if drain_start.elapsed() > DRAIN_DEADLINE {
+                anyhow::bail!(
+                    "ring buffer still producing after {}s while reading reload events",
+                    DRAIN_DEADLINE.as_secs()
+                );
+            }
             if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
                 if ev.hdr.tgid == child_pid {
                     let gen = ev.hdr.policy_gen;
@@ -647,7 +669,17 @@ fn drain_ringbuf(ebpf: &mut aya::Ebpf) -> Result<()> {
         .map_mut("events_ringbuf")
         .context("missing events_ringbuf")?;
     let mut rb = RingBuf::try_from(map).context("open ringbuf")?;
-    while rb.next().is_some() {}
+    let start = Instant::now();
+    let mut records = 0u64;
+    while rb.next().is_some() {
+        records += 1;
+        if start.elapsed() > DRAIN_DEADLINE {
+            anyhow::bail!(
+                "ring buffer never emptied: {records} records in {}s, so something governed is emitting continuously",
+                DRAIN_DEADLINE.as_secs()
+            );
+        }
+    }
     Ok(())
 }
 
@@ -723,9 +755,41 @@ fn run_test<F>(checks: &mut Vec<TestCheck>, name: &'static str, f: F)
 where
     F: FnOnce() -> Result<String>,
 {
-    match f() {
-        Ok(detail) => checks.push(TestCheck::pass(name, detail)),
-        Err(e) => checks.push(TestCheck::fail(name, format!("{e:#}"))),
+    progress!("START {name}");
+    let start = Instant::now();
+    let check = match f() {
+        Ok(detail) => TestCheck::pass(name, detail),
+        Err(e) => TestCheck::fail(name, format!("{e:#}")),
+    };
+    progress!(
+        "{} {name} ({:.1}s)",
+        if check.passed { "PASS" } else { "FAIL" },
+        start.elapsed().as_secs_f64()
+    );
+    checks.push(check);
+}
+
+/// Waits for `child`, killing it if it outlives `deadline`. Child output is
+/// small, so collecting it after exit cannot block on a full pipe.
+#[cfg(target_os = "linux")]
+fn wait_with_deadline(mut child: Child, what: &str, deadline: Duration) -> Result<Output> {
+    let start = Instant::now();
+    loop {
+        if child.try_wait().context("poll child")?.is_some() {
+            return child.wait_with_output().context("collect child output");
+        }
+        if start.elapsed() > deadline {
+            let _ = child.kill();
+            let stderr = child
+                .wait_with_output()
+                .map(|o| String::from_utf8_lossy(&o.stderr).trim().to_string())
+                .unwrap_or_default();
+            anyhow::bail!(
+                "{what} did not exit within {}s and was killed; stderr: {stderr}",
+                deadline.as_secs()
+            );
+        }
+        thread::sleep(Duration::from_millis(20));
     }
 }
 
@@ -741,7 +805,12 @@ fn spawn_child(cgroup_path: &str, workload: &str, extra_args: &[&str]) -> Result
         cmd.arg(arg);
     }
 
-    let output = cmd.output().context("spawn child process")?;
+    let child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("spawn child process")?;
+    let output = wait_with_deadline(child, &format!("child workload '{workload}'"), CHILD_DEADLINE)?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!(

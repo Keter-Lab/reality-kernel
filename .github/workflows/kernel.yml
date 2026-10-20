@@ -109,6 +109,9 @@ jobs:
     name: Verifier + selftest (Linux ${{ matrix.kernel }})
     needs: sensor
     runs-on: ubuntu-24.04
+    # Covers a cold 5.15 kernel build (~20 min). A hang inside the VM is cut
+    # off much earlier by the `timeout` around vmtest.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -208,7 +211,8 @@ jobs:
       - name: Run selftest and verifier controls in the VM
         run: |
           set -o pipefail
-          tools/vmtest -k "$KERNEL_IMAGE" --kargs "lsm=${VM_LSM}" \
+          # The whole VM session normally takes ~2 minutes; fail fast on a hang.
+          timeout --kill-after=30 900 tools/vmtest -k "$KERNEL_IMAGE" --kargs "lsm=${VM_LSM}" \
             "bash $PWD/tests/vm/selftest.sh $PWD/bin/rk-sensor $PWD/rk-bpf/build/x86 $PWD/tools/bpftool $PWD/bin/rk-integration" \
             2>&1 | tee vm.log
           rc=${PIPESTATUS[0]}
