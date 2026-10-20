@@ -139,7 +139,8 @@ pub fn kill_process(pid: i32) -> Result<()> {
     unsafe {
         let fd = libc::syscall(libc::SYS_pidfd_open, pid, 0);
         if fd < 0 {
-            return Err(std::io::Error::last_os_error()).with_context(|| format!("pidfd_open({pid})"));
+            return Err(std::io::Error::last_os_error())
+                .with_context(|| format!("pidfd_open({pid})"));
         }
         let rc = libc::syscall(
             libc::SYS_pidfd_send_signal,
@@ -173,18 +174,19 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     let mut dir_files: BTreeMap<u32, usize> = BTreeMap::new();
-    let mut push = |profile: u32, rule_id: u32, meta: &fs::Metadata, out: &mut Vec<ResolvedExec>| {
-        let r = ResolvedExec {
-            profile,
-            rule_id,
-            dev: kernel_dev(meta.dev()),
-            ino: meta.ino(),
+    let mut push =
+        |profile: u32, rule_id: u32, meta: &fs::Metadata, out: &mut Vec<ResolvedExec>| {
+            let r = ResolvedExec {
+                profile,
+                rule_id,
+                dev: kernel_dev(meta.dev()),
+                ino: meta.ino(),
+            };
+            // First rule wins for the same file in the same profile.
+            if seen.insert((r.profile, r.dev, r.ino)) {
+                out.push(r);
+            }
         };
-        // First rule wins for the same file in the same profile.
-        if seen.insert((r.profile, r.dev, r.ino)) {
-            out.push(r);
-        }
-    };
     for e in entries {
         match e.kind {
             ExecPathKind::File => {
@@ -196,8 +198,9 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
                 push(e.profile, e.rule_id, &meta, &mut out);
             }
             ExecPathKind::Dir => {
-                let dir = fs::read_dir(&e.path)
-                    .with_context(|| format!("exec allowlist: cannot read directory `{}`", e.path))?;
+                let dir = fs::read_dir(&e.path).with_context(|| {
+                    format!("exec allowlist: cannot read directory `{}`", e.path)
+                })?;
                 for item in dir {
                     let item = item.with_context(|| format!("read entry in `{}`", e.path))?;
                     let Ok(meta) = fs::metadata(item.path()) else {

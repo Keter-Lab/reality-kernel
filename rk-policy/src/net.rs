@@ -1237,20 +1237,32 @@ mod tests {
             let id = p.profiles.iter().find(|p| p.name == name).unwrap().id;
             c.profiles.iter().find(|cp| cp.id == id).unwrap().flags
         };
-        assert_eq!(flags("agent") & FLAG_EXEC_DENY_DEFAULT, FLAG_EXEC_DENY_DEFAULT);
+        assert_eq!(
+            flags("agent") & FLAG_EXEC_DENY_DEFAULT,
+            FLAG_EXEC_DENY_DEFAULT
+        );
         assert_eq!(flags("agent") & FLAG_EXEC_ALLOW_UNLINKED, 0);
         assert_eq!(flags("loose") & FLAG_EXEC_DENY_DEFAULT, 0);
-        assert_eq!(flags("loose") & FLAG_EXEC_ALLOW_UNLINKED, FLAG_EXEC_ALLOW_UNLINKED);
+        assert_eq!(
+            flags("loose") & FLAG_EXEC_ALLOW_UNLINKED,
+            FLAG_EXEC_ALLOW_UNLINKED
+        );
     }
 
     #[test]
     fn exec_errors_are_clear() {
-        assert!(err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nallow = [\"bin/sh\"]\n")
-            .contains("must be an absolute path"));
-        assert!(err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nrequire_hash = true\n")
-            .contains("not supported by this release"));
-        assert!(err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nbogus = 1\n")
-            .contains("unknown field"));
+        assert!(
+            err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nallow = [\"bin/sh\"]\n")
+                .contains("must be an absolute path")
+        );
+        assert!(
+            err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nrequire_hash = true\n")
+                .contains("not supported by this release")
+        );
+        assert!(
+            err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nbogus = 1\n")
+                .contains("unknown field")
+        );
     }
 
     #[test]
@@ -1265,7 +1277,11 @@ mod tests {
         // Its id is stable across reloads like any other profile.
         let mut ids = ProfileIds::default();
         let one = parse("[profiles.a]\nmode = \"audit\"\n", &mut ids).unwrap();
-        let two = parse("[profiles.b]\nmode = \"audit\"\n[profiles.a]\nmode = \"audit\"\n", &mut ids).unwrap();
+        let two = parse(
+            "[profiles.b]\nmode = \"audit\"\n[profiles.a]\nmode = \"audit\"\n",
+            &mut ids,
+        )
+        .unwrap();
         let qid = |p: &Policy| p.profiles.iter().find(|p| p.name == QUARANTINE).unwrap().id;
         assert_eq!(qid(&one), qid(&two));
     }

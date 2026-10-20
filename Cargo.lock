@@ -1639,6 +1639,7 @@ dependencies = [
  "anyhow",
  "aya",
  "bytemuck",
+ "libc",
  "proptest",
  "rk-ebpf-common",
  "rk-policy",
