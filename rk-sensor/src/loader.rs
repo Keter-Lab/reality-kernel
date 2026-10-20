@@ -134,6 +134,15 @@ fn lsm_hook(program: &str) -> Option<&'static str> {
     match program {
         "rk_test_lsm_open" => Some("file_open"),
         "rk_net_socket_create" => Some("socket_create"),
+        "rk_exec_check" => Some("bprm_check_security"),
+        _ => None,
+    }
+}
+
+/// Tracepoint for each BTF tracepoint program. Every one must be listed here.
+fn btf_tracepoint(program: &str) -> Option<&'static str> {
+    match program {
+        "rk_exec_record" => Some("sched_process_exec"),
         _ => None,
     }
 }
@@ -154,6 +163,14 @@ fn load_program(
         }
         Program::CgroupSockAddr(prog) => {
             ("cgroup_sock_addr", prog.load().map_err(|e| e.to_string()))
+        }
+        Program::BtfTracePoint(prog) => {
+            let result = match (btf_tracepoint(name), btf) {
+                (Some(tp), Some(btf)) => prog.load(tp, btf).map_err(|e| e.to_string()),
+                (None, _) => Err(format!("no tracepoint registered for program `{name}`")),
+                (Some(_), None) => Err("kernel BTF is unavailable".to_string()),
+            };
+            ("btf_tracepoint", result)
         }
         _ => (
             "unsupported",
@@ -212,6 +229,9 @@ mod tests {
     fn every_lsm_test_program_has_a_hook() {
         assert_eq!(lsm_hook("rk_test_lsm_open"), Some("file_open"));
         assert_eq!(lsm_hook("rk_unknown"), None);
+        assert_eq!(lsm_hook("rk_exec_check"), Some("bprm_check_security"));
+        assert_eq!(btf_tracepoint("rk_exec_record"), Some("sched_process_exec"));
+        assert_eq!(btf_tracepoint("rk_unknown"), None);
     }
 
     #[test]

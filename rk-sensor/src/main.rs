@@ -123,8 +123,8 @@ fn run_daemon(policy_path: &str) -> Result<()> {
             );
         }
         let cgroup_root = Path::new(policy::CGROUP_FS).join(rk_policy::net::CGROUP_ROOT);
-        let attached = policy::attach_network(&mut ebpf, &cgroup_root)?;
-        info!(?attached, "network hooks attached");
+        let attached = policy::attach_all(&mut ebpf, &cgroup_root)?;
+        info!(?attached, "enforcement programs attached");
 
         let mut engine = PolicyEngine::default();
         apply_policy_file(&mut engine, &mut ebpf, policy_path);

@@ -22,7 +22,8 @@ CFLAGS := -g -O2 -target bpf -std=gnu11 -Wall -Werror \
 OBJECTS := $(OUT)/rk.bpf.o $(OUT)/rk_selftest.bpf.o $(OUT)/rk_probes.bpf.o \
 	$(OUT)/rk_emitfail.bpf.o \
 	$(OUT)/reject_infinite_loop.bpf.o
-HEADERS := include/rk_abi.h include/vmlinux/$(ARCH)/vmlinux.h src/common.bpf.h src/net.bpf.c
+HEADERS := include/rk_abi.h include/vmlinux/$(ARCH)/vmlinux.h src/common.bpf.h src/net.bpf.c \
+	src/exec.bpf.c
 
 all: $(OBJECTS)
 

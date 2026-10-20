@@ -153,7 +153,7 @@ fail_closed:
     g->scope = 0xffffffff; /* no trie entry uses this scope */
     g->mode = RK_MODE_ENFORCE;
     g->net_default = RK_ACTION_DENY;
-    g->flags = RK_PROFILE_DENY_RAW_SOCKETS;
+    g->flags = RK_PROFILE_DENY_RAW_SOCKETS | RK_PROFILE_EXEC_DENY_DEFAULT;
     return 1;
 }
 
@@ -261,6 +261,49 @@ static __always_inline void rk_append_kstr(struct rk_scratch_msg *msg, const voi
     /* n includes the NUL terminator, which is not transmitted. */
     *len_ptr = (__u16)(n - 1);
     msg->payload_len = off + 2 + (__u32)(n - 1);
+}
+
+/*
+ * Append [__u16 len][bytes] copied from user memory (`want` bytes at `src`).
+ * Returns 0 on success, 1 if the data was truncated to fit, -1 if the memory
+ * could not be read (an empty string is appended). Same verifier discipline
+ * as rk_append_kstr: masked, barrier-pinned offsets and lengths.
+ */
+static __always_inline int rk_append_ublob(struct rk_scratch_msg *msg, const void *src, __u64 want)
+{
+    __u32 off = msg->payload_len;
+    __u32 len_off, str_off, room, n;
+    __u16 *len_ptr;
+    int truncated = 0;
+
+    if (off > RK_SCRATCH_PAYLOAD_MAX - 3)
+        return 1;
+
+    len_off = off & RK_PAYLOAD_MASK;
+    barrier_var(len_off);
+    len_ptr = (__u16 *)&msg->payload[len_off];
+
+    str_off = (off + 2) & RK_PAYLOAD_MASK;
+    barrier_var(str_off);
+
+    room = RK_SCRATCH_PAYLOAD_MAX - (off + 2);
+    if (want > room) {
+        n = room;
+        truncated = 1;
+    } else {
+        n = (__u32)want;
+    }
+    n &= RK_PAYLOAD_MASK;
+    barrier_var(n);
+
+    if (bpf_probe_read_user(&msg->payload[str_off], n, src) < 0) {
+        *len_ptr = 0;
+        msg->payload_len = off + 2;
+        return -1;
+    }
+    *len_ptr = (__u16)n;
+    msg->payload_len = off + 2 + n;
+    return truncated;
 }
 
 /* Emit hdr + payload_len + _reserved + payload at its real size. */

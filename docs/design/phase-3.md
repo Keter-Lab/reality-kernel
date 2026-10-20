@@ -1,6 +1,10 @@
 # Design note: Phase 3 — process execution policy
 
-Status: **PROPOSED**, waiting for review
+Status: **ACCEPTED** (2026-10-20). All four decisions in §8 approved as recommended.
+Implementation note: `require_hash` needs a sleepable LSM program
+(`lsm.s/bprm_check_security`) to call `bpf_ima_inode_hash`. The first cut
+rejects `require_hash = true` at apply time with a clear error, which is
+decision 4's refusal path, and adds hash enforcement as a follow-up.
 Branch: `phase-3-exec` (from `main` at ff5684b)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 3 and sections 3–5
 

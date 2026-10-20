@@ -28,6 +28,17 @@ pub const PROTO_ANY: u8 = PROTO_TCP | PROTO_UDP | PROTO_OTHER;
 
 /// `rk_profile.flags` bit: deny raw and packet sockets.
 pub const FLAG_DENY_RAW_SOCKETS: u16 = 1;
+/// `rk_profile.flags` bit: exec allowlist mode (unlisted executables denied).
+pub const FLAG_EXEC_DENY_DEFAULT: u16 = 2;
+/// `rk_profile.flags` bit: allow executing files with no links (memfd, deleted).
+pub const FLAG_EXEC_ALLOW_UNLINKED: u16 = 4;
+
+/// Built-in profile that denies all exec and all network; see
+/// docs/design/phase-3.md §6. Its name is reserved.
+pub const QUARANTINE: &str = "quarantine";
+
+/// Maximum files an `exec.allow_dirs` expansion may add per profile.
+pub const MAX_EXEC_DIR_FILES: usize = 4096;
 
 /// Root of every binding: hooks are attached at `/sys/fs/cgroup/rk.slice`.
 pub const CGROUP_ROOT: &str = "rk.slice";
@@ -115,6 +126,29 @@ struct ProfileFile {
     mode: Mode,
     #[serde(default)]
     network: NetworkFile,
+    /// Absent: exec policy inactive (every exec allowed), see design §8.1.
+    #[serde(default)]
+    exec: Option<ExecFile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExecFile {
+    /// With an `exec` section the default is allowlist mode.
+    #[serde(default = "deny")]
+    default: Action,
+    #[serde(default)]
+    allow: Vec<String>,
+    #[serde(default)]
+    allow_dirs: Vec<String>,
+    #[serde(default)]
+    allow_unlinked: bool,
+    #[serde(default)]
+    require_hash: bool,
+}
+
+fn deny() -> Action {
+    Action::Deny
 }
 
 #[derive(Debug, Deserialize)]
@@ -222,6 +256,32 @@ pub struct Profile {
     pub deny_raw_sockets: bool,
     /// In priority order within each action: file order.
     pub rules: Vec<Rule>,
+    /// `None`: exec policy inactive for this profile (every exec allowed).
+    pub exec: Option<ExecPolicy>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecPathKind {
+    /// One executable.
+    File,
+    /// Every regular file directly inside, resolved at apply time.
+    Dir,
+}
+
+/// One exec allowlist entry. Paths are resolved to (device, inode) by the
+/// sensor at apply time; see docs/design/phase-3.md §4.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecAllow {
+    pub id: u32,
+    pub path: String,
+    pub kind: ExecPathKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecPolicy {
+    pub default: Action,
+    pub allow_unlinked: bool,
+    pub allow: Vec<ExecAllow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -416,6 +476,12 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
 
     for (name, pf) in &file.profiles {
         let ctx = format!("profile `{name}`");
+        if name == QUARANTINE {
+            return Err(PolicyError::new(
+                &ctx,
+                "`quarantine` is a built-in profile and cannot be redefined",
+            ));
+        }
         if !valid_name(name) {
             return Err(PolicyError::new(
                 &ctx,
@@ -504,6 +570,11 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             )?;
         }
 
+        let exec = match &pf.exec {
+            None => None,
+            Some(ef) => Some(parse_exec(ef, &ctx, name, &mut next_rule, &mut origins)?),
+        };
+
         profiles.push(Profile {
             id,
             name: name.clone(),
@@ -511,8 +582,23 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             net_default: net.default,
             deny_raw_sockets: net.deny_raw_sockets,
             rules,
+            exec,
         });
     }
+
+    profiles.push(Profile {
+        id: ids.id(QUARANTINE)?,
+        name: QUARANTINE.to_string(),
+        mode: Mode::Enforce,
+        net_default: Action::Deny,
+        deny_raw_sockets: true,
+        rules: Vec::new(),
+        exec: Some(ExecPolicy {
+            default: Action::Deny,
+            allow_unlinked: false,
+            allow: Vec::new(),
+        }),
+    });
 
     let mut bindings = Vec::new();
     let mut seen = BTreeSet::new();
@@ -537,6 +623,52 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
         profiles,
         bindings,
         origins,
+    })
+}
+
+fn parse_exec(
+    ef: &ExecFile,
+    ctx: &str,
+    profile: &str,
+    next_rule: &mut u32,
+    origins: &mut Vec<RuleOrigin>,
+) -> Result<ExecPolicy, PolicyError> {
+    if ef.require_hash {
+        return Err(PolicyError::new(
+            ctx,
+            "exec.require_hash is not supported by this release; the profile is refused \
+             rather than run without the hash check (docs/design/phase-3.md §3)",
+        ));
+    }
+    let mut allow = Vec::new();
+    for (key, kind, paths) in [
+        ("exec.allow", ExecPathKind::File, &ef.allow),
+        ("exec.allow_dirs", ExecPathKind::Dir, &ef.allow_dirs),
+    ] {
+        for (i, path) in paths.iter().enumerate() {
+            if !path.starts_with('/') || path.contains('\0') {
+                return Err(PolicyError::new(
+                    format!("{ctx}, {key}[{i}]"),
+                    format!("`{path}` must be an absolute path"),
+                ));
+            }
+            allow.push(ExecAllow {
+                id: *next_rule,
+                path: path.clone(),
+                kind,
+            });
+            origins.push(RuleOrigin {
+                id: *next_rule,
+                profile: profile.to_string(),
+                origin: format!("{key}[{i}] {path}"),
+            });
+            *next_rule += 1;
+        }
+    }
+    Ok(ExecPolicy {
+        default: ef.default,
+        allow_unlinked: ef.allow_unlinked,
+        allow,
     })
 }
 
@@ -650,6 +782,16 @@ pub struct Compiled {
     pub profiles: Vec<CompiledProfile>,
     pub deny: Vec<Entry>,
     pub allow: Vec<Entry>,
+    /// Exec allowlist entries, still as paths: the sensor resolves them.
+    pub exec: Vec<CompiledExec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledExec {
+    pub profile: u32,
+    pub rule_id: u32,
+    pub path: String,
+    pub kind: ExecPathKind,
 }
 
 /// Compiles a policy into map contents. Each trie entry carries its own
@@ -664,22 +806,47 @@ pub fn compile(policy: &Policy, generation: u64) -> Result<Compiled, PolicyError
         profiles: Vec::new(),
         deny: Vec::new(),
         allow: Vec::new(),
+        exec: Vec::new(),
     };
     for prof in &policy.profiles {
         out.profiles.push(CompiledProfile {
             id: prof.id,
             mode: prof.mode,
             net_default: prof.net_default,
-            flags: if prof.deny_raw_sockets {
-                FLAG_DENY_RAW_SOCKETS
-            } else {
-                0
-            },
+            flags: profile_flags(prof),
         });
+        if let Some(exec) = &prof.exec {
+            out.exec.extend(exec.allow.iter().map(|a| CompiledExec {
+                profile: prof.id,
+                rule_id: a.id,
+                path: a.path.clone(),
+                kind: a.kind,
+            }));
+        }
         out.deny.extend(compile_trie(prof, Action::Deny)?);
         out.allow.extend(compile_trie(prof, Action::Allow)?);
     }
     Ok(out)
+}
+
+fn profile_flags(prof: &Profile) -> u16 {
+    let mut flags = 0;
+    if prof.deny_raw_sockets {
+        flags |= FLAG_DENY_RAW_SOCKETS;
+    }
+    match &prof.exec {
+        // Exec policy inactive: allow everything, including unlinked files.
+        None => flags |= FLAG_EXEC_ALLOW_UNLINKED,
+        Some(exec) => {
+            if exec.default == Action::Deny {
+                flags |= FLAG_EXEC_DENY_DEFAULT;
+            }
+            if exec.allow_unlinked {
+                flags |= FLAG_EXEC_ALLOW_UNLINKED;
+            }
+        }
+    }
+    flags
 }
 
 fn compile_trie(prof: &Profile, action: Action) -> Result<Vec<Entry>, PolicyError> {
@@ -815,7 +982,7 @@ mod tests {
     #[test]
     fn parses_basic_policy() {
         let p = policy(BASIC);
-        assert_eq!(p.profiles.len(), 1);
+        assert_eq!(p.profiles.len(), 2); // agent + built-in quarantine
         let prof = &p.profiles[0];
         assert_eq!(prof.mode, Mode::Enforce);
         assert_eq!(prof.net_default, Action::Deny);
@@ -1015,15 +1182,92 @@ mod tests {
         let c = compile(&policy(BASIC), 7).unwrap();
         assert_eq!(c.generation, 7);
         assert_eq!(
-            c.profiles,
-            vec![CompiledProfile {
+            c.profiles[0],
+            CompiledProfile {
                 id: 0,
                 mode: Mode::Enforce,
                 net_default: Action::Deny,
-                flags: FLAG_DENY_RAW_SOCKETS
-            }]
+                // No exec section: exec policy inactive.
+                flags: FLAG_DENY_RAW_SOCKETS | FLAG_EXEC_ALLOW_UNLINKED
+            }
+        );
+        assert_eq!(
+            c.profiles[1],
+            CompiledProfile {
+                id: 1,
+                mode: Mode::Enforce,
+                net_default: Action::Deny,
+                flags: FLAG_DENY_RAW_SOCKETS | FLAG_EXEC_DENY_DEFAULT
+            }
         );
         assert!(c.deny.iter().all(|e| e.ranges.len() <= MAX_RANGES));
+    }
+
+    const EXEC: &str = r#"
+        [profiles.agent]
+        mode = "enforce"
+        [profiles.agent.exec]
+        allow = ["/usr/bin/git", "/bin/sh"]
+        allow_dirs = ["/opt/agent/bin"]
+
+        [profiles.loose]
+        mode = "audit"
+        [profiles.loose.exec]
+        default = "allow"
+        allow_unlinked = true
+    "#;
+
+    #[test]
+    fn parses_exec_sections() {
+        let p = policy(EXEC);
+        let agent = p.profiles.iter().find(|p| p.name == "agent").unwrap();
+        let exec = agent.exec.as_ref().unwrap();
+        assert_eq!(exec.default, Action::Deny);
+        assert_eq!(exec.allow.len(), 3);
+        assert_eq!(exec.allow[2].kind, ExecPathKind::Dir);
+        assert!(p
+            .origins
+            .iter()
+            .any(|o| o.id == exec.allow[0].id && o.origin == "exec.allow[0] /usr/bin/git"));
+
+        let c = compile(&p, 1).unwrap();
+        assert_eq!(c.exec.len(), 3);
+        assert!(c.exec.iter().all(|e| e.profile == agent.id));
+        let flags = |name: &str| {
+            let id = p.profiles.iter().find(|p| p.name == name).unwrap().id;
+            c.profiles.iter().find(|cp| cp.id == id).unwrap().flags
+        };
+        assert_eq!(flags("agent") & FLAG_EXEC_DENY_DEFAULT, FLAG_EXEC_DENY_DEFAULT);
+        assert_eq!(flags("agent") & FLAG_EXEC_ALLOW_UNLINKED, 0);
+        assert_eq!(flags("loose") & FLAG_EXEC_DENY_DEFAULT, 0);
+        assert_eq!(flags("loose") & FLAG_EXEC_ALLOW_UNLINKED, FLAG_EXEC_ALLOW_UNLINKED);
+    }
+
+    #[test]
+    fn exec_errors_are_clear() {
+        assert!(err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nallow = [\"bin/sh\"]\n")
+            .contains("must be an absolute path"));
+        assert!(err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nrequire_hash = true\n")
+            .contains("not supported by this release"));
+        assert!(err("[profiles.a]\nmode = \"enforce\"\n[profiles.a.exec]\nbogus = 1\n")
+            .contains("unknown field"));
+    }
+
+    #[test]
+    fn quarantine_is_built_in_and_reserved() {
+        let p = policy("[profiles.a]\nmode = \"audit\"\n");
+        let q = p.profiles.iter().find(|p| p.name == QUARANTINE).unwrap();
+        assert_eq!(q.mode, Mode::Enforce);
+        assert_eq!(q.net_default, Action::Deny);
+        assert!(q.rules.is_empty());
+        assert_eq!(q.exec.as_ref().unwrap().allow.len(), 0);
+        assert!(err("[profiles.quarantine]\nmode = \"audit\"\n").contains("built-in profile"));
+        // Its id is stable across reloads like any other profile.
+        let mut ids = ProfileIds::default();
+        let one = parse("[profiles.a]\nmode = \"audit\"\n", &mut ids).unwrap();
+        let two = parse("[profiles.b]\nmode = \"audit\"\n[profiles.a]\nmode = \"audit\"\n", &mut ids).unwrap();
+        let qid = |p: &Policy| p.profiles.iter().find(|p| p.name == QUARANTINE).unwrap().id;
+        assert_eq!(qid(&one), qid(&two));
     }
 
     #[test]

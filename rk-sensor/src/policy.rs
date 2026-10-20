@@ -7,7 +7,7 @@
 //! running decision (which reads the slot once and lasts microseconds) can
 //! observe a slot being rewritten. A failed apply never touches the active slot.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -16,11 +16,18 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::{Array, HashMap as BpfHashMap};
-use aya::programs::{CgroupAttachMode, CgroupSockAddr, Lsm};
+use aya::programs::{BtfTracePoint, CgroupAttachMode, CgroupSockAddr, Lsm};
 use aya::Ebpf;
 use bytemuck::Zeroable;
-use rk_ebpf_common::{rk_binding, rk_net_range, rk_net_rule, rk_profile, RK_MAX_PROFILES};
-use rk_policy::net::{self, Action, Compiled, Entry, Mode, Policy, ProfileIds};
+use rk_ebpf_common::{
+    rk_binding, rk_exec_key, rk_exec_rule, rk_net_range, rk_net_rule, rk_profile, RK_MAX_PROFILES,
+};
+use rk_policy::net::{
+    self, Action, Compiled, CompiledExec, Entry, ExecPathKind, Mode, Policy, ProfileIds,
+    MAX_EXEC_DIR_FILES, QUARANTINE,
+};
+
+use crate::selftest::kernel_dev;
 
 /// cgroup v2 mount point.
 pub const CGROUP_FS: &str = "/sys/fs/cgroup";
@@ -44,6 +51,11 @@ const MAP_PROFILES: &str = "rk_profiles";
 const MAP_ACTIVE: &str = "rk_active_slot";
 const MAP_DENY: &str = "rk_net_deny";
 const MAP_ALLOW: &str = "rk_net_allow";
+const MAP_EXEC: &str = "rk_exec_allow";
+
+/// Exec policy programs (Phase 3): the LSM check and the exec record.
+pub const EXEC_LSM_PROGRAM: &str = "rk_exec_check";
+pub const EXEC_RECORD_PROGRAM: &str = "rk_exec_record";
 
 // aya's map types need aya::Pod; these newtypes satisfy the orphan rule.
 
@@ -74,6 +86,140 @@ unsafe impl aya::Pod for Profile {}
 struct Binding(rk_binding);
 // SAFETY: as above.
 unsafe impl aya::Pod for Binding {}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ExecKey(rk_exec_key);
+// SAFETY: as above.
+unsafe impl aya::Pod for ExecKey {}
+
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct ExecRule(rk_exec_rule);
+// SAFETY: as above.
+unsafe impl aya::Pod for ExecRule {}
+
+/// Attaches the exec programs (already loaded): the host-wide LSM exec check
+/// and the `sched_process_exec` record. Links detach when `ebpf` drops.
+pub fn attach_exec(ebpf: &mut Ebpf) -> Result<Vec<String>> {
+    let program = ebpf
+        .program_mut(EXEC_LSM_PROGRAM)
+        .with_context(|| format!("program `{EXEC_LSM_PROGRAM}` missing from rk.bpf.o"))?;
+    let program: &mut Lsm = program.try_into()?;
+    program
+        .attach()
+        .with_context(|| format!("attach LSM program `{EXEC_LSM_PROGRAM}`"))?;
+
+    let program = ebpf
+        .program_mut(EXEC_RECORD_PROGRAM)
+        .with_context(|| format!("program `{EXEC_RECORD_PROGRAM}` missing from rk.bpf.o"))?;
+    let program: &mut BtfTracePoint = program.try_into()?;
+    program
+        .attach()
+        .with_context(|| format!("attach `{EXEC_RECORD_PROGRAM}`"))?;
+
+    Ok(vec![
+        format!("{EXEC_LSM_PROGRAM} (lsm)"),
+        format!("{EXEC_RECORD_PROGRAM} (tp_btf/sched_process_exec)"),
+    ])
+}
+
+/// Attaches every enforcement program: network hooks on `cgroup_root` plus the
+/// exec programs.
+pub fn attach_all(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
+    let mut attached = attach_network(ebpf, cgroup_root)?;
+    attached.extend(attach_exec(ebpf)?);
+    Ok(attached)
+}
+
+/// Sends SIGKILL through a pidfd, so a recycled PID can never be hit. Used
+/// together with [`PolicyEngine::quarantine`] when a process must also stop.
+pub fn kill_process(pid: i32) -> Result<()> {
+    // SAFETY: plain syscalls with integer arguments; the fd is closed below.
+    unsafe {
+        let fd = libc::syscall(libc::SYS_pidfd_open, pid, 0);
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error()).with_context(|| format!("pidfd_open({pid})"));
+        }
+        let rc = libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            fd as libc::c_int,
+            libc::SIGKILL,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        );
+        let err = std::io::Error::last_os_error();
+        libc::close(fd as libc::c_int);
+        if rc < 0 {
+            return Err(err).with_context(|| format!("pidfd_send_signal({pid}, SIGKILL)"));
+        }
+    }
+    Ok(())
+}
+
+/// One resolved exec allowlist entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ResolvedExec {
+    profile: u32,
+    rule_id: u32,
+    dev: u64,
+    ino: u64,
+}
+
+/// Resolves exec allowlist paths to (device, inode), following symlinks to the
+/// real file. A missing path, a non-file entry or an oversized directory is an
+/// error: the apply fails before anything visible to the kernel changes.
+fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
+    let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut dir_files: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut push = |profile: u32, rule_id: u32, meta: &fs::Metadata, out: &mut Vec<ResolvedExec>| {
+        let r = ResolvedExec {
+            profile,
+            rule_id,
+            dev: kernel_dev(meta.dev()),
+            ino: meta.ino(),
+        };
+        // First rule wins for the same file in the same profile.
+        if seen.insert((r.profile, r.dev, r.ino)) {
+            out.push(r);
+        }
+    };
+    for e in entries {
+        match e.kind {
+            ExecPathKind::File => {
+                let meta = fs::metadata(&e.path)
+                    .with_context(|| format!("exec allowlist: cannot resolve `{}`", e.path))?;
+                if !meta.is_file() {
+                    anyhow::bail!("exec allowlist: `{}` is not a regular file", e.path);
+                }
+                push(e.profile, e.rule_id, &meta, &mut out);
+            }
+            ExecPathKind::Dir => {
+                let dir = fs::read_dir(&e.path)
+                    .with_context(|| format!("exec allowlist: cannot read directory `{}`", e.path))?;
+                for item in dir {
+                    let item = item.with_context(|| format!("read entry in `{}`", e.path))?;
+                    let Ok(meta) = fs::metadata(item.path()) else {
+                        continue; // dangling symlink: nothing to execute
+                    };
+                    if !meta.is_file() {
+                        continue;
+                    }
+                    let count = dir_files.entry(e.profile).or_default();
+                    *count += 1;
+                    if *count > MAX_EXEC_DIR_FILES {
+                        anyhow::bail!(
+                            "exec allowlist: directories expand to more than {MAX_EXEC_DIR_FILES} files for one profile"
+                        );
+                    }
+                    push(e.profile, e.rule_id, &meta, &mut out);
+                }
+            }
+        }
+    }
+    Ok(out)
+}
 
 /// Attaches the network programs (already loaded) to `cgroup_root`, creating
 /// it if needed, and the LSM programs host-wide. Links detach when `ebpf` drops.
@@ -113,6 +259,7 @@ struct SlotContents {
     profiles: Vec<u32>,
     deny: Vec<(u32, KeyData)>,
     allow: Vec<(u32, KeyData)>,
+    exec: Vec<ExecKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,6 +269,7 @@ pub struct ApplyReport {
     pub profiles: usize,
     pub deny_entries: usize,
     pub allow_entries: usize,
+    pub exec_entries: usize,
     pub bindings: usize,
 }
 
@@ -135,6 +283,9 @@ pub struct PolicyEngine {
     written: [SlotContents; 2],
     /// cgroup id -> (path, profile id)
     bindings: BTreeMap<u64, (String, u32)>,
+    /// cgroup ids currently held in the built-in quarantine profile. Survives
+    /// policy reloads until released.
+    quarantined: BTreeSet<u64>,
     policy: Option<Policy>,
 }
 
@@ -154,6 +305,7 @@ impl PolicyEngine {
             last_flip: None,
             written: [SlotContents::default(), SlotContents::default()],
             bindings: BTreeMap::new(),
+            quarantined: BTreeSet::new(),
             policy: None,
         }
     }
@@ -182,6 +334,7 @@ impl PolicyEngine {
         let generation = self.generation + 1;
         let compiled = net::compile(&policy, generation)?;
         let bindings = self.resolve_bindings(&policy)?;
+        let exec = resolve_exec(&compiled.exec)?;
 
         if let Some(flip) = self.last_flip {
             let elapsed = flip.elapsed();
@@ -192,7 +345,7 @@ impl PolicyEngine {
 
         let slot = self.active_slot ^ 1;
         self.clear_slot(ebpf, slot)?;
-        self.write_slot(ebpf, slot, &compiled)?;
+        self.write_slot(ebpf, slot, &compiled, &exec)?;
 
         // Commit point.
         let map = ebpf.map_mut(MAP_ACTIVE).context("rk_active_slot missing")?;
@@ -212,6 +365,7 @@ impl PolicyEngine {
             profiles: compiled.profiles.len(),
             deny_entries: compiled.deny.len(),
             allow_entries: compiled.allow.len(),
+            exec_entries: exec.len(),
             bindings: self.bindings.len(),
         };
         self.policy = Some(policy);
@@ -244,6 +398,11 @@ impl PolicyEngine {
                 let _ = trie.remove(&Key::new(*prefix_len, *data));
             }
         }
+        let map = ebpf.map_mut(MAP_EXEC).context("rk_exec_allow missing")?;
+        let mut exec = BpfHashMap::<_, ExecKey, ExecRule>::try_from(map)?;
+        for key in &contents.exec {
+            let _ = exec.remove(key);
+        }
         let map = ebpf.map_mut(MAP_PROFILES).context("rk_profiles missing")?;
         let mut profiles = Array::<_, Profile>::try_from(map)?;
         for id in &contents.profiles {
@@ -252,7 +411,32 @@ impl PolicyEngine {
         Ok(())
     }
 
-    fn write_slot(&mut self, ebpf: &mut Ebpf, slot: u32, compiled: &Compiled) -> Result<()> {
+    fn write_slot(
+        &mut self,
+        ebpf: &mut Ebpf,
+        slot: u32,
+        compiled: &Compiled,
+        exec: &[ResolvedExec],
+    ) -> Result<()> {
+        {
+            let map = ebpf.map_mut(MAP_EXEC).context("rk_exec_allow missing")?;
+            let mut map = BpfHashMap::<_, ExecKey, ExecRule>::try_from(map)?;
+            for r in exec {
+                let key = ExecKey(rk_exec_key {
+                    scope: (slot << 31) | r.profile,
+                    dev: r.dev,
+                    ino: r.ino,
+                    ..rk_exec_key::zeroed()
+                });
+                self.written[slot as usize].exec.push(key);
+                let rule = ExecRule(rk_exec_rule {
+                    rule_id: r.rule_id,
+                    ..rk_exec_rule::zeroed()
+                });
+                map.insert(key, rule, 0)
+                    .with_context(|| format!("write exec entry for profile {}", r.profile))?;
+            }
+        }
         {
             let map = ebpf.map_mut(MAP_PROFILES).context("rk_profiles missing")?;
             let mut profiles = Array::<_, Profile>::try_from(map)?;
@@ -301,8 +485,17 @@ impl PolicyEngine {
     fn sync_bindings(
         &mut self,
         ebpf: &mut Ebpf,
-        wanted: BTreeMap<u64, (String, u32)>,
+        mut wanted: BTreeMap<u64, (String, u32)>,
     ) -> Result<()> {
+        // Quarantine overrides the file's binding until released.
+        if let Some(qid) = self.quarantine_id() {
+            self.quarantined.retain(|id| wanted.contains_key(id));
+            for id in &self.quarantined {
+                if let Some(entry) = wanted.get_mut(id) {
+                    entry.1 = qid;
+                }
+            }
+        }
         let map = ebpf
             .map_mut(MAP_BINDINGS)
             .context("rk_cgroup_profile missing")?;
@@ -322,6 +515,62 @@ impl PolicyEngine {
             }
         }
         self.bindings = wanted;
+        Ok(())
+    }
+}
+
+impl PolicyEngine {
+    fn quarantine_id(&self) -> Option<u32> {
+        self.policy
+            .as_ref()
+            .and_then(|p| p.profiles.iter().find(|p| p.name == QUARANTINE))
+            .map(|p| p.id)
+            .or_else(|| self.ids.clone().id(QUARANTINE).ok())
+    }
+
+    /// Moves a bound cgroup into the built-in quarantine profile with a single
+    /// map update: no new exec and no new connections. Running processes keep
+    /// running; use [`kill_process`] if one must stop.
+    pub fn quarantine(&mut self, ebpf: &mut Ebpf, cgroup: &str) -> Result<()> {
+        let id = self
+            .cgroup_id(cgroup)
+            .with_context(|| format!("`{cgroup}` is not bound to a profile"))?;
+        let qid = self
+            .quarantine_id()
+            .context("no policy applied yet: quarantine profile unknown")?;
+        self.set_binding(ebpf, id, qid)?;
+        self.quarantined.insert(id);
+        Ok(())
+    }
+
+    /// Restores a quarantined cgroup to the profile its policy binds it to.
+    pub fn release(&mut self, ebpf: &mut Ebpf, cgroup: &str) -> Result<()> {
+        let id = self
+            .cgroup_id(cgroup)
+            .with_context(|| format!("`{cgroup}` is not bound to a profile"))?;
+        let profile = self
+            .policy
+            .as_ref()
+            .and_then(|p| p.bindings.iter().find(|b| b.cgroup == cgroup))
+            .map(|b| b.profile)
+            .with_context(|| format!("`{cgroup}` has no binding in the active policy"))?;
+        self.quarantined.remove(&id);
+        self.set_binding(ebpf, id, profile)
+    }
+
+    fn set_binding(&mut self, ebpf: &mut Ebpf, id: u64, profile: u32) -> Result<()> {
+        let map = ebpf
+            .map_mut(MAP_BINDINGS)
+            .context("rk_cgroup_profile missing")?;
+        let mut bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
+        let value = rk_binding {
+            profile,
+            ..rk_binding::zeroed()
+        };
+        bindings.insert(id, Binding(value), 0)?;
+        if let Some(entry) = self.bindings.get_mut(&id) {
+            entry.1 = profile;
+        }
         Ok(())
     }
 }
