@@ -810,7 +810,11 @@ fn spawn_child(cgroup_path: &str, workload: &str, extra_args: &[&str]) -> Result
         .stderr(Stdio::piped())
         .spawn()
         .context("spawn child process")?;
-    let output = wait_with_deadline(child, &format!("child workload '{workload}'"), CHILD_DEADLINE)?;
+    let output = wait_with_deadline(
+        child,
+        &format!("child workload '{workload}'"),
+        CHILD_DEADLINE,
+    )?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!(
