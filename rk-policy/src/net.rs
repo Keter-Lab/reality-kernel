@@ -192,7 +192,10 @@ pub struct PortRange {
 }
 
 impl PortRange {
-    pub const ALL: PortRange = PortRange { lo: 0, hi: u16::MAX };
+    pub const ALL: PortRange = PortRange {
+        lo: 0,
+        hi: u16::MAX,
+    };
 
     fn contains(&self, port: u16) -> bool {
         (self.lo..=self.hi).contains(&port)
@@ -292,7 +295,8 @@ fn mapped_v4_space() -> Ipv6Net {
 pub fn parse_cidr(s: &str) -> Result<Ipv6Net, String> {
     let s = s.trim();
     let net: IpNet = if s.contains('/') {
-        s.parse().map_err(|_| format!("`{s}` is not a valid CIDR"))?
+        s.parse()
+            .map_err(|_| format!("`{s}` is not a valid CIDR"))?
     } else {
         s.parse::<IpAddr>()
             .map(IpNet::from)
@@ -369,7 +373,9 @@ fn validate_cgroup(path: &str) -> Result<String, String> {
     let rest = path
         .strip_prefix(CGROUP_ROOT)
         .and_then(|r| r.strip_prefix('/'))
-        .ok_or_else(|| format!("`{path}` must be under `{CGROUP_ROOT}/`, where the hooks are attached"))?;
+        .ok_or_else(|| {
+            format!("`{path}` must be under `{CGROUP_ROOT}/`, where the hooks are attached")
+        })?;
     for segment in rest.split('/') {
         if segment.is_empty() || segment == "." || segment == ".." || !valid_name(segment) {
             return Err(format!("`{path}` has an invalid path segment `{segment}`"));
@@ -390,7 +396,10 @@ fn builtin_list(name: &str) -> Result<ListFile, String> {
     let list: ListFile =
         toml::from_str(text).map_err(|e| format!("built-in list `{name}` is invalid: {e}"))?;
     if list.name != name {
-        return Err(format!("built-in list `{name}` declares name `{}`", list.name));
+        return Err(format!(
+            "built-in list `{name}` declares name `{}`",
+            list.name
+        ));
     }
     Ok(list)
 }
@@ -408,7 +417,10 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
     for (name, pf) in &file.profiles {
         let ctx = format!("profile `{name}`");
         if !valid_name(name) {
-            return Err(PolicyError::new(&ctx, "names may use only letters, digits, `-`, `_` and `.` (max 64)"));
+            return Err(PolicyError::new(
+                &ctx,
+                "names may use only letters, digits, `-`, `_` and `.` (max 64)",
+            ));
         }
         let id = ids.id(name)?;
         let net = &pf.network;
@@ -456,15 +468,40 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             }
             let list = builtin_list(list_name).map_err(|m| PolicyError::new(&ctx, m))?;
             for (i, r) in list.deny.iter().enumerate() {
-                let label = if r.note.is_empty() { r.cidr.clone() } else { format!("{} ({})", r.cidr, r.note) };
-                push(Action::Deny, &r.cidr, &r.ports, &r.proto, format!("{list_name}[{i}] {label}"), &mut rules)?;
+                let label = if r.note.is_empty() {
+                    r.cidr.clone()
+                } else {
+                    format!("{} ({})", r.cidr, r.note)
+                };
+                push(
+                    Action::Deny,
+                    &r.cidr,
+                    &r.ports,
+                    &r.proto,
+                    format!("{list_name}[{i}] {label}"),
+                    &mut rules,
+                )?;
             }
         }
         for (i, r) in net.deny.iter().enumerate() {
-            push(Action::Deny, &r.cidr, &r.ports, &r.proto, format!("network.deny[{i}] {}", r.cidr), &mut rules)?;
+            push(
+                Action::Deny,
+                &r.cidr,
+                &r.ports,
+                &r.proto,
+                format!("network.deny[{i}] {}", r.cidr),
+                &mut rules,
+            )?;
         }
         for (i, r) in net.allow.iter().enumerate() {
-            push(Action::Allow, &r.cidr, &r.ports, &r.proto, format!("network.allow[{i}] {}", r.cidr), &mut rules)?;
+            push(
+                Action::Allow,
+                &r.cidr,
+                &r.ports,
+                &r.proto,
+                format!("network.allow[{i}] {}", r.cidr),
+                &mut rules,
+            )?;
         }
 
         profiles.push(Profile {
@@ -483,7 +520,10 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
         let ctx = format!("bindings[{i}]");
         let cgroup = validate_cgroup(&b.cgroup).map_err(|m| PolicyError::new(&ctx, m))?;
         if !seen.insert(cgroup.clone()) {
-            return Err(PolicyError::new(&ctx, format!("`{cgroup}` is bound more than once")));
+            return Err(PolicyError::new(
+                &ctx,
+                format!("`{cgroup}` is bound more than once"),
+            ));
         }
         let profile = profiles
             .iter()
@@ -522,7 +562,13 @@ pub fn normalize(addr: IpAddr) -> Ipv6Addr {
 /// Reference semantics: deny rules win over allow rules; within an action the
 /// most specific matching prefix wins, then file order; otherwise the profile
 /// default applies. `proto` is one `PROTO_*` bit.
-pub fn evaluate(policy: &Policy, profile: u32, addr: IpAddr, port: u16, proto: u8) -> Option<Decision> {
+pub fn evaluate(
+    policy: &Policy,
+    profile: u32,
+    addr: IpAddr,
+    port: u16,
+    proto: u8,
+) -> Option<Decision> {
     let prof = policy.profile(profile)?;
     let addr = normalize(addr);
     for action in [Action::Deny, Action::Allow] {
@@ -537,10 +583,7 @@ pub fn evaluate(policy: &Policy, profile: u32, addr: IpAddr, port: u16, proto: u
                     && r.ports.iter().any(|p| p.contains(port))
             })
             .max_by(|(ia, a), (ib, b)| {
-                a.net
-                    .prefix_len()
-                    .cmp(&b.net.prefix_len())
-                    .then(ib.cmp(ia)) // earlier rule wins a tie
+                a.net.prefix_len().cmp(&b.net.prefix_len()).then(ib.cmp(ia)) // earlier rule wins a tie
             });
         if let Some((_, r)) = best {
             return Some(Decision {
@@ -627,7 +670,11 @@ pub fn compile(policy: &Policy, generation: u64) -> Result<Compiled, PolicyError
             id: prof.id,
             mode: prof.mode,
             net_default: prof.net_default,
-            flags: if prof.deny_raw_sockets { FLAG_DENY_RAW_SOCKETS } else { 0 },
+            flags: if prof.deny_raw_sockets {
+                FLAG_DENY_RAW_SOCKETS
+            } else {
+                0
+            },
         });
         out.deny.extend(compile_trie(prof, Action::Deny)?);
         out.allow.extend(compile_trie(prof, Action::Allow)?);
@@ -654,7 +701,9 @@ fn compile_trie(prof: &Profile, action: Action) -> Result<Vec<Entry>, PolicyErro
         ancestors.sort_by_key(|(n, _)| std::cmp::Reverse(n.prefix_len()));
 
         let mut ranges: Vec<CompiledRange> = Vec::new();
-        let ordered = own.iter().chain(ancestors.iter().flat_map(|(_, rules)| rules.iter()));
+        let ordered = own
+            .iter()
+            .chain(ancestors.iter().flat_map(|(_, rules)| rules.iter()));
         for rule in ordered {
             for p in &rule.ports {
                 let r = CompiledRange {
@@ -677,7 +726,11 @@ fn compile_trie(prof: &Profile, action: Action) -> Result<Vec<Entry>, PolicyErro
                      (including enclosing prefixes); the kernel limit is {MAX_RANGES}. \
                      Merge port lists or split the prefix.",
                     ranges.len(),
-                    if action == Action::Deny { "deny" } else { "allow" },
+                    if action == Action::Deny {
+                        "deny"
+                    } else {
+                        "allow"
+                    },
                 ),
             ));
         }
@@ -736,7 +789,9 @@ mod tests {
     }
 
     fn err(text: &str) -> String {
-        parse(text, &mut ProfileIds::default()).unwrap_err().to_string()
+        parse(text, &mut ProfileIds::default())
+            .unwrap_err()
+            .to_string()
     }
 
     const BASIC: &str = r#"
@@ -765,9 +820,18 @@ mod tests {
         assert_eq!(prof.mode, Mode::Enforce);
         assert_eq!(prof.net_default, Action::Deny);
         assert!(prof.deny_raw_sockets);
-        assert_eq!(p.bindings, vec![Binding { cgroup: "rk.slice/agent-1".into(), profile: prof.id }]);
+        assert_eq!(
+            p.bindings,
+            vec![Binding {
+                cgroup: "rk.slice/agent-1".into(),
+                profile: prof.id
+            }]
+        );
         // cloud-metadata is included by default.
-        assert!(p.origins.iter().any(|o| o.origin.starts_with("cloud-metadata[0] 169.254.169.254/32")));
+        assert!(p
+            .origins
+            .iter()
+            .any(|o| o.origin.starts_with("cloud-metadata[0] 169.254.169.254/32")));
     }
 
     #[test]
@@ -780,8 +844,21 @@ mod tests {
         assert_eq!(d("10.20.1.1", 443, PROTO_UDP).action, Action::Deny); // proto
         assert_eq!(d("10.20.1.1", 22, PROTO_TCP).action, Action::Deny); // port
         assert_eq!(d("10.20.5.9", 443, PROTO_TCP).action, Action::Deny); // deny wins
-        assert_eq!(d("10.20.5.9", 443, PROTO_TCP).rule_id, p.origins.iter().find(|o| o.origin.starts_with("network.deny[0]")).unwrap().id);
-        assert_eq!(d("8.8.8.8", 53, PROTO_UDP), Decision { action: Action::Deny, rule_id: 0 });
+        assert_eq!(
+            d("10.20.5.9", 443, PROTO_TCP).rule_id,
+            p.origins
+                .iter()
+                .find(|o| o.origin.starts_with("network.deny[0]"))
+                .unwrap()
+                .id
+        );
+        assert_eq!(
+            d("8.8.8.8", 53, PROTO_UDP),
+            Decision {
+                action: Action::Deny,
+                rule_id: 0
+            }
+        );
         assert_eq!(d("169.254.169.254", 80, PROTO_TCP).action, Action::Deny);
     }
 
@@ -804,19 +881,30 @@ mod tests {
         assert_eq!(v4, nat64);
         assert_eq!(nat64.action, Action::Deny);
 
-        let off = policy(r#"
+        let off = policy(
+            r#"
             [profiles.a]
             mode = "enforce"
             network.default = "allow"
             network.nat64_equivalence = false
-        "#);
-        let d = evaluate(&off, off.profiles[0].id, ip("64:ff9b::169.254.169.254"), 80, PROTO_TCP).unwrap();
+        "#,
+        );
+        let d = evaluate(
+            &off,
+            off.profiles[0].id,
+            ip("64:ff9b::169.254.169.254"),
+            80,
+            PROTO_TCP,
+        )
+        .unwrap();
         assert_eq!(d.action, Action::Allow);
     }
 
     #[test]
     fn include_can_only_be_removed_explicitly() {
-        let p = policy("[profiles.a]\nmode = \"audit\"\nnetwork.default = \"allow\"\nnetwork.include = []\n");
+        let p = policy(
+            "[profiles.a]\nmode = \"audit\"\nnetwork.default = \"allow\"\nnetwork.include = []\n",
+        );
         assert!(p.profiles[0].rules.is_empty());
     }
 
@@ -824,14 +912,24 @@ mod tests {
     fn rejects_bad_input() {
         assert!(err("[profiles.a]\nmode = \"block\"\n").contains("policy file"));
         assert!(err("[profiles.a]\nmode = \"audit\"\nunknown = 1\n").contains("unknown field"));
-        assert!(err("[profiles.a]\nmode = \"audit\"\n[[profiles.a.network.deny]]\ncidr = \"10.0.0.1/8\"\n")
-            .contains("did you mean `10.0.0.0/8`"));
-        assert!(err("[profiles.a]\nmode = \"audit\"\n[[profiles.a.network.deny]]\ncidr = \"nope\"\n")
-            .contains("not a valid"));
+        assert!(err(
+            "[profiles.a]\nmode = \"audit\"\n[[profiles.a.network.deny]]\ncidr = \"10.0.0.1/8\"\n"
+        )
+        .contains("did you mean `10.0.0.0/8`"));
+        assert!(err(
+            "[profiles.a]\nmode = \"audit\"\n[[profiles.a.network.deny]]\ncidr = \"nope\"\n"
+        )
+        .contains("not a valid"));
         assert!(err("[profiles.a]\nmode = \"audit\"\n[[profiles.a.network.deny]]\ncidr = \"10.0.0.0/8\"\nports = [\"9-1\"]\n")
             .contains("reversed"));
-        assert!(err("[profiles.a]\nmode = \"audit\"\nnetwork.include = [\"nope\"]\n").contains("unknown list"));
-        assert!(err("[[bindings]]\ncgroup = \"rk.slice/x\"\nprofile = \"missing\"\n").contains("unknown profile"));
+        assert!(
+            err("[profiles.a]\nmode = \"audit\"\nnetwork.include = [\"nope\"]\n")
+                .contains("unknown list")
+        );
+        assert!(
+            err("[[bindings]]\ncgroup = \"rk.slice/x\"\nprofile = \"missing\"\n")
+                .contains("unknown profile")
+        );
         assert!(err("[profiles.a]\nmode = \"audit\"\n[[bindings]]\ncgroup = \"system.slice/x\"\nprofile = \"a\"\n")
             .contains("must be under `rk.slice/`"));
         assert!(err("[profiles.a]\nmode = \"audit\"\n[[bindings]]\ncgroup = \"rk.slice/../x\"\nprofile = \"a\"\n")
@@ -845,7 +943,11 @@ mod tests {
     fn profile_ids_are_stable_across_reloads() {
         let mut ids = ProfileIds::default();
         let one = parse("[profiles.b]\nmode = \"audit\"\n", &mut ids).unwrap();
-        let two = parse("[profiles.a]\nmode = \"audit\"\n[profiles.b]\nmode = \"audit\"\n", &mut ids).unwrap();
+        let two = parse(
+            "[profiles.a]\nmode = \"audit\"\n[profiles.b]\nmode = \"audit\"\n",
+            &mut ids,
+        )
+        .unwrap();
         let b1 = one.profiles.iter().find(|p| p.name == "b").unwrap().id;
         let b2 = two.profiles.iter().find(|p| p.name == "b").unwrap().id;
         assert_eq!(b1, b2);
@@ -856,7 +958,8 @@ mod tests {
     fn flattening_keeps_enclosing_deny_rules() {
         // The /16 entry is the longest match for 10.1.2.3, but only the /8 rule
         // matches port 443. Without flattening the kernel would miss it.
-        let p = policy(r#"
+        let p = policy(
+            r#"
             [profiles.a]
             mode = "enforce"
             network.default = "allow"
@@ -867,20 +970,35 @@ mod tests {
             [[profiles.a.network.deny]]
             cidr = "10.1.0.0/16"
             ports = ["22"]
-        "#);
+        "#,
+        );
         let c = compile(&p, 1).unwrap();
         let id = p.profiles[0].id;
-        for (addr, port) in [("10.1.2.3", 443), ("10.1.2.3", 22), ("10.9.9.9", 443), ("10.1.2.3", 80)] {
-            assert_eq!(c.lookup(id, ip(addr), port, PROTO_TCP), evaluate(&p, id, ip(addr), port, PROTO_TCP), "{addr}:{port}");
+        for (addr, port) in [
+            ("10.1.2.3", 443),
+            ("10.1.2.3", 22),
+            ("10.9.9.9", 443),
+            ("10.1.2.3", 80),
+        ] {
+            assert_eq!(
+                c.lookup(id, ip(addr), port, PROTO_TCP),
+                evaluate(&p, id, ip(addr), port, PROTO_TCP),
+                "{addr}:{port}"
+            );
         }
-        assert_eq!(c.lookup(id, ip("10.1.2.3"), 443, PROTO_TCP).unwrap().action, Action::Deny);
+        assert_eq!(
+            c.lookup(id, ip("10.1.2.3"), 443, PROTO_TCP).unwrap().action,
+            Action::Deny
+        );
     }
 
     #[test]
     fn too_many_ranges_is_a_clear_error() {
         let mut text = String::from("[profiles.a]\nmode = \"enforce\"\nnetwork.include = []\n");
         for port in 1..=9 {
-            text.push_str(&format!("[[profiles.a.network.allow]]\ncidr = \"10.0.0.0/8\"\nports = [\"{port}\"]\n"));
+            text.push_str(&format!(
+                "[[profiles.a.network.allow]]\ncidr = \"10.0.0.0/8\"\nports = [\"{port}\"]\n"
+            ));
         }
         let p = policy(&text);
         let e = compile(&p, 1).unwrap_err().to_string();
@@ -898,7 +1016,12 @@ mod tests {
         assert_eq!(c.generation, 7);
         assert_eq!(
             c.profiles,
-            vec![CompiledProfile { id: 0, mode: Mode::Enforce, net_default: Action::Deny, flags: FLAG_DENY_RAW_SOCKETS }]
+            vec![CompiledProfile {
+                id: 0,
+                mode: Mode::Enforce,
+                net_default: Action::Deny,
+                flags: FLAG_DENY_RAW_SOCKETS
+            }]
         );
         assert!(c.deny.iter().all(|e| e.ranges.len() <= MAX_RANGES));
     }
@@ -922,8 +1045,14 @@ mod tests {
             prop::bool::ANY,
             0u8..4,
             prop::sample::select(vec![8u8, 12, 16, 20, 24, 28, 32]),
-            prop::collection::vec(prop::sample::select(vec!["22", "53", "80", "443", "1000-2000", "*"]), 0..3),
-            prop::collection::vec(prop::sample::select(vec!["tcp", "udp", "other", "any"]), 0..2),
+            prop::collection::vec(
+                prop::sample::select(vec!["22", "53", "80", "443", "1000-2000", "*"]),
+                0..3,
+            ),
+            prop::collection::vec(
+                prop::sample::select(vec!["tcp", "udp", "other", "any"]),
+                0..2,
+            ),
         )
             .prop_map(|(deny, b, len, ports, protos)| {
                 let base = Ipv4Addr::new(10, b, 0, 0);

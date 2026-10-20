@@ -13,8 +13,8 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use rk_sensor::loader::{self, Object};
-use rk_sensor::{consumer, selftest};
 use rk_sensor::policy::{self, PolicyEngine};
+use rk_sensor::{consumer, selftest};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::{error, info, warn};
 
@@ -162,7 +162,9 @@ fn apply_policy_file(engine: &mut PolicyEngine, ebpf: &mut aya::Ebpf, path: &str
     };
     match engine.apply_text(ebpf, &text) {
         Ok(report) => info!(path, ?report, "policy applied"),
-        Err(e) => error!(path, error = %format!("{e:#}"), "policy rejected; active policy unchanged"),
+        Err(e) => {
+            error!(path, error = %format!("{e:#}"), "policy rejected; active policy unchanged")
+        }
     }
 }
 

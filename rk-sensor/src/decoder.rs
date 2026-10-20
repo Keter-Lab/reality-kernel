@@ -12,8 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use rk_ebpf_common::{
     rk_event_type, rk_hdr, rk_payload_exec, rk_payload_file, rk_payload_net, rk_payload_sock,
-    rk_verdict,
-    RK_ABI_VERSION, RK_ENVELOPE_LEN, RK_SCRATCH_PAYLOAD_MAX,
+    rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN, RK_SCRATCH_PAYLOAD_MAX,
 };
 
 const HDR_LEN: usize = core::mem::size_of::<rk_hdr>();
@@ -431,7 +430,10 @@ pub(crate) mod tests {
             ..Zeroable::zeroed()
         };
         let rec = record(
-            &hdr(rk_event_type::RK_EV_SOCK_CREATE, rk_verdict::RK_VERDICT_DENY),
+            &hdr(
+                rk_event_type::RK_EV_SOCK_CREATE,
+                rk_verdict::RK_VERDICT_DENY,
+            ),
             bytemuck::bytes_of(&body),
         );
         assert_eq!(decode(&rec).unwrap().payload, Payload::Sock { body });

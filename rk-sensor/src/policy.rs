@@ -78,10 +78,9 @@ unsafe impl aya::Pod for Binding {}
 /// Attaches the network programs (already loaded) to `cgroup_root`, creating
 /// it if needed, and the LSM programs host-wide. Links detach when `ebpf` drops.
 pub fn attach_network(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
-    fs::create_dir_all(cgroup_root)
-        .with_context(|| format!("create {}", cgroup_root.display()))?;
-    let cgroup = fs::File::open(cgroup_root)
-        .with_context(|| format!("open {}", cgroup_root.display()))?;
+    fs::create_dir_all(cgroup_root).with_context(|| format!("create {}", cgroup_root.display()))?;
+    let cgroup =
+        fs::File::open(cgroup_root).with_context(|| format!("open {}", cgroup_root.display()))?;
 
     let mut attached = Vec::new();
     for name in SOCK_ADDR_PROGRAMS {
@@ -223,7 +222,8 @@ impl PolicyEngine {
         let mut out = BTreeMap::new();
         for b in &policy.bindings {
             let path = self.cgroup_fs.join(&b.cgroup);
-            fs::create_dir_all(&path).with_context(|| format!("create cgroup {}", path.display()))?;
+            fs::create_dir_all(&path)
+                .with_context(|| format!("create cgroup {}", path.display()))?;
             let id = fs::metadata(&path)
                 .with_context(|| format!("stat cgroup {}", path.display()))?
                 .ino();
@@ -235,7 +235,9 @@ impl PolicyEngine {
     fn clear_slot(&mut self, ebpf: &mut Ebpf, slot: u32) -> Result<()> {
         let contents = std::mem::take(&mut self.written[slot as usize]);
         for (map_name, keys) in [(MAP_DENY, &contents.deny), (MAP_ALLOW, &contents.allow)] {
-            let map = ebpf.map_mut(map_name).with_context(|| format!("{map_name} missing"))?;
+            let map = ebpf
+                .map_mut(map_name)
+                .with_context(|| format!("{map_name} missing"))?;
             let mut trie = LpmTrie::<_, KeyData, NetRule>::try_from(map)?;
             for (prefix_len, data) in keys {
                 // Already-absent keys are fine: the goal is an empty slot.
@@ -275,7 +277,9 @@ impl PolicyEngine {
             (MAP_DENY, &compiled.deny, true),
             (MAP_ALLOW, &compiled.allow, false),
         ] {
-            let map = ebpf.map_mut(map_name).with_context(|| format!("{map_name} missing"))?;
+            let map = ebpf
+                .map_mut(map_name)
+                .with_context(|| format!("{map_name} missing"))?;
             let mut trie = LpmTrie::<_, KeyData, NetRule>::try_from(map)?;
             for entry in entries {
                 let (prefix_len, data) = trie_key(slot, entry);
@@ -286,14 +290,22 @@ impl PolicyEngine {
                     written.allow.push((prefix_len, data));
                 }
                 trie.insert(&Key::new(prefix_len, data), NetRule(trie_value(entry)), 0)
-                    .with_context(|| format!("write {map_name} entry for profile {}", entry.profile))?;
+                    .with_context(|| {
+                        format!("write {map_name} entry for profile {}", entry.profile)
+                    })?;
             }
         }
         Ok(())
     }
 
-    fn sync_bindings(&mut self, ebpf: &mut Ebpf, wanted: BTreeMap<u64, (String, u32)>) -> Result<()> {
-        let map = ebpf.map_mut(MAP_BINDINGS).context("rk_cgroup_profile missing")?;
+    fn sync_bindings(
+        &mut self,
+        ebpf: &mut Ebpf,
+        wanted: BTreeMap<u64, (String, u32)>,
+    ) -> Result<()> {
+        let map = ebpf
+            .map_mut(MAP_BINDINGS)
+            .context("rk_cgroup_profile missing")?;
         let mut bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
         for (id, (_, profile)) in &wanted {
             if self.bindings.get(id).map(|(_, p)| p) != Some(profile) {
@@ -362,7 +374,10 @@ mod tests {
             4 + std::mem::size_of::<KeyData>(),
             std::mem::size_of::<rk_ebpf_common::rk_net_key>()
         );
-        assert_eq!(std::mem::size_of::<NetRule>(), std::mem::size_of::<rk_net_rule>());
+        assert_eq!(
+            std::mem::size_of::<NetRule>(),
+            std::mem::size_of::<rk_net_rule>()
+        );
     }
 
     #[test]
@@ -386,13 +401,30 @@ mod tests {
             prefix_len: 128,
             addr: [0; 16],
             ranges: vec![
-                CompiledRange { rule_id: 7, lo: 443, hi: 443, proto: 1 },
-                CompiledRange { rule_id: 3, lo: 0, hi: 65535, proto: 7 },
+                CompiledRange {
+                    rule_id: 7,
+                    lo: 443,
+                    hi: 443,
+                    proto: 1,
+                },
+                CompiledRange {
+                    rule_id: 3,
+                    lo: 0,
+                    hi: 65535,
+                    proto: 7,
+                },
             ],
         };
         let v = trie_value(&entry);
         assert_eq!(v.nranges, 2);
-        assert_eq!((v.ranges[0].rule_id, v.ranges[0].port_lo, v.ranges[0].proto_mask), (7, 443, 1));
+        assert_eq!(
+            (
+                v.ranges[0].rule_id,
+                v.ranges[0].port_lo,
+                v.ranges[0].proto_mask
+            ),
+            (7, 443, 1)
+        );
         assert_eq!((v.ranges[1].rule_id, v.ranges[1].port_hi), (3, 65535));
         assert_eq!(v.ranges[2].rule_id, 0);
     }
