@@ -429,7 +429,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let procs = "/sys/fs/cgroup/rk.slice/enforce/cgroup.procs";
 
         // Spawn child to perform 2,000 paced sends to 10.99.0.2:80
-        let mut child = Command::new(&current_exe)
+        let child = Command::new(&current_exe)
             .arg(workloads::CHILD_FLAG)
             .arg(procs)
             .arg("paced_workload")
