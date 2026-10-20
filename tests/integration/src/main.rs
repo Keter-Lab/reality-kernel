@@ -332,9 +332,21 @@ profile = "enforce-profile"
         engine_fail.apply_text(&mut ebpf_fail, POLICY_TEXT)?;
 
         // Verify that verdicts STILL hold when emit fails
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["10.99.0.1:80", "eperm"])?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tcp_connect", &["127.0.0.1:8080", "ok"])?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "udp_connect", &["10.99.0.1:80", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["10.99.0.1:80", "eperm"],
+        )?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tcp_connect",
+            &["127.0.0.1:8080", "ok"],
+        )?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "udp_connect",
+            &["10.99.0.1:80", "eperm"],
+        )?;
         spawn_child("/sys/fs/cgroup/rk.slice/enforce", "raw_socket", &[])?;
         spawn_child("/sys/fs/cgroup/rk.slice/enforce", "packet_socket", &[])?;
 
@@ -359,9 +371,7 @@ fn spawn_child(cgroup_path: &str, workload: &str, extra_args: &[&str]) -> Result
     let current_exe = std::env::current_exe().context("current_exe")?;
 
     let mut cmd = Command::new(current_exe);
-    cmd.arg(workloads::CHILD_FLAG)
-        .arg(&procs)
-        .arg(workload);
+    cmd.arg(workloads::CHILD_FLAG).arg(&procs).arg(workload);
 
     for arg in extra_args {
         cmd.arg(arg);
@@ -383,10 +393,18 @@ fn spawn_child(cgroup_path: &str, workload: &str, extra_args: &[&str]) -> Result
 #[cfg(target_os = "linux")]
 fn setup_environment() {
     // Add loopback test addresses
-    let _ = Command::new("ip").args(["addr", "add", "10.99.0.1/24", "dev", "lo"]).status();
-    let _ = Command::new("ip").args(["addr", "add", "10.99.0.2/24", "dev", "lo"]).status();
-    let _ = Command::new("ip").args(["addr", "add", "fd99::1/64", "dev", "lo"]).status();
-    let _ = Command::new("ip").args(["addr", "add", "64:ff9b::10.99.0.1/128", "dev", "lo"]).status();
+    let _ = Command::new("ip")
+        .args(["addr", "add", "10.99.0.1/24", "dev", "lo"])
+        .status();
+    let _ = Command::new("ip")
+        .args(["addr", "add", "10.99.0.2/24", "dev", "lo"])
+        .status();
+    let _ = Command::new("ip")
+        .args(["addr", "add", "fd99::1/64", "dev", "lo"])
+        .status();
+    let _ = Command::new("ip")
+        .args(["addr", "add", "64:ff9b::10.99.0.1/128", "dev", "lo"])
+        .status();
 
     // Create cgroups
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/enforce");
