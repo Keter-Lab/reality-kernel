@@ -1,6 +1,9 @@
 # Design note: Phase 2 — network policy enforcement
 
-Status: **PROPOSED**, waiting for review
+Status: **ACCEPTED** (2026-10-20). All four decisions in §9 approved as recommended.
+Amendment: the raw/packet socket block uses the BPF-LSM `socket_create` hook
+instead of `cgroup/sock_create`, which only sees AF_INET/AF_INET6 sockets and so
+could never block `AF_PACKET`. BPF-LSM is already required for ENFORCE.
 Branch: `phase-2-network` (from `phase-0-1-foundations`)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 2 and sections 3–5
 
@@ -35,8 +38,8 @@ Phase 2 still reserves the mode and heartbeat fields so Phase 6 adds no ABI brea
 
 ## 2. Hooks
 
-All hooks are `cgroup/sock_addr` or `cgroup/sock` programs, attached through BPF
-links to **`/sys/fs/cgroup/rk.slice`**, never to the host root. They therefore
+The four `cgroup/sock_addr` programs are attached through BPF links to
+**`/sys/fs/cgroup/rk.slice`**, never to the host root. They therefore
 run only for sockets created inside `rk.slice`, and other cgroup programs
 (Cilium, systemd) coexist with them. Where several programs are attached, the
 kernel denies if any of them denies, so the most restrictive verdict wins.
@@ -47,7 +50,7 @@ kernel denies if any of them denies, so the most restrictive verdict wins.
 | `rk_net_connect6` | `cgroup/connect6` | Same for IPv6, including IPv4-mapped destinations |
 | `rk_net_sendmsg4` | `cgroup/sendmsg4` | Unconnected UDP `sendto`/`sendmsg` |
 | `rk_net_sendmsg6` | `cgroup/sendmsg6` | Same for IPv6 |
-| `rk_net_sock_create` | `cgroup/sock_create` | Denies `SOCK_RAW` and `AF_PACKET` sockets for governed ENFORCE cgroups, which would otherwise bypass every hook above |
+| `rk_net_socket_create` | `lsm/socket_create` | Denies `SOCK_RAW` (inet) and `AF_PACKET` sockets for governed ENFORCE cgroups, which would otherwise bypass every hook above. Runs host-wide, at the cost of one hash lookup for ungoverned tasks |
 
 Each decision uses the **current task's** cgroup (`bpf_get_current_cgroup_id`).
 That matches the exec and file hooks in Phases 3–4, and if a socket is handed
@@ -151,7 +154,7 @@ profile = "research-agent"
 
 | Vector | Handling |
 |---|---|
-| Raw or packet sockets | `rk_net_sock_create` denies them in ENFORCE (they also need `CAP_NET_RAW`, which governed agents won't have from Phase 5) |
+| Raw or packet sockets | `rk_net_socket_create` (LSM) denies them in ENFORCE (they also need `CAP_NET_RAW`, which governed agents won't have from Phase 5) |
 | IPv4-mapped IPv6 (`::ffff:a.b.c.d`) | Normalised; one trie serves both families |
 | NAT64 (`64:ff9b::/96`) | Equivalence rules (§5) |
 | Other network namespaces | Cgroup hooks don't depend on the namespace; covered |

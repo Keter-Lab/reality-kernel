@@ -50,6 +50,7 @@ uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 proptest = "1"
+toml = "1"
 ipnet = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time", "fs"] }
 tracing = "0.1"

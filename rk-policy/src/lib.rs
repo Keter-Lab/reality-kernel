@@ -1,3 +1,10 @@
+//! Reality Kernel policy.
+//!
+//! - [`net`]: kernel network policy (Phase 2), compiled into BPF map contents.
+//! - The crate root: the userspace least-agency command check used by rk-api.
+
+pub mod net;
+
 use ipnet::IpNet;
 use regex::Regex;
 use serde::{Deserialize, Serialize};

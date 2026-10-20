@@ -1,0 +1,56 @@
+# Built-in deny list: cloud instance-metadata and credential endpoints.
+#
+# Included in every profile unless an administrator removes it explicitly
+# (`network.include = []`). An agent that reaches one of these endpoints can
+# usually obtain the host's cloud credentials. Every entry cites its source;
+# changes to this file need review from a CODEOWNER (Phase 11).
+#
+# All ports and all protocols are denied.
+
+name = "cloud-metadata"
+description = "Cloud instance-metadata and credential endpoints"
+
+[[deny]]
+cidr = "169.254.169.254/32"
+note = "IMDS on AWS EC2, Google Compute Engine, Azure, Oracle OCI, DigitalOcean, OpenStack and others"
+source = "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html"
+
+[[deny]]
+cidr = "fd00:ec2::254/128"
+note = "AWS EC2 IMDS over IPv6"
+source = "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html"
+
+[[deny]]
+cidr = "169.254.170.2/32"
+note = "AWS ECS task metadata and task IAM role credentials"
+source = "https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html"
+
+[[deny]]
+cidr = "169.254.170.23/32"
+note = "AWS EKS Pod Identity agent"
+source = "https://docs.aws.amazon.com/eks/latest/userguide/pod-id-how-it-works.html"
+
+[[deny]]
+cidr = "fd00:ec2::23/128"
+note = "AWS EKS Pod Identity agent over IPv6"
+source = "https://docs.aws.amazon.com/eks/latest/userguide/pod-id-how-it-works.html"
+
+[[deny]]
+cidr = "fd20:ce::254/128"
+note = "Google Compute Engine metadata server over IPv6"
+source = "https://cloud.google.com/compute/docs/metadata/querying-metadata"
+
+[[deny]]
+cidr = "168.63.129.16/32"
+note = "Azure WireServer (host agent, health probes, DNS)"
+source = "https://learn.microsoft.com/azure/virtual-network/what-is-ip-address-168-63-129-16"
+
+[[deny]]
+cidr = "100.100.100.200/32"
+note = "Alibaba Cloud ECS metadata"
+source = "https://www.alibabacloud.com/help/en/ecs/user-guide/view-instance-metadata"
+
+[[deny]]
+cidr = "169.254.0.23/32"
+note = "Tencent Cloud CVM metadata"
+source = "https://www.tencentcloud.com/document/product/213/4934"

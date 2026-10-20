@@ -2,10 +2,12 @@
 /*
  * rk.bpf.c — production object loaded by the rk-sensor daemon.
  *
- * Phase 0/1 ships only the shared maps (events_ringbuf, rk_counters,
- * monitored_cgroups, scratch_map). Enforcing hooks are added by Phases 2-4.
+ * Shared maps live in common.bpf.h; each policy domain is one source file
+ * included here so all programs share a single set of maps.
  */
 
 #include "common.bpf.h"
 
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
+
+#include "net.bpf.c"

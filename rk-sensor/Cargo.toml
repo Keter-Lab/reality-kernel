@@ -25,6 +25,7 @@ anyhow.workspace = true
 aya.workspace = true
 bytemuck.workspace = true
 rk-ebpf-common = { path = "../rk-ebpf-common" }
+rk-policy = { path = "../rk-policy" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

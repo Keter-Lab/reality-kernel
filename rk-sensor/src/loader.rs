@@ -81,6 +81,14 @@ pub fn object_bytes(object: Object) -> Result<&'static [u8], NotEmbedded> {
     }
 }
 
+/// Opens BPF bytecode supplied by the caller. Only for test harnesses that
+/// embed their own objects (tests/integration); `rk-sensor` itself never
+/// calls this and exposes no way to reach it at runtime.
+#[doc(hidden)]
+pub fn open_bytes(bytes: &[u8], name: &str) -> Result<Ebpf> {
+    Ebpf::load(bytes).with_context(|| format!("failed to open {name}"))
+}
+
 /// Parses the embedded object, creates its maps and applies CO-RE relocations.
 /// Programs are not loaded into the kernel yet; see [`load_programs`].
 pub fn open(object: Object) -> Result<Ebpf> {
@@ -125,6 +133,7 @@ pub fn load_programs(object: Object, ebpf: &mut Ebpf, btf: Option<&Btf>) -> Vec<
 fn lsm_hook(program: &str) -> Option<&'static str> {
     match program {
         "rk_test_lsm_open" => Some("file_open"),
+        "rk_net_socket_create" => Some("socket_create"),
         _ => None,
     }
 }
