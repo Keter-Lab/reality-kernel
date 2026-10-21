@@ -97,8 +97,8 @@ pub async fn run_server(
         );
     }
 
-    let addr_len = (std::mem::size_of::<libc::sa_family_t>() + path_bytes.len() + 1)
-        as libc::socklen_t;
+    let addr_len =
+        (std::mem::size_of::<libc::sa_family_t>() + path_bytes.len() + 1) as libc::socklen_t;
 
     let bind_res = unsafe {
         libc::bind(
@@ -171,13 +171,8 @@ pub async fn run_server(
         let cgroup_fs_clone = config.cgroup_fs.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(
-                client,
-                handler_clone,
-                registry_clone,
-                cgroup_fs_clone,
-            )
-            .await
+            if let Err(e) =
+                handle_connection(client, handler_clone, registry_clone, cgroup_fs_clone).await
             {
                 warn!(error = %e, "error handling client connection");
             }
@@ -210,16 +205,7 @@ async fn handle_connection(
             env,
         } => {
             handle_run(
-                client,
-                cred,
-                profile,
-                session,
-                cmd,
-                env,
-                fds,
-                handler,
-                registry,
-                cgroup_fs,
+                client, cred, profile, session, cmd, env, fds, handler, registry, cgroup_fs,
             )
             .await
         }
@@ -237,12 +223,18 @@ async fn handle_connection(
             if dry_run {
                 let handler_lock = handler.lock().await;
                 match handler_lock.dry_run(&policy_text) {
-                    Ok(dry_run_data) => {
-                        send_response(client.as_raw_fd(), &Response::DryRunSuccess { dry_run: dry_run_data })
-                    }
-                    Err(e) => {
-                        send_response(client.as_raw_fd(), &Response::Error { message: format!("{e:#}") })
-                    }
+                    Ok(dry_run_data) => send_response(
+                        client.as_raw_fd(),
+                        &Response::DryRunSuccess {
+                            dry_run: dry_run_data,
+                        },
+                    ),
+                    Err(e) => send_response(
+                        client.as_raw_fd(),
+                        &Response::Error {
+                            message: format!("{e:#}"),
+                        },
+                    ),
                 }
             } else {
                 let mut handler_lock = handler.lock().await;
@@ -250,9 +242,12 @@ async fn handle_connection(
                     Ok(report) => {
                         send_response(client.as_raw_fd(), &Response::ApplySuccess { report })
                     }
-                    Err(e) => {
-                        send_response(client.as_raw_fd(), &Response::Error { message: format!("{e:#}") })
-                    }
+                    Err(e) => send_response(
+                        client.as_raw_fd(),
+                        &Response::Error {
+                            message: format!("{e:#}"),
+                        },
+                    ),
                 }
             }
         }
@@ -260,9 +255,12 @@ async fn handle_connection(
             let handler_lock = handler.lock().await;
             match handler_lock.diff(&policy_text) {
                 Ok(diff) => send_response(client.as_raw_fd(), &Response::DiffSuccess { diff }),
-                Err(e) => {
-                    send_response(client.as_raw_fd(), &Response::Error { message: format!("{e:#}") })
-                }
+                Err(e) => send_response(
+                    client.as_raw_fd(),
+                    &Response::Error {
+                        message: format!("{e:#}"),
+                    },
+                ),
             }
         }
         Request::Rollback => {
@@ -277,9 +275,12 @@ async fn handle_connection(
                 Ok(report) => {
                     send_response(client.as_raw_fd(), &Response::RollbackSuccess { report })
                 }
-                Err(e) => {
-                    send_response(client.as_raw_fd(), &Response::Error { message: format!("{e:#}") })
-                }
+                Err(e) => send_response(
+                    client.as_raw_fd(),
+                    &Response::Error {
+                        message: format!("{e:#}"),
+                    },
+                ),
             }
         }
         Request::Status => {
@@ -295,7 +296,9 @@ async fn handle_connection(
         Request::Signal { agent_id, signal } => {
             if let Some(agent) = registry.get(&agent_id) {
                 // Authorised if root, in group rk, or owner
-                if cred.uid == 0 || cred.uid == agent.caller_uid || check_policy_admin(&cred).is_ok()
+                if cred.uid == 0
+                    || cred.uid == agent.caller_uid
+                    || check_policy_admin(&cred).is_ok()
                 {
                     unsafe {
                         libc::kill(agent.pid as i32, signal);
@@ -395,7 +398,13 @@ async fn handle_run(
             }
         };
 
-        (profile_def, rel_cgroup, cgroup_path, cgroup_id, cgroup_dir_fd)
+        (
+            profile_def,
+            rel_cgroup,
+            cgroup_path,
+            cgroup_id,
+            cgroup_dir_fd,
+        )
     };
 
     // 4. Extract stdio file descriptors if passed

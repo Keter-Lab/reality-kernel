@@ -87,10 +87,8 @@ pub fn spawn_in_cgroup(
 
     let mut c_argv = Vec::with_capacity(cmd.len());
     for arg in cmd {
-        c_argv.push(
-            CString::new(arg.as_str())
-                .with_context(|| format!("invalid argument `{arg}`"))?,
-        );
+        c_argv
+            .push(CString::new(arg.as_str()).with_context(|| format!("invalid argument `{arg}`"))?);
     }
     let mut c_argv_ptrs: Vec<*const libc::c_char> = c_argv.iter().map(|s| s.as_ptr()).collect();
     c_argv_ptrs.push(std::ptr::null());
@@ -133,7 +131,14 @@ pub fn spawn_in_cgroup(
         // --- CHILD PROCESS ---
         // Async-signal-safe code only. No allocations, no mutexes.
         unsafe {
-            child_pre_exec(stdio_fds, target_uid, target_gid, &c_path, &c_argv_ptrs, &c_envp_ptrs);
+            child_pre_exec(
+                stdio_fds,
+                target_uid,
+                target_gid,
+                &c_path,
+                &c_argv_ptrs,
+                &c_envp_ptrs,
+            );
         }
     }
 
@@ -272,7 +277,14 @@ fn spawn_fallback_pipe(
             libc::read(p2c[0], buf.as_mut_ptr() as *mut _, 1);
             libc::close(p2c[0]);
 
-            child_pre_exec(stdio_fds, target_uid, target_gid, c_path, c_argv_ptrs, c_envp_ptrs);
+            child_pre_exec(
+                stdio_fds,
+                target_uid,
+                target_gid,
+                c_path,
+                c_argv_ptrs,
+                c_envp_ptrs,
+            );
         }
     }
 

@@ -77,13 +77,7 @@ fn get_username_and_groups(
         let mut pwd: libc::passwd = std::mem::zeroed();
         let mut buf = vec![0; 4096];
         let mut result: *mut libc::passwd = std::ptr::null_mut();
-        if libc::getpwuid_r(
-            uid,
-            &mut pwd,
-            buf.as_mut_ptr(),
-            buf.len(),
-            &mut result,
-        ) != 0
+        if libc::getpwuid_r(uid, &mut pwd, buf.as_mut_ptr(), buf.len(), &mut result) != 0
             || result.is_null()
         {
             return None;

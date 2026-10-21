@@ -11,7 +11,11 @@ const MIN_KERNEL_MAJOR: u64 = 5;
 const MIN_KERNEL_MINOR: u64 = 8;
 
 #[derive(Parser, Debug)]
-#[command(name = "rk", version, about = "Reality Kernel operations and agent CLI")]
+#[command(
+    name = "rk",
+    version,
+    about = "Reality Kernel operations and agent CLI"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -219,7 +223,11 @@ fn print_human_status(status: &DaemonStatus) {
     println!("Reality Kernel daemon status");
     println!(
         "  health     : {}",
-        if status.health { "healthy" } else { "unhealthy" }
+        if status.health {
+            "healthy"
+        } else {
+            "unhealthy"
+        }
     );
     println!("  generation : {}", status.generation);
     println!(

@@ -28,13 +28,8 @@ impl Client {
     pub fn connect(socket_path: Option<&Path>) -> Result<Self> {
         let path = socket_path.unwrap_or_else(|| Path::new(DEFAULT_SOCKET_PATH));
 
-        let sock_fd = unsafe {
-            libc::socket(
-                libc::AF_UNIX,
-                libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC,
-                0,
-            )
-        };
+        let sock_fd =
+            unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC, 0) };
         if sock_fd < 0 {
             return Err(std::io::Error::last_os_error()).context("failed to create socket");
         }
@@ -54,8 +49,8 @@ impl Client {
             );
         }
 
-        let addr_len = (std::mem::size_of::<libc::sa_family_t>() + path_bytes.len() + 1)
-            as libc::socklen_t;
+        let addr_len =
+            (std::mem::size_of::<libc::sa_family_t>() + path_bytes.len() + 1) as libc::socklen_t;
 
         let conn_res = unsafe {
             libc::connect(
@@ -88,11 +83,7 @@ impl Client {
         };
 
         // Pass current process stdin, stdout, and stderr
-        let stdio_fds = [
-            libc::STDIN_FILENO,
-            libc::STDOUT_FILENO,
-            libc::STDERR_FILENO,
-        ];
+        let stdio_fds = [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO];
 
         send_request(self.sock.as_raw_fd(), &req, &stdio_fds)?;
 

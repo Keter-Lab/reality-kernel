@@ -23,23 +23,15 @@ pub enum Request {
         env: Vec<(String, String)>,
     },
     /// Apply policy text atomically, or perform dry-run validation.
-    Apply {
-        policy_text: String,
-        dry_run: bool,
-    },
+    Apply { policy_text: String, dry_run: bool },
     /// Diff policy text against currently active policy.
-    Diff {
-        policy_text: String,
-    },
+    Diff { policy_text: String },
     /// Rollback policy to previous generation.
     Rollback,
     /// Query status of daemon, active policy, running agents, and capabilities.
     Status,
     /// Forward a signal to a running agent.
-    Signal {
-        agent_id: String,
-        signal: i32,
-    },
+    Signal { agent_id: String, signal: i32 },
 }
 
 /// Responses sent from the daemon to the client.
@@ -52,35 +44,21 @@ pub enum Response {
         cgroup_id: u64,
     },
     /// Agent main process has exited.
-    RunExited {
-        exit_code: i32,
-    },
+    RunExited { exit_code: i32 },
     /// Policy applied successfully.
-    ApplySuccess {
-        report: ApplyReportData,
-    },
+    ApplySuccess { report: ApplyReportData },
     /// Dry run completed successfully.
-    DryRunSuccess {
-        dry_run: DryRunData,
-    },
+    DryRunSuccess { dry_run: DryRunData },
     /// Policy diff completed successfully.
-    DiffSuccess {
-        diff: Vec<String>,
-    },
+    DiffSuccess { diff: Vec<String> },
     /// Policy rolled back successfully.
-    RollbackSuccess {
-        report: ApplyReportData,
-    },
+    RollbackSuccess { report: ApplyReportData },
     /// Daemon status query result.
-    StatusSuccess {
-        status: DaemonStatus,
-    },
+    StatusSuccess { status: DaemonStatus },
     /// Signal delivered successfully.
     SignalSuccess,
     /// Operation failed.
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -338,7 +316,8 @@ mod tests {
     #[test]
     fn socketpair_message_and_fd_passing() {
         let mut sv = [0; 2];
-        let rc = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0, sv.as_mut_ptr()) };
+        let rc =
+            unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0, sv.as_mut_ptr()) };
         assert_eq!(rc, 0);
 
         let sender = unsafe { OwnedFd::from_raw_fd(sv[0]) };

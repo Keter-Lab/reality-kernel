@@ -142,10 +142,7 @@ mod tests {
 
     #[test]
     fn cgroup_rel_formatting() {
-        assert_eq!(
-            agent_cgroup_rel("1234-abcd"),
-            "rk.slice/agent-1234-abcd"
-        );
+        assert_eq!(agent_cgroup_rel("1234-abcd"), "rk.slice/agent-1234-abcd");
         assert!(net::validate_cgroup(&agent_cgroup_rel("uuid")).is_ok());
     }
 
