@@ -10,8 +10,10 @@ use anyhow::{bail, Context, Result};
 
 use crate::protocol::AgentPrivilegeChecks;
 
-pub const CLONE_PIDFD: u64 = 0x00001000;
-pub const CLONE_INTO_CGROUP: u64 = 0x00000200;
+// Values from include/uapi/linux/sched.h. 0x200 is CLONE_FS: with that value
+// clone3 silently left agents in the daemon's cgroup, ungoverned.
+pub const CLONE_PIDFD: u64 = 0x0000_1000;
+pub const CLONE_INTO_CGROUP: u64 = 0x2_0000_0000;
 
 const SYS_CLONE3: libc::c_long = 435;
 const SYS_CAPSET: libc::c_long = 126;
@@ -484,6 +486,15 @@ pub fn verify_agent_privileges(pid: u32, cgroup_path: &Path) -> AgentPrivilegeCh
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pins the uapi values: a wrong flag makes clone3 succeed while leaving
+    /// the agent outside its cgroup.
+    #[test]
+    fn clone_flags_match_uapi() {
+        assert_eq!(CLONE_INTO_CGROUP, 1 << 33);
+        assert_eq!(CLONE_PIDFD, 1 << 12);
+        assert_eq!(CLONE_INTO_CGROUP & 0xffff_ffff, 0);
+    }
 
     #[test]
     fn privilege_check_flags_root_as_failed() {

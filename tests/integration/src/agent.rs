@@ -97,6 +97,19 @@ pub fn run_probe(args: &[String]) -> i32 {
         eprintln!("[probe] missing mode");
         return 2;
     };
+    // Every probe first proves it runs inside an agent cgroup: an agent left
+    // elsewhere is ungoverned, and the checks below would pass vacuously.
+    match own_cgroup() {
+        Ok(cg) if cg.starts_with("/rk.slice/agent-") => {}
+        Ok(cg) => {
+            eprintln!("[probe] running in cgroup {cg}, not an rk.slice/agent-* cgroup");
+            return 3;
+        }
+        Err(e) => {
+            eprintln!("[probe] {e:#}");
+            return 3;
+        }
+    }
     let rest: Vec<&str> = rest.iter().map(String::as_str).collect();
     let res = match (mode.as_str(), rest.as_slice()) {
         ("noop", []) => Ok(()),

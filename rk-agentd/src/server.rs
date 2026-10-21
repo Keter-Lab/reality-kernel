@@ -469,6 +469,32 @@ async fn handle_run(
         }
     };
 
+    // Fail closed: an agent seen outside its cgroup is ungoverned. clone3
+    // guarantees placement, so this only fires on a launcher bug. A child that
+    // already exited cannot be checked and is not treated as misplaced.
+    if let Ok(cg) = fs::read_to_string(format!("/proc/{pid}/cgroup")) {
+        let expected = format!("/{rel_cgroup}");
+        if let Some(actual) = cg.lines().find_map(|l| l.strip_prefix("0::")) {
+            if actual != expected {
+                unsafe {
+                    libc::kill(pid, libc::SIGKILL);
+                    libc::waitpid(pid, std::ptr::null_mut(), 0);
+                }
+                let mut handler_lock = handler.lock().await;
+                let _ = handler_lock.unbind_dynamic(cgroup_id);
+                let _ = fs::remove_dir(&cgroup_path);
+                error!(pid, actual, %expected, "agent started outside its cgroup; killed");
+                let resp = Response::Error {
+                    message: format!(
+                        "agent started in cgroup {actual}, not {expected}; killed it"
+                    ),
+                };
+                send_response(ctx.client.as_raw_fd(), &resp)?;
+                return Ok(());
+            }
+        }
+    }
+
     let agent_id = rel_cgroup
         .split('/')
         .next_back()
