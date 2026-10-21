@@ -1,6 +1,10 @@
 # Design note: Phase 5 — agent governance and policy pipeline
 
-Status: **PROPOSED**, waiting for review
+Status: **ACCEPTED** (2026-10-21). All four decisions in §8 approved as recommended.
+Implementation note: Phase 5a creates agent cgroups directly under `rk.slice`
+in cgroupfs, which works with or without systemd. Registering them as systemd
+transient scopes (`StartTransientUnit` over D-Bus) is a tracked follow-up, since
+it needs a D-Bus client and its own tests; §3 step 1 describes that target.
 Branch: `phase-5-agentd` (from `main` at f8ad36d)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 5
 

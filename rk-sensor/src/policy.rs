@@ -440,7 +440,30 @@ pub struct PolicyEngine {
     /// cgroup ids currently held in the built-in quarantine profile. Survives
     /// policy reloads until released.
     quarantined: BTreeSet<u64>,
+    /// Agent cgroups bound at runtime (`rk run`): cgroup id -> (path, profile
+    /// name). Kept across reloads; profile ids are stable (ADR-0005).
+    dynamic: BTreeMap<u64, (String, String)>,
     policy: Option<Policy>,
+    /// Text of the active and the previous policy, for `rk policy rollback`.
+    text: Option<String>,
+    previous_text: Option<String>,
+}
+
+/// What `rk policy apply --dry-run` reports: the apply that would happen,
+/// computed without touching the kernel or creating cgroups.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DryRun {
+    pub generation: u64,
+    pub profiles: usize,
+    pub deny_entries: usize,
+    pub allow_entries: usize,
+    pub exec_entries: usize,
+    pub file_entries: usize,
+    pub skipped_files: Vec<String>,
+    /// Static bindings whose cgroup does not exist yet (an apply creates them).
+    pub cgroups_to_create: Vec<String>,
+    /// `rk_policy::net::diff` against the active policy.
+    pub changes: Vec<String>,
 }
 
 impl Default for PolicyEngine {
@@ -460,7 +483,10 @@ impl PolicyEngine {
             written: [SlotContents::default(), SlotContents::default()],
             bindings: BTreeMap::new(),
             quarantined: BTreeSet::new(),
+            dynamic: BTreeMap::new(),
             policy: None,
+            text: None,
+            previous_text: None,
         }
     }
 
@@ -487,7 +513,8 @@ impl PolicyEngine {
         let policy = net::parse(text, &mut ids)?;
         let generation = self.generation + 1;
         let compiled = net::compile(&policy, generation)?;
-        let bindings = self.resolve_bindings(&policy)?;
+        let mut bindings = self.resolve_bindings(&policy, true)?;
+        self.add_dynamic_bindings(&policy, &mut bindings)?;
         let exec = resolve_exec(&compiled.exec)?;
         let (files, skipped_files) = resolve_files(&compiled.files)?;
 
@@ -526,21 +553,143 @@ impl PolicyEngine {
             bindings: self.bindings.len(),
         };
         self.policy = Some(policy);
+        self.previous_text = self.text.replace(text.to_string());
         Ok(report)
     }
 
-    fn resolve_bindings(&self, policy: &Policy) -> Result<BTreeMap<u64, (String, u32)>> {
+    /// Re-applies the previous policy with the same atomic flip. Rolling back
+    /// twice returns to the newer policy.
+    pub fn rollback(&mut self, ebpf: &mut Ebpf) -> Result<ApplyReport> {
+        let previous = self
+            .previous_text
+            .clone()
+            .context("no previous policy to roll back to")?;
+        self.apply_text(ebpf, &previous)
+    }
+
+    /// Everything an apply would do, without changing the kernel or the
+    /// filesystem. Fails exactly where `apply_text` would fail.
+    pub fn dry_run(&self, text: &str) -> Result<DryRun> {
+        let mut ids = self.ids.clone();
+        let policy = net::parse(text, &mut ids)?;
+        let generation = self.generation + 1;
+        let compiled = net::compile(&policy, generation)?;
+        let mut bindings = self.resolve_bindings(&policy, false)?;
+        self.add_dynamic_bindings(&policy, &mut bindings)?;
+        let exec = resolve_exec(&compiled.exec)?;
+        let (files, skipped_files) = resolve_files(&compiled.files)?;
+        let cgroups_to_create = policy
+            .bindings
+            .iter()
+            .filter(|b| !self.cgroup_fs.join(&b.cgroup).is_dir())
+            .map(|b| b.cgroup.clone())
+            .collect();
+        Ok(DryRun {
+            generation,
+            profiles: compiled.profiles.len(),
+            deny_entries: compiled.deny.len(),
+            allow_entries: compiled.allow.len(),
+            exec_entries: exec.len(),
+            file_entries: files.len(),
+            skipped_files,
+            cgroups_to_create,
+            changes: net::diff(self.policy.as_ref(), &policy),
+        })
+    }
+
+    /// `rk_policy::net::diff` between the active policy and `text`.
+    pub fn diff_text(&self, text: &str) -> Result<Vec<String>> {
+        let mut ids = self.ids.clone();
+        let policy = net::parse(text, &mut ids)?;
+        Ok(net::diff(self.policy.as_ref(), &policy))
+    }
+
+    /// Static bindings of `policy`, keyed by cgroup id. With `create`, missing
+    /// cgroup directories are created; without it they are skipped (dry run).
+    fn resolve_bindings(&self, policy: &Policy, create: bool) -> Result<BTreeMap<u64, (String, u32)>> {
         let mut out = BTreeMap::new();
         for b in &policy.bindings {
             let path = self.cgroup_fs.join(&b.cgroup);
-            fs::create_dir_all(&path)
-                .with_context(|| format!("create cgroup {}", path.display()))?;
+            if create {
+                fs::create_dir_all(&path)
+                    .with_context(|| format!("create cgroup {}", path.display()))?;
+            } else if !path.is_dir() {
+                continue;
+            }
             let id = fs::metadata(&path)
                 .with_context(|| format!("stat cgroup {}", path.display()))?
                 .ino();
             out.insert(id, (b.cgroup.clone(), b.profile));
         }
         Ok(out)
+    }
+
+    /// Adds the runtime agent bindings to `wanted`. Fails, before anything in
+    /// the kernel changes, if `policy` drops a profile a running agent uses, or
+    /// statically binds an agent's cgroup.
+    fn add_dynamic_bindings(&self, policy: &Policy, wanted: &mut BTreeMap<u64, (String, u32)>) -> Result<()> {
+        for (id, (path, profile)) in &self.dynamic {
+            let pid = policy
+                .profiles
+                .iter()
+                .find(|p| &p.name == profile)
+                .map(|p| p.id)
+                .with_context(|| {
+                    format!("profile `{profile}` is used by running agent `{path}` and cannot be removed")
+                })?;
+            if wanted.contains_key(id) {
+                anyhow::bail!("`{path}` is a running agent's cgroup and cannot also be bound statically");
+            }
+            wanted.insert(*id, (path.clone(), pid));
+        }
+        Ok(())
+    }
+
+    /// Binds an agent cgroup (created by the caller under `rk.slice/`) to a
+    /// profile, with one map update, and keeps the binding across reloads.
+    /// Returns the cgroup id.
+    pub fn bind_dynamic(&mut self, ebpf: &mut Ebpf, cgroup: &str, profile: &str) -> Result<u64> {
+        let cgroup = net::validate_cgroup(cgroup).map_err(|m| anyhow::anyhow!(m))?;
+        let pid = self
+            .policy
+            .as_ref()
+            .context("no policy applied yet")?
+            .profiles
+            .iter()
+            .find(|p| p.name == profile && p.name != QUARANTINE)
+            .map(|p| p.id)
+            .with_context(|| format!("unknown profile `{profile}`"))?;
+        let path = self.cgroup_fs.join(&cgroup);
+        let id = fs::metadata(&path)
+            .with_context(|| format!("stat cgroup {}", path.display()))?
+            .ino();
+        if self.bindings.contains_key(&id) {
+            anyhow::bail!("`{cgroup}` is already bound");
+        }
+        self.set_binding(ebpf, id, pid)?;
+        self.bindings.insert(id, (cgroup.clone(), pid));
+        self.dynamic.insert(id, (cgroup, profile.to_string()));
+        Ok(id)
+    }
+
+    /// Removes an agent binding (after the agent exited).
+    pub fn unbind_dynamic(&mut self, ebpf: &mut Ebpf, id: u64) -> Result<()> {
+        if self.dynamic.remove(&id).is_none() {
+            anyhow::bail!("cgroup {id} is not a runtime agent binding");
+        }
+        self.bindings.remove(&id);
+        self.quarantined.remove(&id);
+        let map = ebpf
+            .map_mut(MAP_BINDINGS)
+            .context("rk_cgroup_profile missing")?;
+        let mut bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
+        let _ = bindings.remove(&id);
+        Ok(())
+    }
+
+    /// Runtime agent bindings: cgroup id -> (path, profile name).
+    pub fn dynamic_bindings(&self) -> &BTreeMap<u64, (String, String)> {
+        &self.dynamic
     }
 
     fn clear_slot(&mut self, ebpf: &mut Ebpf, slot: u32) -> Result<()> {
@@ -732,11 +881,16 @@ impl PolicyEngine {
         let id = self
             .cgroup_id(cgroup)
             .with_context(|| format!("`{cgroup}` is not bound to a profile"))?;
-        let profile = self
-            .policy
-            .as_ref()
-            .and_then(|p| p.bindings.iter().find(|b| b.cgroup == cgroup))
+        let policy = self.policy.as_ref().context("no policy applied yet")?;
+        let profile = policy
+            .bindings
+            .iter()
+            .find(|b| b.cgroup == cgroup)
             .map(|b| b.profile)
+            .or_else(|| {
+                let name = &self.dynamic.get(&id)?.1;
+                policy.profiles.iter().find(|p| &p.name == name).map(|p| p.id)
+            })
             .with_context(|| format!("`{cgroup}` has no binding in the active policy"))?;
         self.quarantined.remove(&id);
         self.set_binding(ebpf, id, profile)
@@ -909,6 +1063,33 @@ mod tests {
         // A missing path that is not from a built-in list fails the apply.
         assert!(resolve_files(&[file_rule("/nonexistent/rk/required", 1, 14, false)]).is_err());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn dry_run_touches_nothing_and_reports_changes() {
+        let root = std::env::temp_dir().join(format!("rk_dry_run_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let engine = PolicyEngine::new(root.clone());
+        let text = "[profiles.a]\nmode = \"audit\"\n[profiles.a.files]\ninclude = []\n\
+                    [[bindings]]\ncgroup = \"rk.slice/agent-x\"\nprofile = \"a\"\n";
+
+        let d = engine.dry_run(text).unwrap();
+        assert_eq!(d.generation, 1);
+        assert_eq!(d.cgroups_to_create, vec!["rk.slice/agent-x".to_string()]);
+        assert!(!root.join("rk.slice").exists(), "a dry run must not create cgroups");
+        assert!(d.changes.contains(&"+ profile a".to_string()), "{:#?}", d.changes);
+        assert!(engine
+            .diff_text(text)
+            .unwrap()
+            .contains(&"+ binding rk.slice/agent-x -> a".to_string()));
+
+        // A dry run fails exactly where an apply would.
+        assert!(engine.dry_run("[profiles.a]\nmode = \"block\"\n").is_err());
+        assert!(engine
+            .dry_run("[profiles.a]\nmode = \"audit\"\n[[profiles.a.files.deny]]\npath = \"/nonexistent/rk\"\naccess = [\"read\"]\n")
+            .is_err());
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

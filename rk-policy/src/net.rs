@@ -154,6 +154,13 @@ struct ProfileFile {
     exec: Option<ExecFile>,
     #[serde(default)]
     files: FilesFile,
+    /// Who may start agents under this profile with `rk run` (Phase 5).
+    #[serde(default = "root_only")]
+    launchable_by: Vec<String>,
+}
+
+fn root_only() -> Vec<String> {
+    vec!["root".to_string()]
 }
 
 #[derive(Debug, Deserialize)]
@@ -321,6 +328,53 @@ pub struct Profile {
     /// `None`: exec policy inactive for this profile (every exec allowed).
     pub exec: Option<ExecPolicy>,
     pub files: FilePolicy,
+    /// Who may launch agents under this profile; empty means nobody.
+    pub launchable_by: Vec<Principal>,
+}
+
+/// A local user or group allowed to launch agents under a profile.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Principal {
+    User(String),
+    Group(String),
+    Uid(u32),
+    Gid(u32),
+}
+
+impl fmt::Display for Principal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Principal::User(n) if n == "root" => f.write_str("root"),
+            Principal::User(n) => write!(f, "user:{n}"),
+            Principal::Group(n) => write!(f, "group:{n}"),
+            Principal::Uid(u) => write!(f, "uid:{u}"),
+            Principal::Gid(g) => write!(f, "gid:{g}"),
+        }
+    }
+}
+
+/// Parses `root`, `user:NAME`, `group:NAME`, `uid:N` or `gid:N`.
+pub fn parse_principal(s: &str) -> Result<Principal, String> {
+    let s = s.trim();
+    if s == "root" {
+        return Ok(Principal::User("root".to_string()));
+    }
+    let (kind, value) = s
+        .split_once(':')
+        .ok_or_else(|| format!("`{s}` must be root, user:NAME, group:NAME, uid:N or gid:N"))?;
+    let number = |v: &str| {
+        v.parse::<u32>()
+            .map_err(|_| format!("`{s}`: `{v}` is not a numeric id"))
+    };
+    match kind {
+        "user" if valid_name(value) => Ok(Principal::User(value.to_string())),
+        "group" if valid_name(value) => Ok(Principal::Group(value.to_string())),
+        "uid" => Ok(Principal::Uid(number(value)?)),
+        "gid" => Ok(Principal::Gid(number(value)?)),
+        _ => Err(format!(
+            "`{s}` must be root, user:NAME, group:NAME, uid:N or gid:N"
+        )),
+    }
 }
 
 /// One file deny rule. Paths are resolved to (device, inode) by the sensor at
@@ -509,7 +563,9 @@ fn valid_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
-fn validate_cgroup(path: &str) -> Result<String, String> {
+/// Validates a cgroup path relative to `/sys/fs/cgroup`: it must be under
+/// `rk.slice/` with only plain name segments. Returns the normalised path.
+pub fn validate_cgroup(path: &str) -> Result<String, String> {
     let path = path.trim().trim_end_matches('/');
     let rest = path
         .strip_prefix(CGROUP_ROOT)
@@ -673,6 +729,12 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             rules,
             exec,
             files,
+            launchable_by: pf
+                .launchable_by
+                .iter()
+                .map(|p| parse_principal(p))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|m| PolicyError::new(format!("{ctx}, launchable_by"), m))?,
         });
     }
 
@@ -696,6 +758,8 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             &mut next_rule,
             &mut origins,
         )?,
+        // Never a launch target: agents are moved into it, not started in it.
+        launchable_by: Vec::new(),
     });
 
     let mut bindings = Vec::new();
@@ -1184,6 +1248,166 @@ impl Compiled {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Policy diff (`rk policy diff`, dry runs)
+// ---------------------------------------------------------------------------
+
+fn ports_text(ports: &[PortRange]) -> String {
+    if ports == [PortRange::ALL] {
+        return "all ports".to_string();
+    }
+    let list: Vec<String> = ports
+        .iter()
+        .map(|p| {
+            if p.lo == p.hi {
+                p.lo.to_string()
+            } else {
+                format!("{}-{}", p.lo, p.hi)
+            }
+        })
+        .collect();
+    format!("ports {}", list.join(","))
+}
+
+fn proto_text(mask: u8) -> String {
+    if mask == PROTO_ANY {
+        return "any proto".to_string();
+    }
+    let mut out = Vec::new();
+    for (bit, name) in [(PROTO_TCP, "tcp"), (PROTO_UDP, "udp"), (PROTO_OTHER, "other")] {
+        if mask & bit != 0 {
+            out.push(name);
+        }
+    }
+    out.join("+")
+}
+
+fn access_text(mask: u32) -> String {
+    if mask == FILE_ALL {
+        return "all".to_string();
+    }
+    let names = [
+        (FILE_READ, "read"),
+        (FILE_WRITE, "write"),
+        (FILE_EXEC, "exec"),
+        (FILE_CREATE, "create"),
+        (FILE_DELETE, "delete"),
+        (FILE_RENAME, "rename"),
+        (FILE_TRUNCATE, "truncate"),
+        (FILE_LINK, "link"),
+        (FILE_SETATTR, "setattr"),
+    ];
+    names
+        .iter()
+        .filter(|(bit, _)| mask & bit != 0)
+        .map(|(_, n)| *n)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Every setting and rule of a profile as one line each, independent of rule
+/// ids and file order, so two policies can be compared line by line.
+fn describe(p: &Profile) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    out.insert(format!("mode = {:?}", p.mode).to_lowercase());
+    out.insert(format!("network.default = {:?}", p.net_default).to_lowercase());
+    out.insert(format!("network.deny_raw_sockets = {}", p.deny_raw_sockets));
+    for r in &p.rules {
+        out.insert(format!(
+            "network.{} {} {} {}",
+            if r.action == Action::Deny { "deny" } else { "allow" },
+            r.net,
+            ports_text(&r.ports),
+            proto_text(r.proto)
+        ));
+    }
+    match &p.exec {
+        None => {
+            out.insert("exec: inactive".to_string());
+        }
+        Some(e) => {
+            out.insert(format!("exec.default = {:?}", e.default).to_lowercase());
+            out.insert(format!("exec.allow_unlinked = {}", e.allow_unlinked));
+            for a in &e.allow {
+                let key = match a.kind {
+                    ExecPathKind::File => "exec.allow",
+                    ExecPathKind::Dir => "exec.allow_dirs",
+                };
+                out.insert(format!("{key} {}", a.path));
+            }
+        }
+    }
+    out.insert(format!(
+        "files.protect_exec_allowlist = {}",
+        p.files.protect_exec_allowlist
+    ));
+    for f in &p.files.rules {
+        out.insert(format!(
+            "files.deny {}{} [{}]{}",
+            f.path,
+            if f.subtree { " (subtree)" } else { "" },
+            access_text(f.deny_mask),
+            if f.optional { " (built-in)" } else { "" }
+        ));
+    }
+    for who in &p.launchable_by {
+        out.insert(format!("launchable_by {who}"));
+    }
+    out
+}
+
+/// Human-readable changes from `old` (the active policy, if any) to `new`:
+/// one line per added (`+`) or removed (`-`) profile, setting, rule or binding.
+/// An empty result means the policies are equivalent.
+pub fn diff(old: Option<&Policy>, new: &Policy) -> Vec<String> {
+    let mut out = Vec::new();
+    let empty = Vec::new();
+    let old_profiles = old.map(|p| &p.profiles).unwrap_or(&empty);
+    let names: BTreeSet<&str> = old_profiles
+        .iter()
+        .chain(&new.profiles)
+        .map(|p| p.name.as_str())
+        .collect();
+    for name in names {
+        let before = old_profiles.iter().find(|p| p.name == name);
+        let after = new.profiles.iter().find(|p| p.name == name);
+        match (before, after) {
+            (None, Some(_)) => out.push(format!("+ profile {name}")),
+            (Some(_), None) => out.push(format!("- profile {name}")),
+            _ => {}
+        }
+        let b = before.map(describe).unwrap_or_default();
+        let a = after.map(describe).unwrap_or_default();
+        for line in b.difference(&a) {
+            out.push(format!("- {name}: {line}"));
+        }
+        for line in a.difference(&b) {
+            out.push(format!("+ {name}: {line}"));
+        }
+    }
+    let binding_lines = |p: &Policy| -> BTreeSet<String> {
+        p.bindings
+            .iter()
+            .map(|b| {
+                let profile = p
+                    .profile(b.profile)
+                    .map(|pr| pr.name.as_str())
+                    .unwrap_or("?");
+                format!("binding {} -> {profile}", b.cgroup)
+            })
+            .collect()
+    };
+    let b = old.map(binding_lines).unwrap_or_default();
+    let a = binding_lines(new);
+    for line in b.difference(&a) {
+        out.push(format!("- {line}"));
+    }
+    for line in a.difference(&b) {
+        out.push(format!("+ {line}"));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1600,6 +1824,57 @@ mod tests {
             err("[profiles.a]\nmode = \"audit\"\n[profiles.a.files]\ninclude = [\"nope\"]\n")
                 .contains("unknown files list")
         );
+    }
+
+    #[test]
+    fn launchable_by_defaults_to_root_and_validates() {
+        let p = policy("[profiles.a]\nmode = \"audit\"\n");
+        assert_eq!(p.profiles[0].launchable_by, vec![Principal::User("root".into())]);
+        let q = p.profiles.iter().find(|p| p.name == QUARANTINE).unwrap();
+        assert!(q.launchable_by.is_empty());
+
+        let p = policy("[profiles.a]\nmode = \"audit\"\nlaunchable_by = [\"group:agents\", \"uid:1000\", \"user:alice\"]\n");
+        assert_eq!(
+            p.profiles[0].launchable_by,
+            vec![
+                Principal::Group("agents".into()),
+                Principal::Uid(1000),
+                Principal::User("alice".into())
+            ]
+        );
+        assert!(err("[profiles.a]\nmode = \"audit\"\nlaunchable_by = [\"alice\"]\n").contains("launchable_by"));
+        assert!(err("[profiles.a]\nmode = \"audit\"\nlaunchable_by = [\"uid:x\"]\n").contains("not a numeric id"));
+        assert_eq!(parse_principal("group:rk").unwrap().to_string(), "group:rk");
+    }
+
+    #[test]
+    fn diff_reports_changes_and_nothing_for_identical_policies() {
+        let a = policy(BASIC);
+        assert!(diff(Some(&a), &a).is_empty());
+
+        let b = policy(r#"
+            [profiles.agent]
+            mode = "audit"
+            network.default = "deny"
+
+            [[profiles.agent.network.allow]]
+            cidr = "10.20.0.0/16"
+            ports = ["443"]
+            proto = ["tcp"]
+
+            [profiles.extra]
+            mode = "audit"
+        "#);
+        let d = diff(Some(&a), &b);
+        assert!(d.contains(&"+ profile extra".to_string()), "{d:#?}");
+        assert!(d.contains(&"- agent: mode = enforce".to_string()), "{d:#?}");
+        assert!(d.contains(&"+ agent: mode = audit".to_string()), "{d:#?}");
+        assert!(d.iter().any(|l| l.starts_with("- agent: network.deny ::ffff:10.20.5.0/120")), "{d:#?}");
+        assert!(d.iter().any(|l| l.starts_with("- agent: network.allow ::ffff:10.20.0.0/112 ports 443,8000-8100")), "{d:#?}");
+        assert!(d.contains(&"- binding rk.slice/agent-1 -> agent".to_string()), "{d:#?}");
+
+        // No active policy: everything is an addition.
+        assert!(diff(None, &a).iter().all(|l| l.starts_with('+')));
     }
 
     #[test]
