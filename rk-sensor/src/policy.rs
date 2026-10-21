@@ -20,11 +20,12 @@ use aya::programs::{BtfTracePoint, CgroupAttachMode, CgroupSockAddr, Lsm};
 use aya::Ebpf;
 use bytemuck::Zeroable;
 use rk_ebpf_common::{
-    rk_binding, rk_exec_key, rk_exec_rule, rk_net_range, rk_net_rule, rk_profile, RK_MAX_PROFILES,
+    rk_binding, rk_exec_key, rk_exec_rule, rk_file_key, rk_file_rule, rk_net_range, rk_net_rule,
+    rk_profile, RK_MAX_PROFILES,
 };
 use rk_policy::net::{
-    self, Action, Compiled, CompiledExec, Entry, ExecPathKind, Mode, Policy, ProfileIds,
-    MAX_EXEC_DIR_FILES, QUARANTINE,
+    self, Action, Compiled, CompiledExec, CompiledFile, Entry, ExecPathKind, FileTarget, Mode,
+    Policy, ProfileIds, MAX_EXEC_DIR_FILES, QUARANTINE,
 };
 
 use crate::selftest::kernel_dev;
@@ -52,6 +53,7 @@ const MAP_ACTIVE: &str = "rk_active_slot";
 const MAP_DENY: &str = "rk_net_deny";
 const MAP_ALLOW: &str = "rk_net_allow";
 const MAP_EXEC: &str = "rk_exec_allow";
+const MAP_FILE: &str = "rk_file_protect";
 
 /// Exec policy programs (Phase 3): the LSM check and the exec record.
 pub const EXEC_LSM_PROGRAM: &str = "rk_exec_check";
@@ -98,6 +100,87 @@ unsafe impl aya::Pod for ExecKey {}
 struct ExecRule(rk_exec_rule);
 // SAFETY: as above.
 unsafe impl aya::Pod for ExecRule {}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FileKey(rk_file_key);
+// SAFETY: as above.
+unsafe impl aya::Pod for FileKey {}
+
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct FileRule(rk_file_rule);
+// SAFETY: as above.
+unsafe impl aya::Pod for FileRule {}
+
+/// One resolved file protection entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ResolvedFile {
+    profile: u32,
+    rule_id: u32,
+    dev: u64,
+    ino: u64,
+    deny_mask: u32,
+    subtree: bool,
+}
+
+/// Resolves file rules to (device, inode), following symlinks. Several rules
+/// on the same object in one profile merge into one entry: masks are OR-ed,
+/// the first rule id is kept. A missing path from a built-in list is skipped;
+/// any other resolution failure fails the apply before the kernel changes.
+fn resolve_files(entries: &[CompiledFile]) -> Result<Vec<ResolvedFile>> {
+    let mut merged: BTreeMap<(u32, u64, u64), ResolvedFile> = BTreeMap::new();
+    let mut add = |r: ResolvedFile| {
+        merged
+            .entry((r.profile, r.dev, r.ino))
+            .and_modify(|m| {
+                m.deny_mask |= r.deny_mask;
+                m.subtree |= r.subtree;
+            })
+            .or_insert(r);
+    };
+    let mut exec_targets = Vec::new();
+    for e in entries {
+        match e.target {
+            FileTarget::Path { subtree, optional } => match fs::metadata(&e.path) {
+                Ok(meta) => add(ResolvedFile {
+                    profile: e.profile,
+                    rule_id: e.rule_id,
+                    dev: kernel_dev(meta.dev()),
+                    ino: meta.ino(),
+                    deny_mask: e.deny_mask,
+                    subtree: subtree && meta.is_dir(),
+                }),
+                Err(err) if optional && err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => {
+                    return Err(err).with_context(|| format!("file rule: cannot resolve `{}`", e.path))
+                }
+            },
+            FileTarget::Exec(kind) => exec_targets.push((
+                CompiledExec {
+                    profile: e.profile,
+                    rule_id: e.rule_id,
+                    path: e.path.clone(),
+                    kind,
+                },
+                e.deny_mask,
+            )),
+        }
+    }
+    for (target, mask) in &exec_targets {
+        for r in resolve_exec(std::slice::from_ref(target))? {
+            add(ResolvedFile {
+                profile: r.profile,
+                rule_id: r.rule_id,
+                dev: r.dev,
+                ino: r.ino,
+                deny_mask: *mask,
+                subtree: false,
+            });
+        }
+    }
+    Ok(merged.into_values().collect())
+}
 
 /// Attaches the exec programs (already loaded): the host-wide LSM exec check
 /// and the `sched_process_exec` record. Links detach when `ebpf` drops.
@@ -263,6 +346,7 @@ struct SlotContents {
     deny: Vec<(u32, KeyData)>,
     allow: Vec<(u32, KeyData)>,
     exec: Vec<ExecKey>,
+    files: Vec<FileKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,6 +357,7 @@ pub struct ApplyReport {
     pub deny_entries: usize,
     pub allow_entries: usize,
     pub exec_entries: usize,
+    pub file_entries: usize,
     pub bindings: usize,
 }
 
@@ -338,6 +423,7 @@ impl PolicyEngine {
         let compiled = net::compile(&policy, generation)?;
         let bindings = self.resolve_bindings(&policy)?;
         let exec = resolve_exec(&compiled.exec)?;
+        let files = resolve_files(&compiled.files)?;
 
         if let Some(flip) = self.last_flip {
             let elapsed = flip.elapsed();
@@ -348,7 +434,7 @@ impl PolicyEngine {
 
         let slot = self.active_slot ^ 1;
         self.clear_slot(ebpf, slot)?;
-        self.write_slot(ebpf, slot, &compiled, &exec)?;
+        self.write_slot(ebpf, slot, &compiled, &exec, &files)?;
 
         // Commit point.
         let map = ebpf.map_mut(MAP_ACTIVE).context("rk_active_slot missing")?;
@@ -369,6 +455,7 @@ impl PolicyEngine {
             deny_entries: compiled.deny.len(),
             allow_entries: compiled.allow.len(),
             exec_entries: exec.len(),
+            file_entries: files.len(),
             bindings: self.bindings.len(),
         };
         self.policy = Some(policy);
@@ -406,6 +493,11 @@ impl PolicyEngine {
         for key in &contents.exec {
             let _ = exec.remove(key);
         }
+        let map = ebpf.map_mut(MAP_FILE).context("rk_file_protect missing")?;
+        let mut file = BpfHashMap::<_, FileKey, FileRule>::try_from(map)?;
+        for key in &contents.files {
+            let _ = file.remove(key);
+        }
         let map = ebpf.map_mut(MAP_PROFILES).context("rk_profiles missing")?;
         let mut profiles = Array::<_, Profile>::try_from(map)?;
         for id in &contents.profiles {
@@ -420,7 +512,29 @@ impl PolicyEngine {
         slot: u32,
         compiled: &Compiled,
         exec: &[ResolvedExec],
+        files: &[ResolvedFile],
     ) -> Result<()> {
+        {
+            let map = ebpf.map_mut(MAP_FILE).context("rk_file_protect missing")?;
+            let mut map = BpfHashMap::<_, FileKey, FileRule>::try_from(map)?;
+            for r in files {
+                let key = FileKey(rk_file_key {
+                    scope: (slot << 31) | r.profile,
+                    dev: r.dev,
+                    ino: r.ino,
+                    ..rk_file_key::zeroed()
+                });
+                self.written[slot as usize].files.push(key);
+                let rule = FileRule(rk_file_rule {
+                    rule_id: r.rule_id,
+                    deny_mask: r.deny_mask,
+                    flags: u32::from(r.subtree),
+                    ..rk_file_rule::zeroed()
+                });
+                map.insert(key, rule, 0)
+                    .with_context(|| format!("write file entry for profile {}", r.profile))?;
+            }
+        }
         {
             let map = ebpf.map_mut(MAP_EXEC).context("rk_exec_allow missing")?;
             let mut map = BpfHashMap::<_, ExecKey, ExecRule>::try_from(map)?;
@@ -679,6 +793,53 @@ mod tests {
         );
         assert_eq!((v.ranges[1].rule_id, v.ranges[1].port_hi), (3, 65535));
         assert_eq!(v.ranges[2].rule_id, 0);
+    }
+
+    fn file_rule(path: &str, mask: u32, rule_id: u32, optional: bool) -> CompiledFile {
+        CompiledFile {
+            profile: 0,
+            rule_id,
+            path: path.to_string(),
+            target: FileTarget::Path {
+                subtree: true,
+                optional,
+            },
+            deny_mask: mask,
+        }
+    }
+
+    #[test]
+    fn resolve_files_merges_skips_and_fails_correctly() {
+        let dir = std::env::temp_dir().join(format!("rk_resolve_files_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("secret");
+        fs::write(&file, b"x").unwrap();
+        let link = dir.join("link");
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+        let file_s = file.to_str().unwrap();
+        let link_s = link.to_str().unwrap();
+        let dir_s = dir.to_str().unwrap();
+
+        // The file and a symlink to it are one object: masks merge, first rule wins,
+        // and the subtree flag only sticks to directories.
+        let out = resolve_files(&[
+            file_rule(file_s, 1, 10, false),
+            file_rule(link_s, 2, 11, false),
+            file_rule(dir_s, 4, 12, false),
+            file_rule("/nonexistent/rk/optional", 8, 13, true),
+        ])
+        .unwrap();
+        assert_eq!(out.len(), 2);
+        let f = out.iter().find(|r| r.rule_id == 10).unwrap();
+        assert_eq!(f.deny_mask, 1 | 2);
+        assert!(!f.subtree);
+        let d = out.iter().find(|r| r.rule_id == 12).unwrap();
+        assert!(d.subtree);
+
+        // A missing path that is not from a built-in list fails the apply.
+        assert!(resolve_files(&[file_rule("/nonexistent/rk/required", 1, 14, false)]).is_err());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

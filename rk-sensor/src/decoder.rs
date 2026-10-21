@@ -11,8 +11,8 @@ use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use rk_ebpf_common::{
-    rk_event_type, rk_hdr, rk_payload_exec, rk_payload_file, rk_payload_net, rk_payload_sock,
-    rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN, RK_SCRATCH_PAYLOAD_MAX,
+    rk_event_type, rk_hdr, rk_payload_exec, rk_payload_file, rk_payload_file_deny, rk_payload_net,
+    rk_payload_sock, rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN, RK_SCRATCH_PAYLOAD_MAX,
 };
 
 const HDR_LEN: usize = core::mem::size_of::<rk_hdr>();
@@ -123,6 +123,11 @@ pub enum Payload<'a> {
     /// A governed raw or packet `socket()` call.
     Sock {
         body: rk_payload_sock,
+    },
+    /// A file access denied (or audit-would-deny) by file policy.
+    FileDeny {
+        body: rk_payload_file_deny,
+        strings: Strings<'a>,
     },
     /// Event types whose body is not defined yet (unlink, rename, fork, exit,
     /// tamper). Bytes are passed through for logging only.
@@ -279,6 +284,11 @@ pub fn decode(bytes: &[u8]) -> Result<Event<'_>, DecodeError> {
                 return Err(DecodeError::TrailingBytes(tail.len()));
             }
             Payload::Sock { body }
+        }
+        rk_event_type::RK_EV_FILE_DENY => {
+            let (body, tail) = read_body::<rk_payload_file_deny>(payload)?;
+            let strings = Strings::validate(tail, body.str_count)?;
+            Payload::FileDeny { body, strings }
         }
         rk_event_type::RK_EV_UNLINK
         | rk_event_type::RK_EV_RENAME
@@ -444,6 +454,28 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn decodes_file_deny() {
+        let body = rk_payload_file_deny {
+            file_ino: 77,
+            access: 2,
+            hook: 1,
+            str_count: 1,
+            ..Zeroable::zeroed()
+        };
+        let mut payload = bytemuck::bytes_of(&body).to_vec();
+        payload.extend(string_tail(&[b"/etc/hosts"]));
+        let rec = record(&hdr(rk_event_type::RK_EV_FILE_DENY, rk_verdict::RK_VERDICT_DENY), &payload);
+        let Payload::FileDeny { body: got, mut strings } = decode(&rec).unwrap().payload else {
+            panic!("expected file deny payload");
+        };
+        assert_eq!(got.file_ino, 77);
+        assert_eq!(strings.next(), Some(&b"/etc/hosts"[..]));
+        payload.push(0);
+        let rec = record(&hdr(rk_event_type::RK_EV_FILE_DENY, 0), &payload);
+        assert_eq!(decode(&rec), Err(DecodeError::TrailingBytes(1)));
+    }
+
+    #[test]
     fn rejects_short_record() {
         assert_eq!(
             decode(&[0u8; 10]),
@@ -589,7 +621,7 @@ pub(crate) mod tests {
 
         #[test]
         fn arbitrary_payload_with_valid_envelope_never_panics(
-            type_ in 0u32..12,
+            type_ in 0u32..13,
             payload in proptest::collection::vec(any::<u8>(), 0..256)
         ) {
             let _ = decode(&record(&hdr(type_, 0), &payload));

@@ -40,6 +40,7 @@ enum rk_event_type {
     RK_EV_TAMPER      = 8,
     RK_EV_SENDMSG     = 9,
     RK_EV_SOCK_CREATE = 10,
+    RK_EV_FILE_DENY   = 11,
 };
 
 enum rk_verdict {
@@ -221,10 +222,82 @@ struct rk_exec_rule {
     __u32 flags;          /* offset 4: reserved, 0 */
 };
 
+/* ---- File policy (Phase 4, docs/design/phase-4.md) ---- */
+
+/* Ancestor directories checked for subtree rules before failing closed. */
+#define RK_FILE_MAX_DEPTH 32
+
+/* Access types: rk_file_rule.deny_mask and rk_payload_file_deny.access. */
+enum rk_file_access {
+    RK_FILE_READ     = 1,
+    RK_FILE_WRITE    = 2,
+    RK_FILE_EXEC     = 4,
+    RK_FILE_CREATE   = 8,
+    RK_FILE_DELETE   = 16,
+    RK_FILE_RENAME   = 32,
+    RK_FILE_TRUNCATE = 64,
+    RK_FILE_LINK     = 128,
+    RK_FILE_SETATTR  = 256,
+    RK_FILE_ALL      = 511,
+};
+
+/* rk_file_rule.flags */
+enum rk_file_rule_flag {
+    RK_FILE_SUBTREE = 1, /* directory rule covering everything beneath it */
+};
+
+/* rk_payload_file_deny.hook */
+enum rk_file_hook {
+    RK_FILE_HOOK_OPEN    = 1,
+    RK_FILE_HOOK_UNLINK  = 2,
+    RK_FILE_HOOK_RENAME  = 3,
+    RK_FILE_HOOK_LINK    = 4,
+    RK_FILE_HOOK_CREATE  = 5,
+    RK_FILE_HOOK_SETATTR = 6,
+};
+
+/* rk_payload_file_deny.flags */
+enum rk_file_event_flag {
+    RK_FILE_EV_SUBTREE        = 1, /* matched rule was a subtree rule */
+    RK_FILE_EV_DEPTH_EXCEEDED = 2, /* ancestor walk hit RK_FILE_MAX_DEPTH: failed closed */
+};
+
+/* rk_file_protect key: same layout as rk_exec_key. */
+struct rk_file_key {
+    __u32 scope;          /* offset  0: slot << 31 | profile */
+    __u32 _pad;           /* offset  4 */
+    __u64 dev;            /* offset  8: kernel dev_t encoding */
+    __u64 ino;            /* offset 16 */
+};
+
+struct rk_file_rule {
+    __u32 rule_id;        /* offset  0 */
+    __u32 deny_mask;      /* offset  4: enum rk_file_access bits */
+    __u32 flags;          /* offset  8: enum rk_file_rule_flag */
+    __u32 _pad;           /* offset 12 */
+};
+
+/* RK_EV_FILE_DENY payload (32 bytes) + str_count strings: [0] log path. */
+struct rk_payload_file_deny {
+    __u64 file_dev;       /* offset  0 */
+    __u64 file_ino;       /* offset  8 */
+    __u32 access;         /* offset 16: requested access bits */
+    __u16 hook;           /* offset 20: enum rk_file_hook */
+    __u8  flags;          /* offset 22: enum rk_file_event_flag */
+    __u8  _pad;           /* offset 23 */
+    __u16 str_count;      /* offset 24 */
+    __u16 _pad2;          /* offset 26 */
+    __u32 _pad3;          /* offset 28 */
+};
+
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert(sizeof(struct rk_exec_key) == 24, "exec_key size");
 _Static_assert(__builtin_offsetof(struct rk_exec_key, dev) == 8, "exec_key dev");
 _Static_assert(sizeof(struct rk_exec_rule) == 8, "exec_rule size");
+_Static_assert(sizeof(struct rk_file_key) == 24, "file_key size");
+_Static_assert(sizeof(struct rk_file_rule) == 16, "file_rule size");
+_Static_assert(sizeof(struct rk_payload_file_deny) == 32, "payload_file_deny size");
+_Static_assert(__builtin_offsetof(struct rk_payload_file_deny, str_count) == 24, "file_deny str_count");
 _Static_assert(sizeof(struct rk_payload_sock) == 16, "payload_sock size");
 _Static_assert(sizeof(struct rk_binding) == 8, "binding size");
 _Static_assert(sizeof(struct rk_profile) == 16, "profile size");
