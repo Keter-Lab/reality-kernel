@@ -2,7 +2,7 @@
 
 use std::ffi::CString;
 use std::fs;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::os::unix::io::{FromRawFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
@@ -24,21 +24,22 @@ pub fn create_agent_cgroup(cgroup_fs: &Path, uuid: &str) -> Result<(PathBuf, u64
     let rel = agent_cgroup_rel(uuid);
     let path = cgroup_fs.join(&rel);
 
-    // Ensure parent rk.slice directory exists
+    // Ensure parent rk.slice directory exists and is traversable: agents run
+    // unprivileged and must be able to reach their own cgroup. Its mode is
+    // set explicitly because a daemon umask of 077 would otherwise make it 0700.
     let parent = cgroup_fs.join(net::CGROUP_ROOT);
     if !parent.exists() {
         fs::create_dir_all(&parent)
             .with_context(|| format!("failed to create parent cgroup {}", parent.display()))?;
     }
+    fs::set_permissions(&parent, fs::Permissions::from_mode(0o755))
+        .with_context(|| format!("failed to chmod parent cgroup {}", parent.display()))?;
 
     fs::create_dir(&path)
         .with_context(|| format!("failed to create agent cgroup {}", path.display()))?;
 
-    // Set permissions to 0755
-    let c_path = CString::new(path.to_string_lossy().as_bytes())?;
-    unsafe {
-        libc::chmod(c_path.as_ptr(), 0o755);
-    }
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
+        .with_context(|| format!("failed to chmod agent cgroup {}", path.display()))?;
 
     let meta = fs::metadata(&path)
         .with_context(|| format!("failed to stat agent cgroup {}", path.display()))?;
