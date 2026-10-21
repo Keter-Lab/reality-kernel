@@ -19,6 +19,25 @@ struct {
     __uint(max_entries, 65536);
 } rk_exec_allow SEC(".maps");
 
+/*
+ * The decision taken by rk_exec_check, kept per task until rk_exec_record
+ * runs. The record must carry the generation that *decided*: re-reading the
+ * active slot after the exec committed would mislabel the event if a policy
+ * flip landed in between (caught by exec_reload_atomic on 6.6).
+ */
+struct rk_exec_decision {
+    __u64 policy_gen;
+    __u32 rule_id;
+    __u32 _pad;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_TASK_STORAGE);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __type(key, int);
+    __type(value, struct rk_exec_decision);
+} rk_exec_decided SEC(".maps");
+
 static __always_inline void rk_exec_key_of(struct rk_exec_key *key, const struct rk_gov *g, struct inode *inode)
 {
     key->scope = g->scope;
@@ -63,6 +82,16 @@ int BPF_PROG(rk_exec_check, struct linux_binprm *bprm, int ret)
         }
     }
 
+    /* Remember this decision for rk_exec_record (every stage overwrites it, so
+     * the record sees the decision for the final, executed file). */
+    struct rk_exec_decision *decided =
+        bpf_task_storage_get(&rk_exec_decided, bpf_get_current_task_btf(), 0, BPF_LOCAL_STORAGE_GET_F_CREATE);
+    if (decided) {
+        decided->policy_gen = g.policy_gen;
+        decided->rule_id = rule_id;
+        decided->_pad = 0;
+    }
+
     /* Denied (or audit-would-deny) execs never reach sched_process_exec, so the
      * decision is recorded here. Allowed execs are recorded by rk_exec_record. */
     if (action == RK_ACTION_DENY) {
@@ -97,13 +126,15 @@ int BPF_PROG(rk_exec_record, struct task_struct *p, pid_t old_pid, struct linux_
 {
     struct rk_payload_exec *body;
     struct rk_scratch_msg *msg;
+    struct rk_exec_decision *decided;
     struct rk_exec_key key = {};
     struct rk_exec_rule *rule;
     struct rk_gov g = {};
     struct inode *inode;
     struct mm_struct *mm;
     unsigned long arg_start, arg_end;
-    __u32 flags = 0;
+    __u64 policy_gen;
+    __u32 flags = 0, rule_id;
     int copied;
 
     if (!rk_governance(&g))
@@ -115,11 +146,23 @@ int BPF_PROG(rk_exec_record, struct task_struct *p, pid_t old_pid, struct linux_
 
     inode = BPF_CORE_READ(bprm, file, f_inode);
     rk_exec_key_of(&key, &g, inode);
-    rule = bpf_map_lookup_elem(&rk_exec_allow, &key);
     if (BPF_CORE_READ(inode, i_nlink) == 0)
         flags |= RK_EXEC_UNLINKED;
 
-    rk_fill_hdr(&msg->hdr, g.cgroup_id, g.policy_gen, RK_EV_EXEC, RK_VERDICT_ALLOW, rule ? rule->rule_id : 0);
+    /* Prefer the decision recorded by rk_exec_check; fall back to a fresh
+     * lookup only if none exists (exec started before governance applied). */
+    decided = bpf_task_storage_get(&rk_exec_decided, p, 0, 0);
+    if (decided) {
+        policy_gen = decided->policy_gen;
+        rule_id = decided->rule_id;
+        bpf_task_storage_delete(&rk_exec_decided, p);
+    } else {
+        rule = bpf_map_lookup_elem(&rk_exec_allow, &key);
+        policy_gen = g.policy_gen;
+        rule_id = rule ? rule->rule_id : 0;
+    }
+
+    rk_fill_hdr(&msg->hdr, g.cgroup_id, policy_gen, RK_EV_EXEC, RK_VERDICT_ALLOW, rule_id);
     rk_fill_task(&msg->hdr);
 
     body = (struct rk_payload_exec *)msg->payload;

@@ -716,7 +716,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         if ev.rule_id != 0 {
             anyhow::bail!("expected rule_id == 0, got {}", ev.rule_id);
         }
-        if (ev.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0 {
+        if (ev.flags & rk_exec_flag::RK_EXEC_DECISION) == 0 {
             anyhow::bail!("expected RK_EXEC_DECISION flag set");
         }
         Ok("unlisted executable denied with EPERM; emitted decision deny event with rule 0".into())
@@ -746,7 +746,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == enforce_cgroup_id
                 && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
-                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION) == 0
         })?;
         if ev.rule_id != expected_true_rule_id {
             anyhow::bail!(
@@ -781,7 +781,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         if !ev.filename.ends_with("/true") {
             anyhow::bail!("expected filename ending in /true, got {}", ev.filename);
         }
-        if (ev.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0 {
+        if (ev.flags & rk_exec_flag::RK_EXEC_DECISION) == 0 {
             anyhow::bail!("expected RK_EXEC_DECISION flag set");
         }
         Ok(format!(
@@ -814,7 +814,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == enforce_cgroup_id
                 && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
-                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION) == 0
         })?;
         if ev.rule_id != expected_sh_rule_id {
             anyhow::bail!(
@@ -864,7 +864,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == enforce_cgroup_id
                 && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
-                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION) == 0
         })?;
         if ev.rule_id != expected_true_rule_id {
             anyhow::bail!(
@@ -872,7 +872,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
                 ev.rule_id
             );
         }
-        if (ev.flags & rk_exec_flag::RK_EXEC_ARGV_TRUNCATED as u32) == 0 {
+        if (ev.flags & rk_exec_flag::RK_EXEC_ARGV_TRUNCATED) == 0 {
             anyhow::bail!(
                 "expected RK_EXEC_ARGV_TRUNCATED flag set in flags={:#x}",
                 ev.flags
@@ -1064,7 +1064,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == enforce_cgroup_id && e.verdict == rk_verdict::RK_VERDICT_DENY as u8
         })?;
-        if (ev.flags & rk_exec_flag::RK_EXEC_UNLINKED as u32) == 0 {
+        if (ev.flags & rk_exec_flag::RK_EXEC_UNLINKED) == 0 {
             anyhow::bail!("expected RK_EXEC_UNLINKED flag set");
         }
         Ok("unlinked executable (memfd) denied with EPERM in enforce mode; RK_EXEC_UNLINKED flag recorded".into())
@@ -1085,9 +1085,9 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == unlinked_cgroup_id
                 && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
-                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION) == 0
         })?;
-        if (ev.flags & rk_exec_flag::RK_EXEC_UNLINKED as u32) == 0 {
+        if (ev.flags & rk_exec_flag::RK_EXEC_UNLINKED) == 0 {
             anyhow::bail!("expected RK_EXEC_UNLINKED flag set");
         }
         Ok("unlinked executable (memfd) allowed under exec.allow_unlinked=true; RK_EXEC_UNLINKED flag recorded".into())
@@ -1117,7 +1117,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == enforce_cgroup_id
                 && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
-                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION) == 0
         })?;
         if ev.rule_id != expected_symlink_rule_id {
             anyhow::bail!(
@@ -1154,7 +1154,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == enforce_cgroup_id
                 && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
-                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION) == 0
         })?;
         if ev.rule_id != expected_replaced_rule_id {
             anyhow::bail!(
@@ -1201,7 +1201,7 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let ev = poll_exec_event(&mut ring, Duration::from_millis(500), |e| {
             e.cgroup_id == enforce_cgroup_id
                 && e.verdict == rk_verdict::RK_VERDICT_ALLOW as u8
-                && (e.flags & rk_exec_flag::RK_EXEC_DECISION as u32) == 0
+                && (e.flags & rk_exec_flag::RK_EXEC_DECISION) == 0
         })?;
         if ev.rule_id != expected_replaced_rule_id {
             anyhow::bail!(
