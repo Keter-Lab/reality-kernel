@@ -157,7 +157,8 @@ pub fn send_message(sock: RawFd, data: &[u8], fds: &[RawFd]) -> Result<()> {
             cmsg_buf.resize(cmsg_space, 0u8);
 
             msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-            msg.msg_controllen = cmsg_space;
+            // size_t on glibc, socklen_t on musl (release target).
+            msg.msg_controllen = cmsg_space as _;
 
             let cmsg = libc::CMSG_FIRSTHDR(&msg);
             if cmsg.is_null() {
@@ -165,7 +166,7 @@ pub fn send_message(sock: RawFd, data: &[u8], fds: &[RawFd]) -> Result<()> {
             }
             (*cmsg).cmsg_level = libc::SOL_SOCKET;
             (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-            (*cmsg).cmsg_len = libc::CMSG_LEN(fds_bytes as u32) as usize;
+            (*cmsg).cmsg_len = libc::CMSG_LEN(fds_bytes as u32) as _;
 
             let data_ptr = libc::CMSG_DATA(cmsg) as *mut RawFd;
             std::ptr::copy_nonoverlapping(fds.as_ptr(), data_ptr, fds.len());
@@ -193,9 +194,10 @@ pub fn recv_message(sock: RawFd, buf: &mut [u8]) -> Result<(usize, Vec<OwnedFd>)
         msg.msg_iov = &mut iov;
         msg.msg_iovlen = 1;
         msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-        msg.msg_controllen = cmsg_space;
+        msg.msg_controllen = cmsg_space as _;
 
-        let res = libc::recvmsg(sock, &mut msg, 0);
+        // CLOEXEC: a descriptor passed to the daemon must never leak into an agent.
+        let res = libc::recvmsg(sock, &mut msg, libc::MSG_CMSG_CLOEXEC);
         if res < 0 {
             return Err(std::io::Error::last_os_error()).context("recvmsg failed");
         }
@@ -208,7 +210,7 @@ pub fn recv_message(sock: RawFd, buf: &mut [u8]) -> Result<(usize, Vec<OwnedFd>)
         while !cmsg.is_null() {
             if (*cmsg).cmsg_level == libc::SOL_SOCKET && (*cmsg).cmsg_type == libc::SCM_RIGHTS {
                 let data_ptr = libc::CMSG_DATA(cmsg) as *const RawFd;
-                let cmsg_len = (*cmsg).cmsg_len;
+                let cmsg_len: usize = (*cmsg).cmsg_len as _;
                 let base_len = libc::CMSG_LEN(0) as usize;
                 if cmsg_len >= base_len {
                     let num_fds = (cmsg_len - base_len) / std::mem::size_of::<RawFd>();
