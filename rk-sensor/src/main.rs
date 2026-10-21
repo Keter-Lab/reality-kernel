@@ -278,15 +278,21 @@ fn enter_host_cgroup_namespace() -> Result<()> {
     Ok(())
 }
 
-/// Resolves `--k8s-cgroup-root`: `auto` probes [`K8S_ROOTS`]; anything else
+/// Resolves `--k8s-cgroup-root`. `auto` prefers the candidate in
+/// [`K8S_ROOTS`] that contains this process's own cgroup (the DaemonSet pod
+/// is itself under the root), then the first one that exists. Anything else
 /// must be an existing directory relative to the cgroupfs root.
 fn resolve_k8s_root(arg: &str) -> Result<String> {
     let fs_root = Path::new(policy::CGROUP_FS);
     if arg == "auto" {
-        return K8S_ROOTS
-            .iter()
-            .find(|r| fs_root.join(r).is_dir())
-            .map(|r| r.to_string())
+        let own = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
+        let own = own
+            .lines()
+            .find_map(|l| l.strip_prefix("0::"))
+            .unwrap_or("")
+            .trim_start_matches('/');
+        return pick_k8s_root(own, |r| fs_root.join(r).is_dir())
+            .map(str::to_string)
             .with_context(|| format!("no Kubernetes cgroup root found (tried {K8S_ROOTS:?})"));
     }
     let root = arg.trim_matches('/');
@@ -300,6 +306,16 @@ fn resolve_k8s_root(arg: &str) -> Result<String> {
         );
     }
     Ok(root.to_string())
+}
+
+/// The [`K8S_ROOTS`] entry containing `own_cgroup`, else the first that
+/// `exists`.
+fn pick_k8s_root(own_cgroup: &str, exists: impl Fn(&str) -> bool) -> Option<&'static str> {
+    K8S_ROOTS
+        .iter()
+        .find(|r| own_cgroup.starts_with(&format!("{r}/")))
+        .or_else(|| K8S_ROOTS.iter().find(|r| exists(r)))
+        .copied()
 }
 
 fn log_report(path: &str, report: &ApplyReportData, how: &str) {
@@ -350,15 +366,16 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         // refuse rules that need them (docs/design/phase-5b.md §6).
         let lsm_active = policy::bpf_lsm_active();
         let cgroup_root = Path::new(policy::CGROUP_FS).join(rk_policy::net::CGROUP_ROOT);
-        let mut attached = policy::attach_network(&mut ebpf, &cgroup_root)?;
+        let mut attached = policy::attach_sock_addr(&mut ebpf, &cgroup_root)?;
         if lsm_active {
+            attached.extend(policy::attach_network_lsm(&mut ebpf)?);
             attached.extend(policy::attach_exec(&mut ebpf)?);
             attached.extend(policy::attach_file(&mut ebpf)?);
         } else {
             warn!("BPF LSM is not active: exec, file and raw-socket rules will be refused");
         }
         if let Some(root) = &k8s_root {
-            attached.extend(policy::attach_network(
+            attached.extend(policy::attach_sock_addr(
                 &mut ebpf,
                 &Path::new(policy::CGROUP_FS).join(root),
             )?);
@@ -520,6 +537,24 @@ mod tests {
             parse_args(&args(&[selftest::CHILD_FLAG, "a", "b"])),
             Ok(Mode::SelftestChild(args(&["a", "b"])))
         );
+    }
+
+    #[test]
+    fn k8s_root_prefers_the_one_containing_the_daemon() {
+        let kind = "kubelet.slice/kubelet-kubepods.slice/kubelet-kubepods-besteffort.slice/p/c";
+        // kubepods.slice exists too, but the daemon's own pod is elsewhere.
+        assert_eq!(
+            pick_k8s_root(kind, |_| true),
+            Some("kubelet.slice/kubelet-kubepods.slice")
+        );
+        // Not in a pod (systemd service): first existing candidate.
+        assert_eq!(
+            pick_k8s_root("system.slice/rk.service", |r| r == "kubepods"),
+            Some("kubepods")
+        );
+        assert_eq!(pick_k8s_root("", |_| false), None);
+        // A prefix that is not a whole path segment does not count.
+        assert_eq!(pick_k8s_root("kubepods.slicex/c", |_| false), None);
     }
 
     /// Plan Phase 0: release builds contain no runtime override for the BPF

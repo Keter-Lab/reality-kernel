@@ -105,10 +105,6 @@ jobs:
           go-version-file: rk-nri/go.mod
           cache-dependency-path: rk-nri/go.mod
 
-      - name: gofmt
-        working-directory: rk-nri
-        run: test -z "$(gofmt -l .)" || { gofmt -d .; echo "::error::run gofmt (autofix does this on phase branches)"; exit 1; }
-
       - name: vet, test, static build
         working-directory: rk-nri
         run: |
@@ -118,3 +114,9 @@ jobs:
           go vet ./...
           go test -race ./...
           CGO_ENABLED=0 go build -trimpath -o rk-nri .
+
+      # Last, so a formatting nit never hides test results.
+      - name: gofmt
+        if: always()
+        working-directory: rk-nri
+        run: test -z "$(gofmt -l .)" || { gofmt -d .; echo "::error::run gofmt (autofix does this on phase branches)"; exit 1; }

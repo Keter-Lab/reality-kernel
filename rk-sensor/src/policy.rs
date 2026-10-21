@@ -382,6 +382,15 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
 /// Attaches the network programs (already loaded) to `cgroup_root`, creating
 /// it if needed, and the LSM programs host-wide. Links detach when `ebpf` drops.
 pub fn attach_network(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
+    let mut attached = attach_sock_addr(ebpf, cgroup_root)?;
+    attached.extend(attach_network_lsm(ebpf)?);
+    Ok(attached)
+}
+
+/// Attaches the `sock_addr` programs to one more cgroup subtree, creating it
+/// if needed. Unlike the LSM programs, these can be attached at several roots
+/// (`rk.slice` and the Kubernetes root, Phase 5b).
+pub fn attach_sock_addr(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
     fs::create_dir_all(cgroup_root).with_context(|| format!("create {}", cgroup_root.display()))?;
     let cgroup =
         fs::File::open(cgroup_root).with_context(|| format!("open {}", cgroup_root.display()))?;
@@ -398,6 +407,12 @@ pub fn attach_network(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>
             .with_context(|| format!("attach `{name}` to {}", cgroup_root.display()))?;
         attached.push(format!("{name} -> {}", cgroup_root.display()));
     }
+    Ok(attached)
+}
+
+/// Attaches the network LSM programs (raw-socket denial) host-wide, once.
+pub fn attach_network_lsm(ebpf: &mut Ebpf) -> Result<Vec<String>> {
+    let mut attached = Vec::new();
     for name in LSM_PROGRAMS {
         let program = ebpf
             .program_mut(name)
