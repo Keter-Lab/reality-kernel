@@ -248,11 +248,23 @@ mod linux {
 
         match loader::open(Object::Production) {
             Ok(mut ebpf) => {
-                report.programs.extend(loader::load_programs(
-                    Object::Production,
-                    &mut ebpf,
-                    btf.as_ref(),
-                ));
+                let progs = loader::load_programs(Object::Production, &mut ebpf, btf.as_ref());
+                let setattr = progs
+                    .iter()
+                    .find(|p| p.name.starts_with("rk_file_setattr_") && p.loaded);
+                if let Some(p) = setattr {
+                    report.checks.push(Check::new(
+                        "inode_setattr_signature",
+                        true,
+                        format!("loaded {}", p.name),
+                    ));
+                } else {
+                    report.checks.push(Check::fail(
+                        "inode_setattr_signature",
+                        "neither rk_file_setattr_v1 nor rk_file_setattr_v2 loaded",
+                    ));
+                }
+                report.programs.extend(progs);
                 let ok = ebpf.map("events_ringbuf").is_some();
                 report.checks.push(Check::new(
                     "production_object_maps",

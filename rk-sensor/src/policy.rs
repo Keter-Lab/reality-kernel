@@ -219,11 +219,63 @@ pub fn attach_exec(ebpf: &mut Ebpf) -> Result<Vec<String>> {
     ])
 }
 
-/// Attaches every enforcement program: network hooks on `cgroup_root` plus the
-/// exec programs.
+const FILE_PROGRAMS: &[&str] = &[
+    "rk_file_open",
+    "rk_file_unlink",
+    "rk_file_rmdir",
+    "rk_file_rename",
+    "rk_file_link",
+    "rk_file_create",
+    "rk_file_mkdir",
+];
+
+/// Attaches the file LSM programs (already loaded).
+pub fn attach_file(ebpf: &mut Ebpf) -> Result<Vec<String>> {
+    let mut attached = Vec::new();
+    for &name in FILE_PROGRAMS {
+        let program = ebpf
+            .program_mut(name)
+            .with_context(|| format!("program `{name}` missing from rk.bpf.o"))?;
+        let program: &mut Lsm = program.try_into()?;
+        program
+            .attach()
+            .with_context(|| format!("attach LSM program `{name}`"))?;
+        attached.push(format!("{name} (lsm)"));
+    }
+
+    // Attach whichever setattr variant was loaded
+    let setattr_attached = if let Some(prog) = ebpf.program_mut("rk_file_setattr_v2") {
+        let lsm: &mut Lsm = prog.try_into()?;
+        match lsm.attach() {
+            Ok(_) => "rk_file_setattr_v2 (lsm)".to_string(),
+            Err(_) => {
+                let prog = ebpf
+                    .program_mut("rk_file_setattr_v1")
+                    .with_context(|| "rk_file_setattr_v1 missing from rk.bpf.o")?;
+                let lsm: &mut Lsm = prog.try_into()?;
+                lsm.attach().with_context(|| "attach rk_file_setattr_v1")?;
+                "rk_file_setattr_v1 (lsm)".to_string()
+            }
+        }
+    } else {
+        let prog = ebpf
+            .program_mut("rk_file_setattr_v1")
+            .with_context(|| "rk_file_setattr_v1 missing from rk.bpf.o")?;
+        let lsm: &mut Lsm = prog.try_into()?;
+        lsm.attach().with_context(|| "attach rk_file_setattr_v1")?;
+        "rk_file_setattr_v1 (lsm)".to_string()
+    };
+    attached.push(setattr_attached);
+
+    Ok(attached)
+}
+
+/// Attaches every enforcement program: network hooks on `cgroup_root`, exec
+/// programs, and file programs.
 pub fn attach_all(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
     let mut attached = attach_network(ebpf, cgroup_root)?;
     attached.extend(attach_exec(ebpf)?);
+    attached.extend(attach_file(ebpf)?);
     Ok(attached)
 }
 
