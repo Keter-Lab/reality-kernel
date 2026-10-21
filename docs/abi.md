@@ -41,6 +41,22 @@ The record length must equal `56 + payload_len` exactly.
   logs only; decisions are made on kernel objects.
 - Bodies without trailing strings must end exactly at the end of the record.
 
+## Exec records (`RK_EV_EXEC`, Phase 3)
+
+Two kinds of record share the type; `flags` tells them apart (`enum rk_exec_flag`):
+
+| Kind | Emitted by | `flags` | Strings | Verdict |
+|---|---|---|---|---|
+| Decision | `rk_exec_check` (LSM), only for deny / audit-would-deny | `RK_EXEC_DECISION` set | `[0]` filename | DENY or AUDIT_WOULD_DENY |
+| Record | `rk_exec_record` (`sched_process_exec`), after the exec committed | `RK_EXEC_DECISION` clear | `[0]` filename, `[1]` argument area | ALLOW |
+
+- The argument area is copied as the new process sees it: arguments separated by
+  NUL bytes. `RK_EXEC_ARGV_TRUNCATED` means it was larger than the record;
+  `RK_EXEC_ARGV_UNAVAILABLE` means it could not be read.
+- `RK_EXEC_UNLINKED` marks files with no links (memfd, deleted while open).
+- `file_dev`/`file_ino` identify the executed file; `rule_id` is the matching
+  allowlist rule, or 0.
+
 ## Decoder guarantees
 
 `rk_sensor::decoder::decode` rejects, with a typed error and a counter per

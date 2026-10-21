@@ -83,6 +83,12 @@ const _: () = {
     assert!(size_of::<rk_net_range>() == 12);
     assert!(offset_of!(rk_net_range, proto_mask) == 8);
     assert!(size_of::<rk_net_rule>() == 4 + 12 * RK_NET_MAX_RANGES as usize);
+
+    // Exec policy.
+    assert!(size_of::<rk_exec_key>() == 24);
+    assert!(offset_of!(rk_exec_key, dev) == 8);
+    assert!(offset_of!(rk_exec_key, ino) == 16);
+    assert!(size_of::<rk_exec_rule>() == 8);
 };
 
 #[cfg(test)]
@@ -102,6 +108,8 @@ mod tests {
         assert_eq!(rk_proto_bit::RK_PROTO_ANY, 7);
         assert_eq!(rk_mode::RK_MODE_ENFORCE, 1);
         assert_eq!(rk_action::RK_ACTION_DENY, 1);
+        assert_eq!(rk_profile_flag::RK_PROFILE_EXEC_DENY_DEFAULT, 2);
+        assert_eq!(rk_exec_flag::RK_EXEC_DECISION, 8);
     }
 
     #[test]

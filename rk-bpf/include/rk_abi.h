@@ -76,12 +76,16 @@ struct rk_scratch_msg {
  * Payload = Fixed Body Struct + [__u16 length + UTF-8 string bytes]...
  */
 
-/* RK_EV_EXEC Payload (24 bytes) */
+/*
+ * RK_EV_EXEC Payload (24 bytes). Strings: [0] kernel-resolved filename;
+ * [1] (exec records only) the new process's argument area as the process
+ * sees it: arguments separated by NUL bytes. flags: enum rk_exec_flag.
+ */
 struct rk_payload_exec {
     __u64 file_dev;       /* offset  0 */
     __u64 file_ino;       /* offset  8 */
     __u32 flags;          /* offset 16 */
-    __u16 str_count;      /* offset 20: Number of following strings (comm, filename, argv) */
+    __u16 str_count;      /* offset 20: Number of following strings (see below) */
     __u16 _pad;           /* offset 22 */
     /* Trailing: str_count occurrences of: [__u16 str_len][__u8 str_bytes[str_len]] */
 };
@@ -148,7 +152,17 @@ enum rk_proto_bit {
 
 /* rk_profile.flags bits */
 enum rk_profile_flag {
-    RK_PROFILE_DENY_RAW_SOCKETS = 1,
+    RK_PROFILE_DENY_RAW_SOCKETS     = 1,
+    RK_PROFILE_EXEC_DENY_DEFAULT    = 2, /* exec allowlist mode */
+    RK_PROFILE_EXEC_ALLOW_UNLINKED  = 4, /* admin override: allow nlink == 0 files */
+};
+
+/* rk_payload_exec.flags bits */
+enum rk_exec_flag {
+    RK_EXEC_ARGV_TRUNCATED   = 1, /* argument area larger than the record */
+    RK_EXEC_ARGV_UNAVAILABLE = 2, /* argument area could not be read */
+    RK_EXEC_UNLINKED         = 4, /* file had no links (memfd, deleted) */
+    RK_EXEC_DECISION         = 8, /* emitted by the exec check (verdict), not the exec record */
 };
 
 /* rk_cgroup_profile value: cgroup id -> profile id (stable across reloads). */
@@ -194,7 +208,23 @@ struct rk_net_rule {
     struct rk_net_range ranges[RK_NET_MAX_RANGES]; /* offset 4 */
 };
 
+/* rk_exec_allow key: scope = slot << 31 | profile, then the file identity. */
+struct rk_exec_key {
+    __u32 scope;          /* offset  0 */
+    __u32 _pad;           /* offset  4 */
+    __u64 dev;            /* offset  8: kernel dev_t encoding */
+    __u64 ino;            /* offset 16 */
+};
+
+struct rk_exec_rule {
+    __u32 rule_id;        /* offset 0 */
+    __u32 flags;          /* offset 4: reserved, 0 */
+};
+
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(sizeof(struct rk_exec_key) == 24, "exec_key size");
+_Static_assert(__builtin_offsetof(struct rk_exec_key, dev) == 8, "exec_key dev");
+_Static_assert(sizeof(struct rk_exec_rule) == 8, "exec_rule size");
 _Static_assert(sizeof(struct rk_payload_sock) == 16, "payload_sock size");
 _Static_assert(sizeof(struct rk_binding) == 8, "binding size");
 _Static_assert(sizeof(struct rk_profile) == 16, "profile size");

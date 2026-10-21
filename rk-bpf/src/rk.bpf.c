@@ -11,3 +11,4 @@
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
 
 #include "net.bpf.c"
+#include "exec.bpf.c"
