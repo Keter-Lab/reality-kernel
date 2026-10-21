@@ -1274,7 +1274,11 @@ fn proto_text(mask: u8) -> String {
         return "any proto".to_string();
     }
     let mut out = Vec::new();
-    for (bit, name) in [(PROTO_TCP, "tcp"), (PROTO_UDP, "udp"), (PROTO_OTHER, "other")] {
+    for (bit, name) in [
+        (PROTO_TCP, "tcp"),
+        (PROTO_UDP, "udp"),
+        (PROTO_OTHER, "other"),
+    ] {
         if mask & bit != 0 {
             out.push(name);
         }
@@ -1315,7 +1319,11 @@ fn describe(p: &Profile) -> BTreeSet<String> {
     for r in &p.rules {
         out.insert(format!(
             "network.{} {} {} {}",
-            if r.action == Action::Deny { "deny" } else { "allow" },
+            if r.action == Action::Deny {
+                "deny"
+            } else {
+                "allow"
+            },
             r.net,
             ports_text(&r.ports),
             proto_text(r.proto)
@@ -1829,7 +1837,10 @@ mod tests {
     #[test]
     fn launchable_by_defaults_to_root_and_validates() {
         let p = policy("[profiles.a]\nmode = \"audit\"\n");
-        assert_eq!(p.profiles[0].launchable_by, vec![Principal::User("root".into())]);
+        assert_eq!(
+            p.profiles[0].launchable_by,
+            vec![Principal::User("root".into())]
+        );
         let q = p.profiles.iter().find(|p| p.name == QUARANTINE).unwrap();
         assert!(q.launchable_by.is_empty());
 
@@ -1842,8 +1853,14 @@ mod tests {
                 Principal::User("alice".into())
             ]
         );
-        assert!(err("[profiles.a]\nmode = \"audit\"\nlaunchable_by = [\"alice\"]\n").contains("launchable_by"));
-        assert!(err("[profiles.a]\nmode = \"audit\"\nlaunchable_by = [\"uid:x\"]\n").contains("not a numeric id"));
+        assert!(
+            err("[profiles.a]\nmode = \"audit\"\nlaunchable_by = [\"alice\"]\n")
+                .contains("launchable_by")
+        );
+        assert!(
+            err("[profiles.a]\nmode = \"audit\"\nlaunchable_by = [\"uid:x\"]\n")
+                .contains("not a numeric id")
+        );
         assert_eq!(parse_principal("group:rk").unwrap().to_string(), "group:rk");
     }
 
@@ -1852,7 +1869,8 @@ mod tests {
         let a = policy(BASIC);
         assert!(diff(Some(&a), &a).is_empty());
 
-        let b = policy(r#"
+        let b = policy(
+            r#"
             [profiles.agent]
             mode = "audit"
             network.default = "deny"
@@ -1864,14 +1882,26 @@ mod tests {
 
             [profiles.extra]
             mode = "audit"
-        "#);
+        "#,
+        );
         let d = diff(Some(&a), &b);
         assert!(d.contains(&"+ profile extra".to_string()), "{d:#?}");
         assert!(d.contains(&"- agent: mode = enforce".to_string()), "{d:#?}");
         assert!(d.contains(&"+ agent: mode = audit".to_string()), "{d:#?}");
-        assert!(d.iter().any(|l| l.starts_with("- agent: network.deny ::ffff:10.20.5.0/120")), "{d:#?}");
-        assert!(d.iter().any(|l| l.starts_with("- agent: network.allow ::ffff:10.20.0.0/112 ports 443,8000-8100")), "{d:#?}");
-        assert!(d.contains(&"- binding rk.slice/agent-1 -> agent".to_string()), "{d:#?}");
+        assert!(
+            d.iter()
+                .any(|l| l.starts_with("- agent: network.deny ::ffff:10.20.5.0/120")),
+            "{d:#?}"
+        );
+        assert!(
+            d.iter().any(|l| l
+                .starts_with("- agent: network.allow ::ffff:10.20.0.0/112 ports 443,8000-8100")),
+            "{d:#?}"
+        );
+        assert!(
+            d.contains(&"- binding rk.slice/agent-1 -> agent".to_string()),
+            "{d:#?}"
+        );
 
         // No active policy: everything is an addition.
         assert!(diff(None, &a).iter().all(|l| l.starts_with('+')));

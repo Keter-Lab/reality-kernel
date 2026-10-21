@@ -606,7 +606,11 @@ impl PolicyEngine {
 
     /// Static bindings of `policy`, keyed by cgroup id. With `create`, missing
     /// cgroup directories are created; without it they are skipped (dry run).
-    fn resolve_bindings(&self, policy: &Policy, create: bool) -> Result<BTreeMap<u64, (String, u32)>> {
+    fn resolve_bindings(
+        &self,
+        policy: &Policy,
+        create: bool,
+    ) -> Result<BTreeMap<u64, (String, u32)>> {
         let mut out = BTreeMap::new();
         for b in &policy.bindings {
             let path = self.cgroup_fs.join(&b.cgroup);
@@ -627,7 +631,11 @@ impl PolicyEngine {
     /// Adds the runtime agent bindings to `wanted`. Fails, before anything in
     /// the kernel changes, if `policy` drops a profile a running agent uses, or
     /// statically binds an agent's cgroup.
-    fn add_dynamic_bindings(&self, policy: &Policy, wanted: &mut BTreeMap<u64, (String, u32)>) -> Result<()> {
+    fn add_dynamic_bindings(
+        &self,
+        policy: &Policy,
+        wanted: &mut BTreeMap<u64, (String, u32)>,
+    ) -> Result<()> {
         for (id, (path, profile)) in &self.dynamic {
             let pid = policy
                 .profiles
@@ -638,7 +646,9 @@ impl PolicyEngine {
                     format!("profile `{profile}` is used by running agent `{path}` and cannot be removed")
                 })?;
             if wanted.contains_key(id) {
-                anyhow::bail!("`{path}` is a running agent's cgroup and cannot also be bound statically");
+                anyhow::bail!(
+                    "`{path}` is a running agent's cgroup and cannot also be bound statically"
+                );
             }
             wanted.insert(*id, (path.clone(), pid));
         }
@@ -889,7 +899,11 @@ impl PolicyEngine {
             .map(|b| b.profile)
             .or_else(|| {
                 let name = &self.dynamic.get(&id)?.1;
-                policy.profiles.iter().find(|p| &p.name == name).map(|p| p.id)
+                policy
+                    .profiles
+                    .iter()
+                    .find(|p| &p.name == name)
+                    .map(|p| p.id)
             })
             .with_context(|| format!("`{cgroup}` has no binding in the active policy"))?;
         self.quarantined.remove(&id);
@@ -1077,8 +1091,15 @@ mod tests {
         let d = engine.dry_run(text).unwrap();
         assert_eq!(d.generation, 1);
         assert_eq!(d.cgroups_to_create, vec!["rk.slice/agent-x".to_string()]);
-        assert!(!root.join("rk.slice").exists(), "a dry run must not create cgroups");
-        assert!(d.changes.contains(&"+ profile a".to_string()), "{:#?}", d.changes);
+        assert!(
+            !root.join("rk.slice").exists(),
+            "a dry run must not create cgroups"
+        );
+        assert!(
+            d.changes.contains(&"+ profile a".to_string()),
+            "{:#?}",
+            d.changes
+        );
         assert!(engine
             .diff_text(text)
             .unwrap()
