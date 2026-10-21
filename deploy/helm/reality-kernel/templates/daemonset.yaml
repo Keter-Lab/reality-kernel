@@ -77,6 +77,12 @@ spec:
             - {{ .Values.failurePolicy | quote }}
             - -governed-namespaces
             - {{ keys .Values.namespaces | sortAlpha | join "," | quote }}
+          # Ready only once registered with NRI: before that, containers on
+          # this node start without passing through rk-nri.
+          readinessProbe:
+            exec:
+              command: ["/usr/local/bin/rk-nri", "-check-ready"]
+            periodSeconds: 5
           securityContext:
             # Root only to reach the root-owned NRI and agentd sockets.
             runAsUser: 0

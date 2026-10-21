@@ -130,6 +130,14 @@ The quarantine profile can't be selected by annotation. `rk policy diff` and
   and the plugin's resync running containers are ungoverned. The resync is
   automatic and tested (§8), and the gap is documented, not hidden. Phase 6 pins
   the maps and closes it.
+- **Readiness means protecting.** The DaemonSet pod is Ready only when the
+  daemon answers *and* `rk-nri` has completed NRI registration (it writes a
+  ready file after the stub's `Start` returns, and removes it when the
+  connection ends). The first kind run caught the gap: a pod created right
+  after `rollout status` started before registration finished. Containers
+  that start before a node's plugin registers are not governed, as before
+  installation. Clusters that need governance from node boot should keep new
+  nodes tainted until this pod is Ready.
 - **Fail-closed by default** if the daemon is unreachable: the plugin refuses
   every container that could be governed, meaning annotated pods and pods in
   a namespace with rules (the plugin gets that list from the same Helm values
