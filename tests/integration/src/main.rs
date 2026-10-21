@@ -2,7 +2,11 @@
 //!
 //! Validates kernel network policy enforcement across all supported kernels.
 //! Executes the full verdict suite against rk.bpf.o and rk_emitfail.bpf.o.
+//! With `--agent-suite`, drives the rk-sensor daemon through the `rk` CLI
+//! instead (Phase 5, see agent.rs).
 
+#[cfg(target_os = "linux")]
+mod agent;
 mod bpf;
 mod workloads;
 
@@ -398,13 +402,28 @@ fn main() {
         let code = workloads::run_child(&args[2..]);
         std::process::exit(code);
     }
+    #[cfg(target_os = "linux")]
+    if args.len() > 1 && args[1] == agent::PROBE_FLAG {
+        std::process::exit(agent::run_probe(&args[2..]));
+    }
+    #[cfg(target_os = "linux")]
+    if args.len() > 1 && args[1] == agent::SUITE_FLAG {
+        let mut checks = Vec::new();
+        agent::run_suite(&args[2..], &mut checks);
+        output_results("RK_AGENT", &checks);
+        std::process::exit(if checks.iter().all(|c| c.passed) {
+            0
+        } else {
+            1
+        });
+    }
 
     let mut checks = Vec::new();
 
     #[cfg(not(target_os = "linux"))]
     {
         checks.push(TestCheck::fail("platform", "rk-integration requires Linux"));
-        output_results(&checks);
+        output_results("RK_INTEGRATION", &checks);
         std::process::exit(1);
     }
 
@@ -415,24 +434,24 @@ fn main() {
                 "embedded_bpf",
                 "binary built without --features embedded-bpf",
             ));
-            output_results(&checks);
+            output_results("RK_INTEGRATION", &checks);
             std::process::exit(1);
         }
 
         run_suite(&mut checks);
-        output_results(&checks);
+        output_results("RK_INTEGRATION", &checks);
 
         let failed = checks.iter().any(|c| !c.passed);
         std::process::exit(if failed { 1 } else { 0 });
     }
 }
 
-fn output_results(checks: &[TestCheck]) {
-    println!("===RK_INTEGRATION_BEGIN===");
+fn output_results(marker: &str, checks: &[TestCheck]) {
+    println!("==={marker}_BEGIN===");
     if let Ok(json) = serde_json::to_string_pretty(checks) {
         println!("{}", json);
     }
-    println!("===RK_INTEGRATION_END===");
+    println!("==={marker}_END===");
 }
 
 #[cfg(target_os = "linux")]

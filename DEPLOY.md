@@ -3,7 +3,7 @@
 ## 1) Prerequisites
 
 - Linux kernel **>= 5.8**
-- Run `rkctl preflight` **before anything else**
+- Run `rk doctor` **before anything else**
 - Rust toolchain (stable)
 - Root/sudo access on sensor host (for eBPF capabilities)
 
@@ -115,7 +115,7 @@ sudo systemctl status rk-sensor
 
 1. Run preflight:
    ```bash
-   rkctl preflight
+   rk doctor
    ```
 2. Run parity gate:
    ```bash

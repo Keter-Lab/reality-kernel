@@ -10,6 +10,7 @@ members = [
   "rk-engine-core",
   "rk-session",
   "rk-types",
+  "rk-agentd",
   "rk-cli",
   "xtask",
   "tests/parity",

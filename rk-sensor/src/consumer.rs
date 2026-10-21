@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use aya::maps::{MapData, RingBuf};
 use aya::Ebpf;
+use rk_agentd::registry::AgentRegistry;
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
@@ -26,12 +27,20 @@ pub fn take_ring(ebpf: &mut Ebpf) -> Result<RingBuf<MapData>> {
     RingBuf::try_from(map).context("failed to open events_ringbuf")
 }
 
-pub async fn consume_loop(mut ring: RingBuf<MapData>, stop: Arc<AtomicBool>) -> Result<()> {
+pub async fn consume_loop(ring: RingBuf<MapData>, stop: Arc<AtomicBool>) -> Result<()> {
+    consume_loop_with_registry(ring, stop, None).await
+}
+
+pub async fn consume_loop_with_registry(
+    mut ring: RingBuf<MapData>,
+    stop: Arc<AtomicBool>,
+    registry: Option<Arc<AgentRegistry>>,
+) -> Result<()> {
     let stats = DecodeStats::default();
 
     while !stop.load(Ordering::Relaxed) {
         while let Some(item) = ring.next() {
-            pipeline::process_record(&item, &stats);
+            pipeline::process_record_with_registry(&item, &stats, registry.as_ref());
         }
         sleep(Duration::from_millis(10)).await;
     }

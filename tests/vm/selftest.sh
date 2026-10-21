@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Runs inside the vmtest guest (host rootfs shared read-only; /run is tmpfs).
 #
-#   selftest.sh <rk-sensor binary> <bpf object dir> <bpftool binary>
+#   selftest.sh <rk-sensor binary> <bpf object dir> <bpftool binary> [rk-integration] [rk]
 #
 # 1. rk-sensor --selftest: loads every embedded program, runs the functional
 #    checks and prints the JSON report between markers for the host to extract.
 # 2. Negative control: the kernel verifier must reject reject_infinite_loop.
 # 3. Positive control: bpftool must load rk_selftest.bpf.o, so a broken bpftool
 #    can never make step 2 pass.
+# 4. rk-integration: the verdict suite, then (with rk) the Phase 5 agent suite.
 # Exits non-zero if any step fails.
 set -u
 
@@ -15,6 +16,7 @@ sensor="$1"
 bpf_dir="$2"
 bpftool="$3"
 integration="${4:-}"
+rk_cli="${5:-}"
 rc=0
 
 mountpoint -q /sys/kernel/security || mount -t securityfs securityfs /sys/kernel/security
@@ -65,6 +67,20 @@ if [ -n "$integration" ]; then
         [ "$integ_rc" -eq 0 ] || rc=1
     else
         echo "FAIL integration binary given but not executable: $integration"
+        rc=1
+    fi
+fi
+
+if [ -n "$rk_cli" ]; then
+    # Phase 5: the daemon, driven through the rk CLI. Runs after
+    # rk-integration has exited so only the daemon's programs are attached.
+    if [ -x "$integration" ] && [ -x "$rk_cli" ]; then
+        "$integration" --agent-suite "$sensor" "$rk_cli" "$bpftool" 2>&1
+        agent_rc=$?
+        echo "agent suite exit code: $agent_rc"
+        [ "$agent_rc" -eq 0 ] || rc=1
+    else
+        echo "FAIL agent suite needs executable rk-integration and rk: $integration $rk_cli"
         rc=1
     fi
 fi
