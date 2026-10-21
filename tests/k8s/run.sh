@@ -286,6 +286,15 @@ t_daemon_down_fails_closed() {
     echo "daemon stopped: annotated pod refused, unannotated pod started ($out)"
 }
 
+t_daemon_replies_fast() {
+    # rk-nri warns when a reply takes over a quarter of its 1s budget; NRI
+    # drops a plugin that exceeds its 2s timeout and starts containers ungoverned.
+    local slow
+    slow="$(kubectl -n "$NS" logs ds/rk -c rk-nri --tail=-1 | grep -c 'slow rk-sensor reply' || true)"
+    [ "$slow" -eq 0 ] || fail "$slow slow daemon replies: $(kubectl -n "$NS" logs ds/rk -c rk-nri --tail=-1 | grep 'slow rk-sensor reply' | head -3)"
+    echo "every daemon reply within a quarter of rk-nri's budget ($(kubectl -n "$NS" logs ds/rk -c rk-nri --tail=-1 | grep -c ' in [0-9]*ms') timed binds)"
+}
+
 t_chart_renders() {
     helm lint "$CHART" -f "$HERE/values-ci.yaml" >/dev/null || fail "helm lint failed"
     helm lint "$CHART" >/dev/null || fail "helm lint (default values) failed"
@@ -329,6 +338,7 @@ else
     run_test k8s_configmap_update_applies t_configmap_update
     dump_logs before-restart
     run_test k8s_daemon_restart_resyncs t_restart_resyncs
+    run_test k8s_daemon_replies_fast t_daemon_replies_fast
     run_test k8s_daemon_down_fails_closed t_daemon_down_fails_closed
     run_test helm_chart_renders t_chart_renders
 fi

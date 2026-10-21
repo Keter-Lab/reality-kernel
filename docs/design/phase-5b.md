@@ -221,6 +221,7 @@ matrix already tests.
 | Removal unbinds | `k8s_container_removal_unbinds` (binding gone from the kernel map) |
 | Daemon restart resyncs | `k8s_daemon_restart_resyncs` (running pod governed again after the DaemonSet pod restarts) |
 | Fail closed when the daemon is down | `k8s_daemon_down_fails_closed` |
+| Replies stay inside NRI's timeout (§2) | `k8s_daemon_replies_fast` (no reply over a quarter of rk-nri's 1s budget) |
 | Capability honesty (§6) | `apply_rejects_lsm_rules_without_bpf_lsm` (kind job) and a unit test; VM matrix keeps proving the LSM path |
 | Policy updates apply without a restart | `k8s_configmap_update_applies` (generation advances, the pod's verdict flips, the DaemonSet pod is not restarted) |
 | Chart renders and validates | `helm_chart_renders` (`helm lint`, `helm template`, schema validation) |

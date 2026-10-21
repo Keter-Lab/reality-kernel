@@ -199,58 +199,60 @@ pub async fn run_server(
         "agentd socket server listening"
     );
 
-    let raw_listener = listener.as_raw_fd();
-    // Keep listener alive by not dropping it
-    let _listener_keepalive = listener;
-
-    loop {
-        // Poll for incoming connection
-        let mut pollfd = libc::pollfd {
-            fd: raw_listener,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let poll_res = unsafe { libc::poll(&mut pollfd, 1, 500) };
-        if poll_res < 0 {
-            let err = std::io::Error::last_os_error();
-            if err.raw_os_error() == Some(libc::EINTR) {
+    // The accept loop blocks in poll(2), so it runs on a blocking thread and
+    // hands each connection to the runtime with Handle::spawn, which any idle
+    // worker picks up at once. Spawning from inside a worker that then blocks
+    // parks the new task in that worker's LIFO slot, which other workers
+    // cannot steal: every request used to wait for the poll timeout (~500 ms,
+    // half of rk-nri's budget per NRI call).
+    let rt = tokio::runtime::Handle::current();
+    let accept_loop = tokio::task::spawn_blocking(move || -> Result<()> {
+        let raw_listener = listener.as_raw_fd();
+        loop {
+            let mut pollfd = libc::pollfd {
+                fd: raw_listener,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let poll_res = unsafe { libc::poll(&mut pollfd, 1, 1000) };
+            if poll_res < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(err).context("poll on the agentd socket failed");
+            }
+            if poll_res == 0 || (pollfd.revents & libc::POLLIN) == 0 {
                 continue;
             }
-            error!(error = %err, "poll on socket failed");
-            break;
-        }
-        if poll_res == 0 || (pollfd.revents & libc::POLLIN) == 0 {
-            tokio::task::yield_now().await;
-            continue;
-        }
 
-        let client_fd = unsafe {
-            libc::accept4(
-                raw_listener,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                libc::SOCK_CLOEXEC,
-            )
-        };
-        if client_fd < 0 {
-            continue;
-        }
-
-        let client = unsafe { OwnedFd::from_raw_fd(client_fd) };
-        let handler_clone = handler.clone();
-        let registry_clone = registry.clone();
-        let config_clone = Arc::new(config.clone());
-
-        tokio::spawn(async move {
-            if let Err(e) =
-                handle_connection(client, handler_clone, registry_clone, config_clone).await
-            {
-                warn!(error = %e, "error handling client connection");
+            let client_fd = unsafe {
+                libc::accept4(
+                    raw_listener,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    libc::SOCK_CLOEXEC,
+                )
+            };
+            if client_fd < 0 {
+                continue;
             }
-        });
-    }
 
-    Ok(())
+            let client = unsafe { OwnedFd::from_raw_fd(client_fd) };
+            let handler_clone = handler.clone();
+            let registry_clone = registry.clone();
+            let config_clone = Arc::new(config.clone());
+
+            rt.spawn(async move {
+                if let Err(e) =
+                    handle_connection(client, handler_clone, registry_clone, config_clone).await
+                {
+                    warn!(error = %e, "error handling client connection");
+                }
+            });
+        }
+    });
+    accept_loop.await.context("agentd accept loop panicked")?
 }
 
 async fn handle_connection(
