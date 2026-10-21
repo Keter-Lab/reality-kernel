@@ -124,7 +124,7 @@ impl PolicyHandler for SensorPolicyHandler {
             file_entries: dr.file_entries,
             skipped_files: dr.skipped_files,
             cgroups_to_create: dr.cgroups_to_create,
-            diff: dr.diff,
+            diff: dr.changes,
         })
     }
 
@@ -225,7 +225,7 @@ fn run_daemon(policy_path: &str) -> Result<()> {
         let attached = policy::attach_all(&mut ebpf, &cgroup_root)?;
         info!(?attached, "enforcement programs attached");
 
-        let mut engine = PolicyEngine::default();
+        let engine = PolicyEngine::default();
         let stop = Arc::new(AtomicBool::new(false));
         let ring = consumer::take_ring(&mut ebpf)?;
 
