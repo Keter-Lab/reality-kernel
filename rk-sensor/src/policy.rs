@@ -126,9 +126,12 @@ struct ResolvedFile {
 
 /// Resolves file rules to (device, inode), following symlinks. Several rules
 /// on the same object in one profile merge into one entry: masks are OR-ed,
-/// the first rule id is kept. A missing path from a built-in list is skipped;
-/// any other resolution failure fails the apply before the kernel changes.
-fn resolve_files(entries: &[CompiledFile]) -> Result<Vec<ResolvedFile>> {
+/// the first rule id is kept. A path from a built-in list that is missing or
+/// not accessible on this host is skipped and returned in the second list so
+/// the apply report shows it; any other resolution failure fails the apply
+/// before the kernel changes.
+fn resolve_files(entries: &[CompiledFile]) -> Result<(Vec<ResolvedFile>, Vec<String>)> {
+    let mut skipped = Vec::new();
     let mut merged: BTreeMap<(u32, u64, u64), ResolvedFile> = BTreeMap::new();
     let mut add = |r: ResolvedFile| {
         merged
@@ -151,7 +154,15 @@ fn resolve_files(entries: &[CompiledFile]) -> Result<Vec<ResolvedFile>> {
                     deny_mask: e.deny_mask,
                     subtree: subtree && meta.is_dir(),
                 }),
-                Err(err) if optional && err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err)
+                    if optional
+                        && matches!(
+                            err.kind(),
+                            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+                        ) =>
+                {
+                    skipped.push(format!("{} ({err})", e.path));
+                }
                 Err(err) => {
                     return Err(err)
                         .with_context(|| format!("file rule: cannot resolve `{}`", e.path))
@@ -180,7 +191,7 @@ fn resolve_files(entries: &[CompiledFile]) -> Result<Vec<ResolvedFile>> {
             });
         }
     }
-    Ok(merged.into_values().collect())
+    Ok((merged.into_values().collect(), skipped))
 }
 
 /// Attaches the exec programs (already loaded): the host-wide LSM exec check
@@ -359,6 +370,8 @@ pub struct ApplyReport {
     pub allow_entries: usize,
     pub exec_entries: usize,
     pub file_entries: usize,
+    /// Built-in file rules not active on this host (missing or inaccessible).
+    pub skipped_files: Vec<String>,
     pub bindings: usize,
 }
 
@@ -424,7 +437,7 @@ impl PolicyEngine {
         let compiled = net::compile(&policy, generation)?;
         let bindings = self.resolve_bindings(&policy)?;
         let exec = resolve_exec(&compiled.exec)?;
-        let files = resolve_files(&compiled.files)?;
+        let (files, skipped_files) = resolve_files(&compiled.files)?;
 
         if let Some(flip) = self.last_flip {
             let elapsed = flip.elapsed();
@@ -457,6 +470,7 @@ impl PolicyEngine {
             allow_entries: compiled.allow.len(),
             exec_entries: exec.len(),
             file_entries: files.len(),
+            skipped_files,
             bindings: self.bindings.len(),
         };
         self.policy = Some(policy);
@@ -824,7 +838,7 @@ mod tests {
 
         // The file and a symlink to it are one object: masks merge, first rule wins,
         // and the subtree flag only sticks to directories.
-        let out = resolve_files(&[
+        let (out, skipped) = resolve_files(&[
             file_rule(file_s, 1, 10, false),
             file_rule(link_s, 2, 11, false),
             file_rule(dir_s, 4, 12, false),
@@ -832,6 +846,8 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(out.len(), 2);
+        assert_eq!(skipped.len(), 1);
+        assert!(skipped[0].starts_with("/nonexistent/rk/optional"));
         let f = out.iter().find(|r| r.rule_id == 10).unwrap();
         assert_eq!(f.deny_mask, 1 | 2);
         assert!(!f.subtree);

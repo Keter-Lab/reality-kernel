@@ -161,7 +161,16 @@ fn apply_policy_file(engine: &mut PolicyEngine, ebpf: &mut aya::Ebpf, path: &str
         }
     };
     match engine.apply_text(ebpf, &text) {
-        Ok(report) => info!(path, ?report, "policy applied"),
+        Ok(report) => {
+            if !report.skipped_files.is_empty() {
+                warn!(
+                    path,
+                    skipped = ?report.skipped_files,
+                    "built-in file rules not active on this host (missing or inaccessible)"
+                );
+            }
+            info!(path, ?report, "policy applied");
+        }
         Err(e) => {
             error!(path, error = %format!("{e:#}"), "policy rejected; active policy unchanged")
         }
