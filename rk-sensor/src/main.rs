@@ -6,16 +6,20 @@ compile_error!(
     "release builds of rk-sensor must embed the BPF objects: build with `--features embedded-bpf`"
 );
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
+use rk_agentd::protocol::{ApplyReportData, CapabilityStatus, DryRunData};
+use rk_agentd::registry::AgentRegistry;
+use rk_agentd::server::{self, PolicyHandler, ServerConfig};
 use rk_sensor::loader::{self, Object};
 use rk_sensor::policy::{self, PolicyEngine};
 use rk_sensor::{consumer, selftest};
 use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 const USAGE: &str = "usage: rk-sensor [--policy FILE | --selftest | --version | --help]";
@@ -98,6 +102,101 @@ fn main() -> ExitCode {
     }
 }
 
+struct SensorPolicyHandler {
+    ebpf: aya::Ebpf,
+    engine: PolicyEngine,
+}
+
+impl PolicyHandler for SensorPolicyHandler {
+    fn apply(&mut self, text: &str) -> Result<ApplyReportData> {
+        let rep = self.engine.apply_text(&mut self.ebpf, text)?;
+        Ok(to_report_data(&rep))
+    }
+
+    fn dry_run(&self, text: &str) -> Result<DryRunData> {
+        let dr = self.engine.dry_run(text)?;
+        Ok(DryRunData {
+            generation: dr.generation,
+            profiles: dr.profiles,
+            deny_entries: dr.deny_entries,
+            allow_entries: dr.allow_entries,
+            exec_entries: dr.exec_entries,
+            file_entries: dr.file_entries,
+            skipped_files: dr.skipped_files,
+            cgroups_to_create: dr.cgroups_to_create,
+            diff: dr.diff,
+        })
+    }
+
+    fn diff(&self, text: &str) -> Result<Vec<String>> {
+        self.engine.diff_text(text)
+    }
+
+    fn rollback(&mut self) -> Result<ApplyReportData> {
+        let rep = self.engine.rollback(&mut self.ebpf)?;
+        Ok(to_report_data(&rep))
+    }
+
+    fn bind_dynamic(&mut self, cgroup: &str, profile: &str) -> Result<u64> {
+        self.engine.bind_dynamic(&mut self.ebpf, cgroup, profile)
+    }
+
+    fn unbind_dynamic(&mut self, cgroup_id: u64) -> Result<()> {
+        self.engine.unbind_dynamic(&mut self.ebpf, cgroup_id)
+    }
+
+    fn get_profile(&self, name: &str) -> Result<rk_policy::net::Profile> {
+        self.engine
+            .policy()
+            .context("no policy applied yet")?
+            .profiles
+            .iter()
+            .find(|p| p.name == name)
+            .cloned()
+            .with_context(|| format!("profile `{name}` not found"))
+    }
+
+    fn active_profiles(&self) -> Vec<String> {
+        self.engine
+            .policy()
+            .map(|p| p.profiles.iter().map(|prof| prof.name.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    fn generation(&self) -> u64 {
+        self.engine.generation()
+    }
+
+    fn capabilities(&self) -> Vec<CapabilityStatus> {
+        vec![
+            CapabilityStatus {
+                name: "bpf_lsm".into(),
+                ok: true,
+                detail: "active".into(),
+            },
+            CapabilityStatus {
+                name: "cgroup_v2".into(),
+                ok: true,
+                detail: "/sys/fs/cgroup".into(),
+            },
+        ]
+    }
+}
+
+fn to_report_data(rep: &policy::ApplyReport) -> ApplyReportData {
+    ApplyReportData {
+        generation: rep.generation,
+        slot: rep.slot,
+        profiles: rep.profiles,
+        deny_entries: rep.deny_entries,
+        allow_entries: rep.allow_entries,
+        exec_entries: rep.exec_entries,
+        file_entries: rep.file_entries,
+        skipped_files: rep.skipped_files.clone(),
+        bindings: rep.bindings,
+    }
+}
+
 fn run_daemon(policy_path: &str) -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -127,17 +226,94 @@ fn run_daemon(policy_path: &str) -> Result<()> {
         info!(?attached, "enforcement programs attached");
 
         let mut engine = PolicyEngine::default();
-        apply_policy_file(&mut engine, &mut ebpf, policy_path);
-
         let stop = Arc::new(AtomicBool::new(false));
         let ring = consumer::take_ring(&mut ebpf)?;
-        let consumer = tokio::spawn(consumer::consume_loop(ring, stop.clone()));
+
+        let registry = AgentRegistry::new();
+        let consumer = tokio::spawn(consumer::consume_loop_with_registry(
+            ring,
+            stop.clone(),
+            Some(registry.clone()),
+        ));
+
+        let mut handler_inner = SensorPolicyHandler { ebpf, engine };
+        if let Ok(text) = std::fs::read_to_string(policy_path) {
+            match handler_inner.apply(&text) {
+                Ok(report) => {
+                    if !report.skipped_files.is_empty() {
+                        warn!(
+                            path = policy_path,
+                            skipped = ?report.skipped_files,
+                            "built-in file rules not active on this host (missing or inaccessible)"
+                        );
+                    }
+                    info!(path = policy_path, ?report, "policy applied");
+                }
+                Err(e) => {
+                    error!(
+                        path = policy_path,
+                        error = %format!("{e:#}"),
+                        "policy rejected; active policy unchanged"
+                    );
+                }
+            }
+        } else {
+            warn!(
+                path = policy_path,
+                "policy file not readable; active policy unchanged"
+            );
+        }
+
+        let handler: Arc<Mutex<dyn PolicyHandler>> = Arc::new(Mutex::new(handler_inner));
+
+        let server_cfg = ServerConfig {
+            socket_path: PathBuf::from(rk_agentd::protocol::DEFAULT_SOCKET_PATH),
+            cgroup_fs: PathBuf::from(policy::CGROUP_FS),
+        };
+
+        let server_handler = handler.clone();
+        let server_registry = registry.clone();
+        let _server = tokio::spawn(async move {
+            if let Err(e) = server::run_server(server_cfg, server_handler, server_registry).await {
+                error!(error = %e, "agentd server stopped with error");
+            }
+        });
 
         let mut hangup = signal(SignalKind::hangup()).context("install SIGHUP handler")?;
         let mut terminate = signal(SignalKind::terminate()).context("install SIGTERM handler")?;
         loop {
             tokio::select! {
-                _ = hangup.recv() => apply_policy_file(&mut engine, &mut ebpf, policy_path),
+                _ = hangup.recv() => {
+                    let mut lock = handler.lock().await;
+                    match std::fs::read_to_string(policy_path) {
+                        Ok(text) => match lock.apply(&text) {
+                            Ok(report) => {
+                                if !report.skipped_files.is_empty() {
+                                    warn!(
+                                        path = policy_path,
+                                        skipped = ?report.skipped_files,
+                                        "built-in file rules not active on this host (missing or inaccessible)"
+                                    );
+                                }
+                                info!(path = policy_path, ?report, "policy applied on SIGHUP");
+                            }
+                            Err(e) => {
+                                error!(
+                                    path = policy_path,
+                                    error = %format!("{e:#}"),
+                                    "policy rejected on SIGHUP; active policy unchanged"
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            warn!(
+                                path = policy_path,
+                                error = %e,
+                                "policy file not readable on SIGHUP; active policy unchanged"
+                            );
+                        }
+                    }
+                }
                 _ = terminate.recv() => break,
                 _ = tokio::signal::ctrl_c() => break,
             }
@@ -148,33 +324,6 @@ fn run_daemon(policy_path: &str) -> Result<()> {
         info!("rk-sensor stopped");
         Ok(())
     })
-}
-
-/// Applies the policy file atomically. A missing or invalid file leaves the
-/// active policy unchanged and is logged; it never stops the sensor.
-fn apply_policy_file(engine: &mut PolicyEngine, ebpf: &mut aya::Ebpf, path: &str) {
-    let text = match std::fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) => {
-            warn!(path, error = %e, "policy file not readable; active policy unchanged");
-            return;
-        }
-    };
-    match engine.apply_text(ebpf, &text) {
-        Ok(report) => {
-            if !report.skipped_files.is_empty() {
-                warn!(
-                    path,
-                    skipped = ?report.skipped_files,
-                    "built-in file rules not active on this host (missing or inaccessible)"
-                );
-            }
-            info!(path, ?report, "policy applied");
-        }
-        Err(e) => {
-            error!(path, error = %format!("{e:#}"), "policy rejected; active policy unchanged")
-        }
-    }
 }
 
 #[cfg(test)]
