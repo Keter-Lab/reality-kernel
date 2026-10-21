@@ -330,8 +330,16 @@ unsafe fn child_pre_exec(ctx: ChildExecContext<'_>) -> ! {
         ctx.c_envp_ptrs.as_ptr(),
     );
 
-    // If execve failed:
-    send_child_err_and_exit(ctx.err_pipe, b"execve failed\n", 127);
+    // If execve failed, report the errno (EPERM here means policy denied the
+    // agent's first exec). Formatted by hand: no allocation after clone.
+    let errno = *libc::__errno_location();
+    let mut msg = *b"execve failed: errno 0000\n";
+    let mut n = errno.clamp(0, 9999);
+    for digit in msg[21..25].iter_mut().rev() {
+        *digit = b'0' + (n % 10) as u8;
+        n /= 10;
+    }
+    send_child_err_and_exit(ctx.err_pipe, &msg, 127);
 }
 
 /// Fallback fork + pipe handshake if clone3 is unavailable.

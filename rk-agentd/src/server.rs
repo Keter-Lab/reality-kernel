@@ -498,14 +498,17 @@ async fn handle_run(
     };
     send_response(ctx.client.as_raw_fd(), &resp)?;
 
-    // 7. Wait for process exit or incoming signal requests
-    let client_fd = ctx.client.as_raw_fd();
+    // 7. Wait for process exit or incoming signal requests. The waiter owns the
+    // connection: it must stay open until `RunExited` is sent, and a closed fd
+    // number could otherwise be reused by another client.
+    let client = ctx.client;
     let handler_clone = handler.clone();
     let registry_clone = registry.clone();
     let cgroup_path_clone = cgroup_path.clone();
 
     // Background waiter task for process termination
     tokio::task::spawn_blocking(move || {
+        let client_fd = client.as_raw_fd();
         let mut status = 0;
         let mut exit_code = 1;
 
@@ -572,6 +575,7 @@ async fn handle_run(
         // e. Send exit notification to client
         let exit_resp = Response::RunExited { exit_code };
         let _ = send_response(client_fd, &exit_resp);
+        drop(client);
     });
 
     Ok(())

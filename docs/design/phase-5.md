@@ -103,6 +103,9 @@ When the agent exits, the daemon removes the binding and then the cgroup.
 in the daemon. `rk status` shows it, and the sensor's event log adds `session_id`
 to every event from that cgroup, so each kernel event can be tied to an agent
 session and its attestation (`rk-session`). The full audit schema is Phase 9.
+The mapping outlives the agent so events still queued in the ring buffer when it
+exits keep their session id. The newest 4096 exited sessions are kept, which is
+safe because cgroup ids are not reused within a boot.
 
 ## 6. CLI (`rk-cli`)
 
