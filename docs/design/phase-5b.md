@@ -46,7 +46,25 @@ What containerd guarantees, verified in its source
 
 So binding the container's cgroup in our `StartContainer` handler means the
 first instruction is governed, and any failure to bind is fail-closed: the
-container does not start. NRI is enabled by default from containerd 2.0
+container does not start.
+
+**One exception, found in the first kind runs: NRI fails open on timeouts.**
+In `pkg/adaptation/plugin.go`, a plugin call that ends in
+`context.DeadlineExceeded` (the request timeout, 2s by default) or a closed
+connection is *fatal*. NRI closes the plugin and returns no error, so the
+container starts, ungoverned. Policy refusals still fail the start. The
+plugin therefore:
+
+- answers every call within a 1s total budget (dial, write and read
+  together), refusing if the daemon doesn't reply in time;
+- replies to `Synchronize` at once and rebinds running containers in the
+  background, since NRI times out `Synchronize` too and a dropped plugin
+  governs nothing until it reconnects;
+- logs each bind's duration and any slow reply.
+
+Operators may raise containerd's `plugin_request_timeout`. A daemon-side
+reconciler that stops annotated containers found unbound is a tracked
+follow-up (defence in depth against this NRI behaviour). NRI is enabled by default from containerd 2.0
 (socket `/var/run/nri/nri.sock`); on 1.7 it must be switched on in the
 containerd config, which the chart documents.
 

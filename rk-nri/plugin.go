@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	"github.com/containerd/nri/pkg/api"
 )
@@ -26,6 +28,8 @@ type plugin struct {
 	// neither annotated nor in one of them could not be governed anyway, so it
 	// starts: otherwise a daemon crash would stop kube-system from healing.
 	governed map[string]bool
+	// resync tracks background rebinds started by Synchronize.
+	resync sync.WaitGroup
 }
 
 func bindRequest(pod *api.PodSandbox, ctr *api.Container) BindRequest {
@@ -50,7 +54,12 @@ func bindRequest(pod *api.PodSandbox, ctr *api.Container) BindRequest {
 func (p *plugin) bind(pod *api.PodSandbox, ctr *api.Container) error {
 	req := bindRequest(pod, ctr)
 	where := fmt.Sprintf("%s/%s container %s", req.Namespace, req.Pod, req.Container)
+	start := time.Now()
 	reply, err := p.daemon.Bind(req)
+	took := time.Since(start).Round(time.Millisecond)
+	if took > callBudget/4 {
+		log.Printf("WARNING: slow rk-sensor reply for %s: %s", where, took)
+	}
 	if err != nil {
 		if _, annotated := req.Annotations[profileAnnotation]; !annotated && !p.governed[req.Namespace] {
 			return nil
@@ -59,11 +68,11 @@ func (p *plugin) bind(pod *api.PodSandbox, ctr *api.Container) error {
 			log.Printf("WARNING: starting %s ungoverned (failurePolicy Ignore): %v", where, err)
 			return nil
 		}
-		return fmt.Errorf("reality-kernel: %s not started: %w", where, err)
+		return fmt.Errorf("reality-kernel: %s not started (after %s): %w", where, took, err)
 	}
 	switch reply.Kind {
 	case "ContainerBound":
-		log.Printf("bound %s to profile %s (cgroup %d)", where, reply.Profile, reply.CgroupID)
+		log.Printf("bound %s to profile %s (cgroup %d) in %s", where, reply.Profile, reply.CgroupID, took)
 		return nil
 	case "NotGoverned":
 		return nil
@@ -81,22 +90,36 @@ func (p *plugin) StartContainer(_ context.Context, pod *api.PodSandbox, ctr *api
 }
 
 // Synchronize rebinds running containers whenever the plugin (re)connects,
-// which covers an rk-sensor restart. They are already running, so failures
+// which covers an rk-sensor restart. It replies at once and rebinds in the
+// background: NRI applies its request timeout to Synchronize too and drops a
+// plugin that exceeds it, and containers started while the plugin is dropped
+// are not governed. The containers listed are already running, so failures
 // are logged; they cannot be refused any more.
 func (p *plugin) Synchronize(_ context.Context, pods []*api.PodSandbox, ctrs []*api.Container) ([]*api.ContainerUpdate, error) {
 	byID := make(map[string]*api.PodSandbox, len(pods))
 	for _, pod := range pods {
 		byID[pod.GetId()] = pod
 	}
+	type pair struct {
+		pod *api.PodSandbox
+		ctr *api.Container
+	}
+	var running []pair
 	for _, ctr := range ctrs {
 		pod, ok := byID[ctr.GetPodSandboxId()]
-		if !ok || ctr.GetState() != api.ContainerState_CONTAINER_RUNNING {
-			continue
-		}
-		if err := p.bind(pod, ctr); err != nil {
-			log.Printf("resync: %v", err)
+		if ok && ctr.GetState() == api.ContainerState_CONTAINER_RUNNING {
+			running = append(running, pair{pod, ctr})
 		}
 	}
+	p.resync.Add(1)
+	go func() {
+		defer p.resync.Done()
+		for _, r := range running {
+			if err := p.bind(r.pod, r.ctr); err != nil {
+				log.Printf("resync: %v", err)
+			}
+		}
+	}()
 	return nil, nil
 }
 

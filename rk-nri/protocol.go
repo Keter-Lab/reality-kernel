@@ -16,9 +16,11 @@ const (
 	sessionAnnotation = "realitykernel.dev/session"
 
 	maxMessage = 1 << 20
-	// Below NRI's default plugin request timeout (2s), so a hung daemon is
-	// answered with our refusal rather than a runtime timeout.
-	ioTimeout = time.Second
+	// Total budget for one daemon call: dial, write and read together. NRI
+	// treats a plugin that exceeds its request timeout (2s by default) as
+	// failed: it drops the plugin and starts the container anyway. So a hung
+	// daemon must be answered with our refusal well before that.
+	callBudget = time.Second
 )
 
 // BindRequest is Request::BindContainer.
@@ -92,12 +94,13 @@ type socketDaemon struct {
 }
 
 func (d socketDaemon) call(msg []byte) (Reply, error) {
-	conn, err := net.DialTimeout("unixpacket", d.path, ioTimeout)
+	deadline := time.Now().Add(callBudget)
+	conn, err := (&net.Dialer{Deadline: deadline}).Dial("unixpacket", d.path)
 	if err != nil {
 		return Reply{}, fmt.Errorf("rk-sensor unreachable at %s: %w", d.path, err)
 	}
 	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(ioTimeout)); err != nil {
+	if err := conn.SetDeadline(deadline); err != nil {
 		return Reply{}, err
 	}
 	if _, err := conn.Write(msg); err != nil {

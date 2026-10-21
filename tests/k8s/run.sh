@@ -48,6 +48,16 @@ daemon_events() {
         | jq -Rc 'fromjson? | select(.fields.message? == "event") | .fields'
 }
 
+# Daemon, plugin and containerd NRI logs, saved for the CI artifact. Taken
+# before the restart test too, since replacing the pod loses its logs.
+LOGS="${RK_K8S_LOGS:-k8s-logs}"
+dump_logs() { # label
+    mkdir -p "$LOGS"
+    kubectl -n "$NS" logs ds/rk -c rk-sensor --tail=-1 2>&1         | grep -v '"message":"event"' > "$LOGS/$1-rk-sensor.log" || true
+    kubectl -n "$NS" logs ds/rk -c rk-nri --tail=-1 > "$LOGS/$1-rk-nri.log" 2>&1 || true
+    docker exec "$NODE" journalctl -u containerd --no-pager 2>&1         | grep -iE 'nri|plugin .*(clos|fail|timeout)' > "$LOGS/$1-containerd-nri.log" || true
+}
+
 # pod NAME NAMESPACE ANNOTATIONS_JSON PROBE_ARGS... (one probe container)
 pod() {
     local name="$1" ns="$2" ann="$3"
@@ -307,6 +317,7 @@ else
     wait_running hold1 default || log "hold1 did not start: $(pod_messages hold1 default)"
 
     run_test k8s_pod_governed_from_first_instruction t_governed_first_instruction
+    dump_logs after-first-test
     run_test k8s_exec_session_governed t_exec_session_governed
     run_test k8s_unannotated_pod_unaffected t_unannotated_unaffected
     run_test k8s_namespace_default_applied t_namespace_default
@@ -316,11 +327,13 @@ else
     run_test k8s_container_removal_unbinds t_removal_unbinds
     run_test apply_rejects_lsm_rules_without_bpf_lsm t_lsm_rules_refused
     run_test k8s_configmap_update_applies t_configmap_update
+    dump_logs before-restart
     run_test k8s_daemon_restart_resyncs t_restart_resyncs
     run_test k8s_daemon_down_fails_closed t_daemon_down_fails_closed
     run_test helm_chart_renders t_chart_renders
 fi
 
+dump_logs end
 echo "===RK_K8S_BEGIN==="
 printf '%s\n' "${results[@]}" | jq -s .
 echo "===RK_K8S_END==="

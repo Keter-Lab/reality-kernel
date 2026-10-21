@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/containerd/nri/pkg/api"
 )
@@ -127,6 +128,8 @@ func TestSynchronizeRebindsOnlyRunning(t *testing.T) {
 	if err != nil || updates != nil {
 		t.Fatalf("Synchronize = %v, %v", updates, err)
 	}
+	// Synchronize replies before rebinding (NRI times it out like any call).
+	p.resync.Wait()
 	if len(d.binds) != 1 || d.binds[0].ContainerID != "c1" {
 		t.Fatalf("binds %+v", d.binds)
 	}
@@ -166,3 +169,32 @@ func TestDaemonDownRefusesOnlyGovernablePods(t *testing.T) {
 		t.Fatal("annotated pod started while the daemon was down")
 	}
 }
+
+// Synchronize must answer without waiting for the daemon.
+func TestSynchronizeDoesNotBlockOnDaemon(t *testing.T) {
+	release := make(chan struct{})
+	d := &blockingDaemon{release: release}
+	p := &plugin{daemon: d}
+	done := make(chan struct{})
+	go func() {
+		p.Synchronize(context.Background(), []*api.PodSandbox{pod(nil)},
+			[]*api.Container{ctr(api.ContainerState_CONTAINER_RUNNING)})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Synchronize blocked on a slow daemon")
+	}
+	close(release)
+	p.resync.Wait()
+}
+
+type blockingDaemon struct{ release chan struct{} }
+
+func (b *blockingDaemon) Bind(BindRequest) (Reply, error) {
+	<-b.release
+	return Reply{Kind: "NotGoverned"}, nil
+}
+
+func (b *blockingDaemon) Unbind(string) (Reply, error) { return Reply{Kind: "ContainerUnbound"}, nil }

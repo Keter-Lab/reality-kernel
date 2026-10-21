@@ -334,6 +334,7 @@ jobs:
             k8s.json
             k8s.log
             k8s-daemon.log
+            k8s-logs/
           if-no-files-found: warn
 
   fuzz:
