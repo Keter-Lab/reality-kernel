@@ -1,0 +1,30 @@
+# kind CI values. The runner kernel has no BPF LSM, so profiles are
+# network-only (docs/design/phase-5b.md §6, §8).
+image:
+  repository: reality-kernel
+  tag: ci
+  pullPolicy: Never
+profiles: |
+  [profiles.k8s-net]
+  mode = "enforce"
+  network.default = "allow"
+  network.deny_raw_sockets = false
+
+  [[profiles.k8s-net.network.deny]]
+  cidr = "10.99.0.1/32"
+  proto = ["tcp", "udp"]
+
+  [profiles.k8s-net.files]
+  include = []
+
+  [profiles.k8s-open]
+  mode = "enforce"
+  network.default = "allow"
+  network.deny_raw_sockets = false
+
+  [profiles.k8s-open.files]
+  include = []
+namespaces:
+  agents:
+    default: k8s-net
+    allowed: [k8s-net]

@@ -1,6 +1,7 @@
 name: Autofix
 
-# On phase branches, applies mechanical fixes (rustfmt, Cargo.lock) and pushes
+# On phase branches, applies mechanical fixes (rustfmt, gofmt, Cargo.lock,
+# go.sum) and pushes
 # them as a separate commit. Contributors without a local Rust toolchain rely on
 # this. Never runs on main or on pull requests from forks.
 
@@ -34,6 +35,17 @@ jobs:
           cargo fmt --all
           cargo fmt --manifest-path fuzz/Cargo.toml --all
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: rk-nri/go.mod
+          cache-dependency-path: rk-nri/go.mod
+
+      - name: gofmt and go.sum (rk-nri)
+        working-directory: rk-nri
+        run: |
+          gofmt -w .
+          go mod tidy
+
       - name: Refresh Cargo.lock for workspace changes
         run: cargo update --workspace
 
@@ -56,11 +68,12 @@ jobs:
 
       - name: Commit and push
         run: |
-          if git diff --quiet; then
+          if git diff --quiet && [ -z "$(git status --porcelain rk-nri)" ]; then
             echo "nothing to fix"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore: autofix (rustfmt, Cargo.lock)"
+          git add -A rk-nri
+          git commit -am "chore: autofix (rustfmt, gofmt, Cargo.lock, go.sum)"
           git push

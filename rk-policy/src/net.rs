@@ -66,6 +66,11 @@ pub const FILE_LISTS: &[(&str, &str)] = &[(
 /// Root of every binding: hooks are attached at `/sys/fs/cgroup/rk.slice`.
 pub const CGROUP_ROOT: &str = "rk.slice";
 
+/// Pod annotation naming the profile its containers run under (Phase 5b).
+pub const K8S_PROFILE_ANNOTATION: &str = "realitykernel.dev/profile";
+/// Pod annotation carrying the session id for event linkage (Phase 5b).
+pub const K8S_SESSION_ANNOTATION: &str = "realitykernel.dev/session";
+
 /// Built-in rule lists that profiles can `include`.
 pub const BUILTIN_LISTS: &[(&str, &str)] = &[(
     "cloud-metadata",
@@ -141,6 +146,24 @@ struct PolicyFile {
     profiles: BTreeMap<String, ProfileFile>,
     #[serde(default)]
     bindings: Vec<BindingFile>,
+    #[serde(default)]
+    kubernetes: KubernetesFile,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KubernetesFile {
+    #[serde(default)]
+    namespaces: BTreeMap<String, NamespaceFile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NamespaceFile {
+    #[serde(default)]
+    default: Option<String>,
+    #[serde(default)]
+    allowed: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -434,16 +457,63 @@ pub struct RuleOrigin {
     pub origin: String,
 }
 
+/// Profile rules for one Kubernetes namespace (`[kubernetes.namespaces.NAME]`).
+/// A listed namespace is always governed: pods without an annotation get
+/// `default`, or are refused when there is none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamespaceRule {
+    pub default: Option<String>,
+    /// Profiles a pod annotation may name. Never empty.
+    pub allowed: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Policy {
     pub profiles: Vec<Profile>,
     pub bindings: Vec<Binding>,
     pub origins: Vec<RuleOrigin>,
+    pub namespaces: BTreeMap<String, NamespaceRule>,
 }
 
 impl Policy {
     pub fn profile(&self, id: u32) -> Option<&Profile> {
         self.profiles.iter().find(|p| p.id == id)
+    }
+
+    /// The profile a pod's containers run under (docs/design/phase-5b.md §4).
+    /// `Ok(None)` means the pod is not governed; `Err` means its containers
+    /// must not start.
+    pub fn resolve_pod_profile(
+        &self,
+        namespace: &str,
+        annotation: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        let rule = self.namespaces.get(namespace);
+        let Some(name) = annotation else {
+            return match rule {
+                None => Ok(None),
+                Some(NamespaceRule {
+                    default: Some(d), ..
+                }) => Ok(Some(d.clone())),
+                Some(r) => Err(format!(
+                    "namespace `{namespace}` is governed and has no default profile: \
+                     annotate the pod with {K8S_PROFILE_ANNOTATION} naming one of {:?}",
+                    r.allowed
+                )),
+            };
+        };
+        if name == QUARANTINE || !self.profiles.iter().any(|p| p.name == name) {
+            return Err(format!("unknown profile `{name}`"));
+        }
+        if let Some(r) = rule {
+            if !r.allowed.iter().any(|a| a == name) {
+                return Err(format!(
+                    "profile `{name}` is not allowed in namespace `{namespace}` (allowed: {:?})",
+                    r.allowed
+                ));
+            }
+        }
+        Ok(Some(name.to_string()))
     }
 
     pub fn origin(&self, rule_id: u32) -> Option<&RuleOrigin> {
@@ -781,11 +851,64 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
         bindings.push(Binding { cgroup, profile });
     }
 
+    let mut namespaces = BTreeMap::new();
+    for (ns, rule) in &file.kubernetes.namespaces {
+        let ctx = format!("kubernetes.namespaces.{ns}");
+        if !valid_namespace(ns) {
+            return Err(PolicyError::new(
+                &ctx,
+                "not a valid Kubernetes namespace name (lowercase letters, digits and `-`, max 63)",
+            ));
+        }
+        let allowed = match (&rule.allowed, &rule.default) {
+            (Some(list), _) if list.is_empty() => {
+                return Err(PolicyError::new(&ctx, "`allowed` must not be empty"));
+            }
+            (Some(list), _) => list.clone(),
+            (None, Some(d)) => vec![d.clone()],
+            (None, None) => {
+                return Err(PolicyError::new(&ctx, "needs `default`, `allowed` or both"));
+            }
+        };
+        for name in rule.default.iter().chain(&allowed) {
+            if name == QUARANTINE || !profiles.iter().any(|p| &p.name == name) {
+                return Err(PolicyError::new(&ctx, format!("unknown profile `{name}`")));
+            }
+        }
+        if let Some(d) = &rule.default {
+            if !allowed.contains(d) {
+                return Err(PolicyError::new(
+                    &ctx,
+                    format!("default `{d}` must also be in `allowed`"),
+                ));
+            }
+        }
+        namespaces.insert(
+            ns.clone(),
+            NamespaceRule {
+                default: rule.default.clone(),
+                allowed,
+            },
+        );
+    }
+
     Ok(Policy {
         profiles,
         bindings,
         origins,
+        namespaces,
     })
+}
+
+/// RFC 1123 label, the rule Kubernetes applies to namespace names.
+fn valid_namespace(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 63
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !name.starts_with('-')
+        && !name.ends_with('-')
 }
 
 fn parse_access(list: &[String]) -> Result<u32, String> {
@@ -1413,6 +1536,26 @@ pub fn diff(old: Option<&Policy>, new: &Policy) -> Vec<String> {
     for line in a.difference(&b) {
         out.push(format!("+ {line}"));
     }
+    let namespace_lines = |p: &Policy| -> BTreeSet<String> {
+        p.namespaces
+            .iter()
+            .map(|(ns, r)| {
+                format!(
+                    "kubernetes namespace {ns}: default {}, allowed {:?}",
+                    r.default.as_deref().unwrap_or("(none)"),
+                    r.allowed
+                )
+            })
+            .collect()
+    };
+    let b = old.map(namespace_lines).unwrap_or_default();
+    let a = namespace_lines(new);
+    for line in b.difference(&a) {
+        out.push(format!("- {line}"));
+    }
+    for line in a.difference(&b) {
+        out.push(format!("+ {line}"));
+    }
     out
 }
 
@@ -1971,5 +2114,110 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod k8s_tests {
+    use super::*;
+
+    const K8S: &str = r#"
+[profiles.research]
+mode = "enforce"
+[profiles.strict]
+mode = "enforce"
+[profiles.open]
+mode = "audit"
+
+[kubernetes.namespaces.agents]
+default = "research"
+allowed = ["research", "strict"]
+
+[kubernetes.namespaces.locked]
+allowed = ["strict"]
+"#;
+
+    fn policy(text: &str) -> Policy {
+        parse(text, &mut ProfileIds::default()).unwrap()
+    }
+
+    fn err(text: &str) -> String {
+        parse(text, &mut ProfileIds::default())
+            .unwrap_err()
+            .to_string()
+    }
+
+    /// Every row of the table in docs/design/phase-5b.md §4.
+    #[test]
+    fn pod_profile_resolution_table() {
+        let p = policy(K8S);
+        // Namespace not listed.
+        assert_eq!(p.resolve_pod_profile("default", None), Ok(None));
+        assert_eq!(
+            p.resolve_pod_profile("default", Some("open")),
+            Ok(Some("open".into()))
+        );
+        // Listed namespace with a default.
+        assert_eq!(
+            p.resolve_pod_profile("agents", None),
+            Ok(Some("research".into()))
+        );
+        assert_eq!(
+            p.resolve_pod_profile("agents", Some("strict")),
+            Ok(Some("strict".into()))
+        );
+        let e = p.resolve_pod_profile("agents", Some("open")).unwrap_err();
+        assert!(e.contains("not allowed in namespace `agents`"), "{e}");
+        // Listed namespace without a default: the annotation is mandatory.
+        let e = p.resolve_pod_profile("locked", None).unwrap_err();
+        assert!(e.contains("has no default profile"), "{e}");
+        // Unknown, empty and quarantine profiles are refused everywhere.
+        for name in ["nope", "", QUARANTINE] {
+            for ns in ["default", "agents"] {
+                assert!(p.resolve_pod_profile(ns, Some(name)).is_err(), "{ns}/{name}");
+            }
+        }
+    }
+
+    #[test]
+    fn allowed_defaults_to_default() {
+        let p = policy(
+            "[profiles.a]\nmode = \"enforce\"\n[kubernetes.namespaces.ns]\ndefault = \"a\"\n",
+        );
+        assert_eq!(p.namespaces["ns"].allowed, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn namespace_rules_are_validated() {
+        let base = "[profiles.a]\nmode = \"enforce\"\n";
+        let cases = [
+            ("[kubernetes.namespaces.ns]\n", "needs `default`"),
+            ("[kubernetes.namespaces.ns]\nallowed = []\n", "must not be empty"),
+            ("[kubernetes.namespaces.ns]\ndefault = \"b\"\n", "unknown profile `b`"),
+            (
+                "[kubernetes.namespaces.ns]\ndefault = \"quarantine\"\n",
+                "unknown profile `quarantine`",
+            ),
+            (
+                "[profiles.b]\nmode = \"enforce\"\n[kubernetes.namespaces.ns]\ndefault = \"a\"\nallowed = [\"b\"]\n",
+                "must also be in `allowed`",
+            ),
+            ("[kubernetes.namespaces.Bad_Name]\ndefault = \"a\"\n", "valid Kubernetes namespace"),
+            ("[kubernetes.namespaces.ns]\ndefault = \"a\"\nextra = 1\n", "unknown field"),
+        ];
+        for (extra, want) in cases {
+            let e = err(&format!("{base}{extra}"));
+            assert!(e.contains(want), "{extra:?}: {e}");
+        }
+    }
+
+    #[test]
+    fn diff_reports_namespace_changes() {
+        let old = policy(K8S);
+        let new = policy(&K8S.replace("default = \"research\"", "default = \"strict\""));
+        let d = diff(Some(&old), &new);
+        assert!(d.iter().any(|l| l.starts_with("- kubernetes namespace agents: default research")), "{d:?}");
+        assert!(d.iter().any(|l| l.starts_with("+ kubernetes namespace agents: default strict")), "{d:?}");
+        assert!(diff(Some(&old), &old).is_empty());
     }
 }

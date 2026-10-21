@@ -93,3 +93,28 @@ jobs:
 
       - name: pytest
         run: .github/scripts/run-logged.sh pytest pytest tests/ -v
+
+  go:
+    name: Go (rk-nri vet, test, build)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: rk-nri/go.mod
+          cache-dependency-path: rk-nri/go.mod
+
+      - name: gofmt
+        working-directory: rk-nri
+        run: test -z "$(gofmt -l .)" || { gofmt -d .; echo "::error::run gofmt (autofix does this on phase branches)"; exit 1; }
+
+      - name: vet, test, static build
+        working-directory: rk-nri
+        run: |
+          # Autofix commits go.sum; tidy keeps a push before that buildable.
+          # Module checksums are verified against sum.golang.org either way.
+          go mod tidy
+          go vet ./...
+          go test -race ./...
+          CGO_ENABLED=0 go build -trimpath -o rk-nri .

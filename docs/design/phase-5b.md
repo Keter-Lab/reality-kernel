@@ -1,6 +1,11 @@
 # Design note: Phase 5b — Kubernetes governance
 
-Status: **PROPOSED** (2026-10-21), awaiting review of the decisions in §9.
+Status: **ACCEPTED** (2026-10-21). All four decisions in §9 approved as recommended.
+Implementation notes (found while building; reflected below): the daemon
+enters PID 1's cgroup namespace so container cgroup paths resolve from a pod;
+raw-socket denial is part of the §6 honesty check; while the daemon is
+unreachable, pods that could not be governed anyway still start (§5); and
+rk-nri registers with NRI only once the daemon answers.
 Branch: `phase-5b-k8s` (from `main` at ec3acc2)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 5 ("Kubernetes: a
 DaemonSet plus pod annotation (realitykernel.dev/profile) or an NRI plugin that
@@ -104,7 +109,7 @@ allowed = ["research-agent", "strict"] # an annotation must name one of these
 |---|---|---|
 | not listed | none | not governed |
 | not listed | `P` (exists) | governed by `P` |
-| listed | none | governed by `default` |
+| listed | none | governed by `default`; **refused** if there is no default |
 | listed | `P` in `allowed` | governed by `P` |
 | listed | `P` not in `allowed` | **start refused** |
 | any | unknown profile | **start refused** |
@@ -125,8 +130,11 @@ The quarantine profile can't be selected by annotation. `rk policy diff` and
   and the plugin's resync running containers are ungoverned. The resync is
   automatic and tested (§8), and the gap is documented, not hidden. Phase 6 pins
   the maps and closes it.
-- **Fail-closed by default** if the daemon is unreachable: the plugin returns
-  an error and governed-or-not containers stop starting on that node. A Helm
+- **Fail-closed by default** if the daemon is unreachable: the plugin refuses
+  every container that could be governed, meaning annotated pods and pods in
+  a namespace with rules (the plugin gets that list from the same Helm values
+  as the policy). Other pods start, since they would not be governed anyway,
+  so a daemon crash can't stop `kube-system` from healing. A Helm
   value `failurePolicy: Ignore` lets clusters choose availability over
   enforcement, with a warning on each skipped container. See decision 3.
 

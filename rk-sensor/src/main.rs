@@ -6,6 +6,7 @@ compile_error!(
     "release builds of rk-sensor must embed the BPF objects: build with `--features embedded-bpf`"
 );
 
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,14 +23,37 @@ use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
-const USAGE: &str = "usage: rk-sensor [--policy FILE | --selftest | --version | --help]";
+const USAGE: &str = "usage: rk-sensor [--policy FILE] [--watch-policy] \
+                     [--k8s-cgroup-root auto|DIR] | --selftest | --version | --help";
 
 /// Policy file read at start and on SIGHUP when `--policy` is not given.
 const DEFAULT_POLICY: &str = "/etc/rk/policy.toml";
 
+/// Kubernetes cgroup roots probed by `--k8s-cgroup-root auto`, relative to
+/// the cgroupfs root: systemd driver, cgroupfs driver, and kubelet's
+/// `--cgroup-root=/kubelet` layout (used by kind) for each.
+const K8S_ROOTS: &[&str] = &[
+    "kubepods.slice",
+    "kubepods",
+    "kubelet.slice/kubelet-kubepods.slice",
+    "kubelet/kubepods",
+];
+
+/// How often `--watch-policy` checks the policy file.
+const WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct RunOpts {
+    policy: Option<String>,
+    /// Re-apply the policy file whenever its content changes (Phase 5b §7).
+    watch: bool,
+    /// `auto` or a directory relative to the cgroupfs root (Phase 5b §5).
+    k8s_root: Option<String>,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Mode {
-    Run { policy: Option<String> },
+    Run(RunOpts),
     Selftest,
     SelftestChild(Vec<String>),
     Version,
@@ -38,19 +62,26 @@ enum Mode {
 
 fn parse_args(args: &[String]) -> Result<Mode, String> {
     match args {
-        [] => Ok(Mode::Run { policy: None }),
-        [flag, file] if flag == "--policy" => Ok(Mode::Run {
-            policy: Some(file.clone()),
-        }),
-        [flag] if flag == "--selftest" => Ok(Mode::Selftest),
-        [flag] if flag == "--version" || flag == "-V" => Ok(Mode::Version),
-        [flag] if flag == "--help" || flag == "-h" => Ok(Mode::Help),
-        [flag, rest @ ..] if flag == selftest::CHILD_FLAG => Ok(Mode::SelftestChild(rest.to_vec())),
-        _ => Err(format!(
-            "unrecognised arguments: {}\n{USAGE}",
-            args.join(" ")
-        )),
+        [flag] if flag == "--selftest" => return Ok(Mode::Selftest),
+        [flag] if flag == "--version" || flag == "-V" => return Ok(Mode::Version),
+        [flag] if flag == "--help" || flag == "-h" => return Ok(Mode::Help),
+        [flag, rest @ ..] if flag == selftest::CHILD_FLAG => {
+            return Ok(Mode::SelftestChild(rest.to_vec()))
+        }
+        _ => {}
     }
+    let unrecognised = || format!("unrecognised arguments: {}\n{USAGE}", args.join(" "));
+    let mut opts = RunOpts::default();
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--policy" => opts.policy = Some(it.next().ok_or_else(unrecognised)?.clone()),
+            "--k8s-cgroup-root" => opts.k8s_root = Some(it.next().ok_or_else(unrecognised)?.clone()),
+            "--watch-policy" => opts.watch = true,
+            _ => return Err(unrecognised()),
+        }
+    }
+    Ok(Mode::Run(opts))
 }
 
 fn exit_code(code: i32) -> ExitCode {
@@ -92,7 +123,7 @@ fn main() -> ExitCode {
             }
             exit_code(report.exit_code)
         }
-        Mode::Run { policy } => match run_daemon(policy.as_deref().unwrap_or(DEFAULT_POLICY)) {
+        Mode::Run(opts) => match run_daemon(&opts) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("rk-sensor: {e:#}");
@@ -105,6 +136,8 @@ fn main() -> ExitCode {
 struct SensorPolicyHandler {
     ebpf: aya::Ebpf,
     engine: PolicyEngine,
+    lsm_active: bool,
+    k8s_root: Option<String>,
 }
 
 impl PolicyHandler for SensorPolicyHandler {
@@ -171,15 +204,47 @@ impl PolicyHandler for SensorPolicyHandler {
         vec![
             CapabilityStatus {
                 name: "bpf_lsm".into(),
-                ok: true,
-                detail: "active".into(),
+                ok: self.lsm_active,
+                detail: if self.lsm_active {
+                    "active: exec, file and raw-socket rules enforced".into()
+                } else {
+                    "inactive (`bpf` not in /sys/kernel/security/lsm): network rules only; \
+                     boot with lsm=...,bpf"
+                        .into()
+                },
             },
             CapabilityStatus {
                 name: "cgroup_v2".into(),
-                ok: true,
-                detail: "/sys/fs/cgroup".into(),
+                ok: Path::new(policy::CGROUP_FS)
+                    .join("cgroup.controllers")
+                    .exists(),
+                detail: policy::CGROUP_FS.into(),
+            },
+            CapabilityStatus {
+                name: "kubernetes".into(),
+                ok: self.k8s_root.is_some(),
+                detail: match &self.k8s_root {
+                    Some(root) => format!("container bindings under {root}"),
+                    None => "not enabled (--k8s-cgroup-root)".into(),
+                },
             },
         ]
+    }
+
+    fn resolve_pod_profile(
+        &self,
+        namespace: &str,
+        annotation: Option<&str>,
+    ) -> Result<Option<String>> {
+        self.engine
+            .policy()
+            .context("no policy applied yet")?
+            .resolve_pod_profile(namespace, annotation)
+            .map_err(anyhow::Error::msg)
+    }
+
+    fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64> {
+        self.engine.bind_container(&mut self.ebpf, cgroup, profile)
     }
 }
 
@@ -197,13 +262,66 @@ fn to_report_data(rep: &policy::ApplyReport) -> ApplyReportData {
     }
 }
 
-fn run_daemon(policy_path: &str) -> Result<()> {
+/// Moves this thread into PID 1's cgroup namespace, so `/proc/<pid>/cgroup`
+/// of containers reads as paths from the host cgroupfs root. A DaemonSet pod
+/// has a private cgroup namespace; needs `hostPID` and CAP_SYS_ADMIN. Must
+/// run before any other thread exists: setns changes only the calling thread,
+/// and threads created afterwards inherit it.
+fn enter_host_cgroup_namespace() -> Result<()> {
+    let ns = std::fs::File::open("/proc/1/ns/cgroup").context("open /proc/1/ns/cgroup")?;
+    // SAFETY: plain syscall on a valid fd that outlives the call.
+    if unsafe { libc::setns(ns.as_raw_fd(), libc::CLONE_NEWCGROUP) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("setns(CLONE_NEWCGROUP)");
+    }
+    Ok(())
+}
+
+/// Resolves `--k8s-cgroup-root`: `auto` probes [`K8S_ROOTS`]; anything else
+/// must be an existing directory relative to the cgroupfs root.
+fn resolve_k8s_root(arg: &str) -> Result<String> {
+    let fs_root = Path::new(policy::CGROUP_FS);
+    if arg == "auto" {
+        return K8S_ROOTS
+            .iter()
+            .find(|r| fs_root.join(r).is_dir())
+            .map(|r| r.to_string())
+            .with_context(|| format!("no Kubernetes cgroup root found (tried {K8S_ROOTS:?})"));
+    }
+    let root = arg.trim_matches('/');
+    if root.is_empty() || root.split('/').any(|s| s == ".." || s == ".") {
+        bail!("invalid --k8s-cgroup-root `{arg}`");
+    }
+    if !fs_root.join(root).is_dir() {
+        bail!("--k8s-cgroup-root `{root}` does not exist under {}", policy::CGROUP_FS);
+    }
+    Ok(root.to_string())
+}
+
+fn log_report(path: &str, report: &ApplyReportData, how: &str) {
+    if !report.skipped_files.is_empty() {
+        warn!(
+            path,
+            skipped = ?report.skipped_files,
+            "built-in file rules not active on this host (missing or inaccessible)"
+        );
+    }
+    info!(path, ?report, how, "policy applied");
+}
+
+fn run_daemon(opts: &RunOpts) -> Result<()> {
+    let policy_path = opts.policy.as_deref().unwrap_or(DEFAULT_POLICY);
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .json()
         .init();
+
+    // Before the runtime starts any thread (see enter_host_cgroup_namespace).
+    if opts.k8s_root.is_some() {
+        enter_host_cgroup_namespace()?;
+    }
+    let k8s_root = opts.k8s_root.as_deref().map(resolve_k8s_root).transpose()?;
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -221,11 +339,30 @@ fn run_daemon(policy_path: &str) -> Result<()> {
                 failed.error.as_deref().unwrap_or("unknown error")
             );
         }
-        let cgroup_root = Path::new(policy::CGROUP_FS).join(rk_policy::net::CGROUP_ROOT);
-        let attached = policy::attach_all(&mut ebpf, &cgroup_root)?;
-        info!(?attached, "enforcement programs attached");
 
-        let engine = PolicyEngine::default();
+        // LSM programs attach even where BPF LSM is inactive, but are never
+        // called there. Attach them only where they work, and let the engine
+        // refuse rules that need them (docs/design/phase-5b.md §6).
+        let lsm_active = policy::bpf_lsm_active();
+        let cgroup_root = Path::new(policy::CGROUP_FS).join(rk_policy::net::CGROUP_ROOT);
+        let mut attached = policy::attach_network(&mut ebpf, &cgroup_root)?;
+        if lsm_active {
+            attached.extend(policy::attach_exec(&mut ebpf)?);
+            attached.extend(policy::attach_file(&mut ebpf)?);
+        } else {
+            warn!("BPF LSM is not active: exec, file and raw-socket rules will be refused");
+        }
+        if let Some(root) = &k8s_root {
+            attached.extend(policy::attach_network(
+                &mut ebpf,
+                &Path::new(policy::CGROUP_FS).join(root),
+            )?);
+            info!(root = root.as_str(), "network programs attached at the Kubernetes cgroup root");
+        }
+        info!(?attached, lsm_active, "enforcement programs attached");
+
+        let mut engine = PolicyEngine::default();
+        engine.set_lsm_active(lsm_active);
         let stop = Arc::new(AtomicBool::new(false));
         let ring = consumer::take_ring(&mut ebpf)?;
 
@@ -236,32 +373,31 @@ fn run_daemon(policy_path: &str) -> Result<()> {
             Some(registry.clone()),
         ));
 
-        let mut handler_inner = SensorPolicyHandler { ebpf, engine };
-        if let Ok(text) = std::fs::read_to_string(policy_path) {
-            match handler_inner.apply(&text) {
-                Ok(report) => {
-                    if !report.skipped_files.is_empty() {
-                        warn!(
-                            path = policy_path,
-                            skipped = ?report.skipped_files,
-                            "built-in file rules not active on this host (missing or inaccessible)"
-                        );
-                    }
-                    info!(path = policy_path, ?report, "policy applied");
-                }
-                Err(e) => {
-                    error!(
+        let mut handler_inner = SensorPolicyHandler {
+            ebpf,
+            engine,
+            lsm_active,
+            k8s_root: k8s_root.clone(),
+        };
+        // Last policy text seen on disk, applied or not, so the watcher acts
+        // (and logs a rejection) once per change.
+        let mut last_seen: Option<String> = None;
+        match std::fs::read_to_string(policy_path) {
+            Ok(text) => {
+                match handler_inner.apply(&text) {
+                    Ok(report) => log_report(policy_path, &report, "start"),
+                    Err(e) => error!(
                         path = policy_path,
                         error = %format!("{e:#}"),
                         "policy rejected; active policy unchanged"
-                    );
+                    ),
                 }
+                last_seen = Some(text);
             }
-        } else {
-            warn!(
+            Err(_) => warn!(
                 path = policy_path,
                 "policy file not readable; active policy unchanged"
-            );
+            ),
         }
 
         let handler: Arc<Mutex<dyn PolicyHandler>> = Arc::new(Mutex::new(handler_inner));
@@ -271,6 +407,7 @@ fn run_daemon(policy_path: &str) -> Result<()> {
             cgroup_fs: PathBuf::from(policy::CGROUP_FS),
             service_uid: 65534,
             service_gid: 65534,
+            k8s_cgroup_root: k8s_root,
         };
 
         let server_handler = handler.clone();
@@ -283,36 +420,43 @@ fn run_daemon(policy_path: &str) -> Result<()> {
 
         let mut hangup = signal(SignalKind::hangup()).context("install SIGHUP handler")?;
         let mut terminate = signal(SignalKind::terminate()).context("install SIGTERM handler")?;
+        let mut watch = tokio::time::interval(WATCH_INTERVAL);
         loop {
             tokio::select! {
                 _ = hangup.recv() => {
-                    let mut lock = handler.lock().await;
                     match std::fs::read_to_string(policy_path) {
-                        Ok(text) => match lock.apply(&text) {
-                            Ok(report) => {
-                                if !report.skipped_files.is_empty() {
-                                    warn!(
-                                        path = policy_path,
-                                        skipped = ?report.skipped_files,
-                                        "built-in file rules not active on this host (missing or inaccessible)"
-                                    );
-                                }
-                                info!(path = policy_path, ?report, "policy applied on SIGHUP");
-                            }
-                            Err(e) => {
-                                error!(
+                        Ok(text) => {
+                            match handler.lock().await.apply(&text) {
+                                Ok(report) => log_report(policy_path, &report, "SIGHUP"),
+                                Err(e) => error!(
                                     path = policy_path,
                                     error = %format!("{e:#}"),
                                     "policy rejected on SIGHUP; active policy unchanged"
-                                );
+                                ),
                             }
-                        },
-                        Err(e) => {
-                            warn!(
-                                path = policy_path,
-                                error = %e,
-                                "policy file not readable on SIGHUP; active policy unchanged"
-                            );
+                            last_seen = Some(text);
+                        }
+                        Err(e) => warn!(
+                            path = policy_path,
+                            error = %e,
+                            "policy file not readable on SIGHUP; active policy unchanged"
+                        ),
+                    }
+                }
+                _ = watch.tick(), if opts.watch => {
+                    // ConfigMap volumes are updated by an atomic symlink swap,
+                    // so a read sees either the old or the new file, never half.
+                    if let Ok(text) = std::fs::read_to_string(policy_path) {
+                        if last_seen.as_deref() != Some(text.as_str()) {
+                            match handler.lock().await.apply(&text) {
+                                Ok(report) => log_report(policy_path, &report, "watch"),
+                                Err(e) => error!(
+                                    path = policy_path,
+                                    error = %format!("{e:#}"),
+                                    "changed policy rejected; active policy unchanged"
+                                ),
+                            }
+                            last_seen = Some(text);
                         }
                     }
                 }
@@ -338,13 +482,30 @@ mod tests {
 
     #[test]
     fn parses_known_modes() {
-        assert_eq!(parse_args(&args(&[])), Ok(Mode::Run { policy: None }));
+        assert_eq!(parse_args(&args(&[])), Ok(Mode::Run(RunOpts::default())));
         assert_eq!(
             parse_args(&args(&["--policy", "/etc/rk/p.toml"])),
-            Ok(Mode::Run {
-                policy: Some("/etc/rk/p.toml".into())
-            })
+            Ok(Mode::Run(RunOpts {
+                policy: Some("/etc/rk/p.toml".into()),
+                ..RunOpts::default()
+            }))
         );
+        assert_eq!(
+            parse_args(&args(&[
+                "--watch-policy",
+                "--k8s-cgroup-root",
+                "auto",
+                "--policy",
+                "/p"
+            ])),
+            Ok(Mode::Run(RunOpts {
+                policy: Some("/p".into()),
+                watch: true,
+                k8s_root: Some("auto".into()),
+            }))
+        );
+        assert!(parse_args(&args(&["--policy"])).is_err());
+        assert!(parse_args(&args(&["--k8s-cgroup-root"])).is_err());
         assert_eq!(parse_args(&args(&["--selftest"])), Ok(Mode::Selftest));
         assert_eq!(parse_args(&args(&["-V"])), Ok(Mode::Version));
         assert_eq!(

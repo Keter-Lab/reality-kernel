@@ -232,6 +232,7 @@ fn print_human_status(status: &DaemonStatus) {
         }
     );
     println!("  generation : {}", status.generation);
+    println!("  containers : {} (Kubernetes)", status.containers);
     println!(
         "  profiles   : {}",
         if status.active_profiles.is_empty() {
