@@ -541,7 +541,7 @@ fn handle_exec_large_argv(args: &[String]) -> i32 {
     } else {
         "/bin/true"
     };
-    let c_path = match std::ffi::CString::new(path.as_str()) {
+    let c_path = match std::ffi::CString::new(path) {
         Ok(p) => p,
         Err(_) => return 290,
     };
