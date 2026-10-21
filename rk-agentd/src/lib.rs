@@ -14,6 +14,7 @@ pub mod server;
 
 pub use auth::{check_launchable_by, check_policy_admin, get_peer_cred, PeerCred};
 pub use client::{ApplyOutcome, Client};
+pub use launcher::{spawn_in_cgroup, verify_agent_privileges, SpawnContext};
 pub use protocol::{
     AgentPrivilegeChecks, AgentStatusInfo, ApplyReportData, CapabilityStatus, DaemonStatus,
     DryRunData, Request, Response, DEFAULT_SOCKET_PATH,

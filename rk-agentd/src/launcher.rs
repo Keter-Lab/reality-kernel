@@ -66,22 +66,52 @@ struct CloneArgs {
 /// 10. Command is executed (`execve`).
 ///
 /// Returns `(child_pid, optional_pidfd)`.
-pub fn spawn_in_cgroup(
-    cgroup_fd: RawFd,
-    cgroup_path: &Path,
+/// Context parameters for launching an unprivileged agent process into a cgroup.
+#[derive(Debug, Clone)]
+pub struct SpawnContext<'a> {
+    pub cgroup_fd: RawFd,
+    pub cgroup_path: &'a Path,
+    pub target_uid: u32,
+    pub target_gid: u32,
+    pub cwd: Option<&'a str>,
+    pub stdio_fds: Option<[RawFd; 3]>,
+    pub cmd: &'a [String],
+    pub env: &'a [(String, String)],
+}
+
+struct ChildExecContext<'a> {
+    err_pipe: RawFd,
+    stdio_fds: Option<[RawFd; 3]>,
     target_uid: u32,
     target_gid: u32,
-    cwd: Option<&str>,
-    stdio_fds: Option<[RawFd; 3]>,
-    cmd: &[String],
-    env: &[(String, String)],
-) -> Result<(i32, Option<OwnedFd>)> {
-    if cmd.is_empty() {
+    c_cwd: Option<&'a CString>,
+    c_path: &'a CString,
+    c_argv_ptrs: &'a [*const libc::c_char],
+    c_envp_ptrs: &'a [*const libc::c_char],
+}
+
+/// Spawn an unprivileged agent process directly into the given cgroup.
+///
+/// Execution posture:
+/// 1. Process is created directly inside `cgroup_fd` via `clone3(CLONE_INTO_CGROUP)`.
+/// 2. If stdio FDs were passed over seqpacket SCM_RIGHTS, they are dup2'd to 0, 1, 2.
+/// 3. New session is established (`setsid`).
+/// 4. Group memberships are cleared (`setgroups`).
+/// 5. GID is dropped to `target_gid` (`setresgid`).
+/// 6. UID is dropped to `target_uid` (`setresuid`).
+/// 7. `no_new_privs` is enabled (`prctl`).
+/// 8. Capabilities are cleared as defence in depth (`capset` + ambient clear).
+/// 9. Working directory is changed (`chdir`).
+/// 10. Command is executed (`execve`).
+///
+/// Returns `(child_pid, optional_pidfd)`.
+pub fn spawn_in_cgroup(ctx: SpawnContext<'_>) -> Result<(i32, Option<OwnedFd>)> {
+    if ctx.cmd.is_empty() {
         bail!("empty command");
     }
 
     // Resolve binary path (absolute or via PATH)
-    let binary_str = &cmd[0];
+    let binary_str = &ctx.cmd[0];
     let resolved_path = if binary_str.contains('/') {
         binary_str.clone()
     } else {
@@ -91,16 +121,16 @@ pub fn spawn_in_cgroup(
     let c_path = CString::new(resolved_path.as_str())
         .with_context(|| format!("invalid binary path `{resolved_path}`"))?;
 
-    let mut c_argv = Vec::with_capacity(cmd.len());
-    for arg in cmd {
+    let mut c_argv = Vec::with_capacity(ctx.cmd.len());
+    for arg in ctx.cmd {
         c_argv
             .push(CString::new(arg.as_str()).with_context(|| format!("invalid argument `{arg}`"))?);
     }
     let mut c_argv_ptrs: Vec<*const libc::c_char> = c_argv.iter().map(|s| s.as_ptr()).collect();
     c_argv_ptrs.push(std::ptr::null());
 
-    let mut c_env = Vec::with_capacity(env.len());
-    for (k, v) in env {
+    let mut c_env = Vec::with_capacity(ctx.env.len());
+    for (k, v) in ctx.env {
         c_env.push(
             CString::new(format!("{k}={v}"))
                 .with_context(|| format!("invalid environment `{k}={v}`"))?,
@@ -109,7 +139,7 @@ pub fn spawn_in_cgroup(
     let mut c_envp_ptrs: Vec<*const libc::c_char> = c_env.iter().map(|s| s.as_ptr()).collect();
     c_envp_ptrs.push(std::ptr::null());
 
-    let c_cwd = match cwd {
+    let c_cwd = match ctx.cwd {
         Some(dir) => Some(CString::new(dir).with_context(|| format!("invalid cwd `{dir}`"))?),
         None => None,
     };
@@ -133,7 +163,7 @@ pub fn spawn_in_cgroup(
         tls: 0,
         set_tid: 0,
         set_tid_size: 0,
-        cgroup: cgroup_fd as u64,
+        cgroup: ctx.cgroup_fd as u64,
     };
 
     let clone_res = unsafe {
@@ -144,21 +174,23 @@ pub fn spawn_in_cgroup(
         )
     };
 
+    let child_ctx = ChildExecContext {
+        err_pipe: err_pipe[1],
+        stdio_fds: ctx.stdio_fds,
+        target_uid: ctx.target_uid,
+        target_gid: ctx.target_gid,
+        c_cwd: c_cwd.as_ref(),
+        c_path: &c_path,
+        c_argv_ptrs: &c_argv_ptrs,
+        c_envp_ptrs: &c_envp_ptrs,
+    };
+
     if clone_res == 0 {
         // --- CHILD PROCESS ---
         // Async-signal-safe code only. No allocations, no mutexes.
         unsafe {
             libc::close(err_pipe[0]); // Close read end in child
-            child_pre_exec(
-                err_pipe[1],
-                stdio_fds,
-                target_uid,
-                target_gid,
-                c_cwd.as_ref(),
-                &c_path,
-                &c_argv_ptrs,
-                &c_envp_ptrs,
-            );
+            child_pre_exec(child_ctx);
         }
     }
 
@@ -206,16 +238,7 @@ pub fn spawn_in_cgroup(
     }
     let err = std::io::Error::last_os_error();
     if err.raw_os_error() == Some(libc::ENOSYS) {
-        return spawn_fallback_pipe(
-            cgroup_path,
-            target_uid,
-            target_gid,
-            c_cwd.as_ref(),
-            stdio_fds,
-            &c_path,
-            &c_argv_ptrs,
-            &c_envp_ptrs,
-        );
+        return spawn_fallback_pipe(ctx.cgroup_path, child_ctx);
     }
 
     Err(err).context("clone3 syscall failed")
@@ -228,56 +251,47 @@ unsafe fn send_child_err_and_exit(err_pipe: RawFd, msg: &[u8], code: i32) -> ! {
 }
 
 /// Async-signal-safe setup in child process before execve.
-unsafe fn child_pre_exec(
-    err_pipe: RawFd,
-    stdio_fds: Option<[RawFd; 3]>,
-    target_uid: u32,
-    target_gid: u32,
-    c_cwd: Option<&CString>,
-    c_path: &CString,
-    c_argv_ptrs: &[*const libc::c_char],
-    c_envp_ptrs: &[*const libc::c_char],
-) -> ! {
+unsafe fn child_pre_exec(ctx: ChildExecContext<'_>) -> ! {
     // 1. Stdio redirection
-    if let Some([in_fd, out_fd, err_fd]) = stdio_fds {
+    if let Some([in_fd, out_fd, err_fd]) = ctx.stdio_fds {
         if libc::dup2(in_fd, libc::STDIN_FILENO) < 0
             || libc::dup2(out_fd, libc::STDOUT_FILENO) < 0
             || libc::dup2(err_fd, libc::STDERR_FILENO) < 0
         {
-            send_child_err_and_exit(err_pipe, b"dup2 stdio failed\n", 101);
+            send_child_err_and_exit(ctx.err_pipe, b"dup2 stdio failed\n", 101);
         }
     }
 
     // 2. Close file descriptors >= 3 except err_pipe
     for fd in 3..256 {
-        if fd != err_pipe {
+        if fd != ctx.err_pipe {
             libc::close(fd);
         }
     }
 
     // 3. setsid
     if libc::setsid() < 0 {
-        send_child_err_and_exit(err_pipe, b"setsid failed\n", 102);
+        send_child_err_and_exit(ctx.err_pipe, b"setsid failed\n", 102);
     }
 
     // 4. setgroups
     if libc::setgroups(0, std::ptr::null()) < 0 {
-        send_child_err_and_exit(err_pipe, b"setgroups failed\n", 103);
+        send_child_err_and_exit(ctx.err_pipe, b"setgroups failed\n", 103);
     }
 
     // 5. setresgid
-    if libc::setresgid(target_gid, target_gid, target_gid) < 0 {
-        send_child_err_and_exit(err_pipe, b"setresgid failed\n", 104);
+    if libc::setresgid(ctx.target_gid, ctx.target_gid, ctx.target_gid) < 0 {
+        send_child_err_and_exit(ctx.err_pipe, b"setresgid failed\n", 104);
     }
 
     // 6. setresuid
-    if libc::setresuid(target_uid, target_uid, target_uid) < 0 {
-        send_child_err_and_exit(err_pipe, b"setresuid failed\n", 105);
+    if libc::setresuid(ctx.target_uid, ctx.target_uid, ctx.target_uid) < 0 {
+        send_child_err_and_exit(ctx.err_pipe, b"setresuid failed\n", 105);
     }
 
     // 7. PR_SET_NO_NEW_PRIVS
     if libc::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0 {
-        send_child_err_and_exit(err_pipe, b"prctl PR_SET_NO_NEW_PRIVS failed\n", 106);
+        send_child_err_and_exit(ctx.err_pipe, b"prctl PR_SET_NO_NEW_PRIVS failed\n", 106);
     }
 
     // 8. Clear ambient and remaining capabilities as defence in depth
@@ -299,33 +313,31 @@ unsafe fn child_pre_exec(
         },
     ];
     if libc::syscall(SYS_CAPSET, &cap_hdr, &cap_data[0]) < 0 {
-        send_child_err_and_exit(err_pipe, b"capset failed\n", 107);
+        send_child_err_and_exit(ctx.err_pipe, b"capset failed\n", 107);
     }
 
     // 9. chdir to working directory if specified
-    if let Some(cwd) = c_cwd {
+    if let Some(cwd) = ctx.c_cwd {
         if libc::chdir(cwd.as_ptr()) < 0 {
-            send_child_err_and_exit(err_pipe, b"chdir failed\n", 108);
+            send_child_err_and_exit(ctx.err_pipe, b"chdir failed\n", 108);
         }
     }
 
     // 10. Execute command
-    libc::execve(c_path.as_ptr(), c_argv_ptrs.as_ptr(), c_envp_ptrs.as_ptr());
+    libc::execve(
+        ctx.c_path.as_ptr(),
+        ctx.c_argv_ptrs.as_ptr(),
+        ctx.c_envp_ptrs.as_ptr(),
+    );
 
     // If execve failed:
-    send_child_err_and_exit(err_pipe, b"execve failed\n", 127);
+    send_child_err_and_exit(ctx.err_pipe, b"execve failed\n", 127);
 }
 
 /// Fallback fork + pipe handshake if clone3 is unavailable.
 fn spawn_fallback_pipe(
     cgroup_path: &Path,
-    target_uid: u32,
-    target_gid: u32,
-    c_cwd: Option<&CString>,
-    stdio_fds: Option<[RawFd; 3]>,
-    c_path: &CString,
-    c_argv_ptrs: &[*const libc::c_char],
-    c_envp_ptrs: &[*const libc::c_char],
+    mut child_ctx: ChildExecContext<'_>,
 ) -> Result<(i32, Option<OwnedFd>)> {
     let mut c2p = [0; 2];
     let mut p2c = [0; 2];
@@ -361,16 +373,8 @@ fn spawn_fallback_pipe(
             libc::read(p2c[0], buf.as_mut_ptr() as *mut _, 1);
             libc::close(p2c[0]);
 
-            child_pre_exec(
-                err_pipe[1],
-                stdio_fds,
-                target_uid,
-                target_gid,
-                c_cwd,
-                c_path,
-                c_argv_ptrs,
-                c_envp_ptrs,
-            );
+            child_ctx.err_pipe = err_pipe[1];
+            child_pre_exec(child_ctx);
         }
     }
 

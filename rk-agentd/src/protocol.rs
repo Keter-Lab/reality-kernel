@@ -152,7 +152,7 @@ pub fn send_message(sock: RawFd, data: &[u8], fds: &[RawFd]) -> Result<()> {
 
         let mut cmsg_buf = Vec::new();
         if !fds.is_empty() {
-            let fds_bytes = fds.len() * std::mem::size_of::<RawFd>();
+            let fds_bytes = std::mem::size_of_val(fds);
             let cmsg_space = libc::CMSG_SPACE(fds_bytes as u32) as usize;
             cmsg_buf.resize(cmsg_space, 0u8);
 

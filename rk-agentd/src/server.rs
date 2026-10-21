@@ -210,10 +210,17 @@ async fn handle_connection(
             cmd,
             env,
         } => {
-            handle_run(
-                client, cred, profile, session, cwd, cmd, env, fds, handler, registry, config,
-            )
-            .await
+            let run_ctx = RunContext {
+                client,
+                cred,
+                profile_name: profile,
+                session,
+                cwd,
+                cmd,
+                env,
+                passed_fds: fds,
+            };
+            handle_run(run_ctx, handler, registry, config).await
         }
         Request::Apply {
             policy_text,
@@ -330,7 +337,7 @@ async fn handle_connection(
     }
 }
 
-async fn handle_run(
+struct RunContext {
     client: OwnedFd,
     cred: PeerCred,
     profile_name: String,
@@ -339,6 +346,10 @@ async fn handle_run(
     cmd: Vec<String>,
     env: Vec<(String, String)>,
     passed_fds: Vec<OwnedFd>,
+}
+
+async fn handle_run(
+    ctx: RunContext,
     handler: Arc<Mutex<dyn PolicyHandler>>,
     registry: Arc<AgentRegistry>,
     config: Arc<ServerConfig>,
@@ -346,22 +357,22 @@ async fn handle_run(
     // 1. Authorisation and validation
     let (_profile_def, rel_cgroup, cgroup_path, cgroup_id, cgroup_dir_fd) = {
         let mut handler_lock = handler.lock().await;
-        let profile_def = match handler_lock.get_profile(&profile_name) {
+        let profile_def = match handler_lock.get_profile(&ctx.profile_name) {
             Ok(p) => p,
             Err(e) => {
                 let resp = Response::Error {
                     message: format!("{e:#}"),
                 };
-                send_response(client.as_raw_fd(), &resp)?;
+                send_response(ctx.client.as_raw_fd(), &resp)?;
                 return Ok(());
             }
         };
 
-        if let Err(e) = check_launchable_by(&cred, &profile_def) {
+        if let Err(e) = check_launchable_by(&ctx.cred, &profile_def) {
             let resp = Response::Error {
                 message: format!("{e:#}"),
             };
-            send_response(client.as_raw_fd(), &resp)?;
+            send_response(ctx.client.as_raw_fd(), &resp)?;
             return Ok(());
         }
 
@@ -374,20 +385,20 @@ async fn handle_run(
                 let resp = Response::Error {
                     message: format!("failed to create cgroup: {e:#}"),
                 };
-                send_response(client.as_raw_fd(), &resp)?;
+                send_response(ctx.client.as_raw_fd(), &resp)?;
                 return Ok(());
             }
         };
 
         // 3. Bind cgroup to profile before process exists
-        let cgroup_id = match handler_lock.bind_dynamic(&rel_cgroup, &profile_name) {
+        let cgroup_id = match handler_lock.bind_dynamic(&rel_cgroup, &ctx.profile_name) {
             Ok(id) => id,
             Err(e) => {
                 let _ = fs::remove_dir(&cgroup_path);
                 let resp = Response::Error {
                     message: format!("failed to bind profile: {e:#}"),
                 };
-                send_response(client.as_raw_fd(), &resp)?;
+                send_response(ctx.client.as_raw_fd(), &resp)?;
                 return Ok(());
             }
         };
@@ -400,7 +411,7 @@ async fn handle_run(
                 let resp = Response::Error {
                     message: format!("failed to open cgroup dir: {e:#}"),
                 };
-                send_response(client.as_raw_fd(), &resp)?;
+                send_response(ctx.client.as_raw_fd(), &resp)?;
                 return Ok(());
             }
         };
@@ -415,34 +426,34 @@ async fn handle_run(
     };
 
     // 4. Extract stdio file descriptors if passed
-    let stdio_fds = if passed_fds.len() >= 3 {
+    let stdio_fds = if ctx.passed_fds.len() >= 3 {
         Some([
-            passed_fds[0].as_raw_fd(),
-            passed_fds[1].as_raw_fd(),
-            passed_fds[2].as_raw_fd(),
+            ctx.passed_fds[0].as_raw_fd(),
+            ctx.passed_fds[1].as_raw_fd(),
+            ctx.passed_fds[2].as_raw_fd(),
         ])
     } else {
         None
     };
 
     // 5. Never run agents as root: map root caller to configured service user
-    let (target_uid, target_gid) = if cred.uid == 0 {
+    let (target_uid, target_gid) = if ctx.cred.uid == 0 {
         (config.service_uid, config.service_gid)
     } else {
-        (cred.uid, cred.gid)
+        (ctx.cred.uid, ctx.cred.gid)
     };
 
     // 6. Spawn unprivileged process directly into cgroup
-    let spawn_res = spawn_in_cgroup(
-        cgroup_dir_fd.as_raw_fd(),
-        &cgroup_path,
+    let spawn_res = spawn_in_cgroup(crate::launcher::SpawnContext {
+        cgroup_fd: cgroup_dir_fd.as_raw_fd(),
+        cgroup_path: &cgroup_path,
         target_uid,
         target_gid,
-        cwd.as_deref(),
+        cwd: ctx.cwd.as_deref(),
         stdio_fds,
-        &cmd,
-        &env,
-    );
+        cmd: &ctx.cmd,
+        env: &ctx.env,
+    });
 
     let (pid, _pidfd) = match spawn_res {
         Ok(res) => res,
@@ -453,23 +464,23 @@ async fn handle_run(
             let resp = Response::Error {
                 message: format!("failed to spawn agent: {e:#}"),
             };
-            send_response(client.as_raw_fd(), &resp)?;
+            send_response(ctx.client.as_raw_fd(), &resp)?;
             return Ok(());
         }
     };
 
-    let agent_id = rel_cgroup.split('/').last().unwrap_or("agent").to_string();
+    let agent_id = rel_cgroup.split('/').next_back().unwrap_or("agent").to_string();
 
     let agent = ActiveAgent {
         agent_id: agent_id.clone(),
         pid: pid as u32,
-        profile: profile_name,
-        session_id: session,
+        profile: ctx.profile_name,
+        session_id: ctx.session,
         cgroup_rel: rel_cgroup.clone(),
         cgroup_path: cgroup_path.clone(),
         cgroup_id,
-        caller_uid: cred.uid,
-        caller_gid: cred.gid,
+        caller_uid: ctx.cred.uid,
+        caller_gid: ctx.cred.gid,
         target_uid,
         target_gid,
     };
@@ -481,10 +492,10 @@ async fn handle_run(
         pid: pid as u32,
         cgroup_id,
     };
-    send_response(client.as_raw_fd(), &resp)?;
+    send_response(ctx.client.as_raw_fd(), &resp)?;
 
     // 7. Wait for process exit or incoming signal requests
-    let client_fd = client.as_raw_fd();
+    let client_fd = ctx.client.as_raw_fd();
     let handler_clone = handler.clone();
     let registry_clone = registry.clone();
     let cgroup_path_clone = cgroup_path.clone();
@@ -543,7 +554,7 @@ async fn handle_run(
 
         // b. Unbind dynamic cgroup from eBPF map
         let rt = tokio::runtime::Handle::current();
-        let _ = rt.block_on(async {
+        rt.block_on(async {
             let mut lock = handler_clone.lock().await;
             let _ = lock.unbind_dynamic(cgroup_id);
         });

@@ -121,9 +121,9 @@ fn get_username_and_groups(
         }
 
         for &gid in groups.iter().take(ngroups as usize) {
-            out_gids.insert(gid as u32);
+            out_gids.insert(gid);
             if libc::getgrgid_r(
-                gid as libc::gid_t,
+                gid,
                 &mut grp,
                 grp_buf.as_mut_ptr(),
                 grp_buf.len(),
@@ -209,7 +209,10 @@ mod tests {
             deny_raw_sockets: true,
             rules: Vec::new(),
             exec: None,
-            files: Default::default(),
+            files: rk_policy::net::FilePolicy {
+                rules: Vec::new(),
+                protect_exec_allowlist: false,
+            },
             launchable_by: principals,
         }
     }
