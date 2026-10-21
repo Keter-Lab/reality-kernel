@@ -34,8 +34,8 @@ func TestWireContract(t *testing.T) {
 
 	cases := map[string]Reply{
 		`{"ContainerBound":{"cgroup_id":7,"profile":"strict"}}`: {Kind: "ContainerBound", CgroupID: 7, Profile: "strict"},
-		`"NotGoverned"`:              {Kind: "NotGoverned"},
-		`"ContainerUnbound"`:         {Kind: "ContainerUnbound"},
+		`"NotGoverned"`:             {Kind: "NotGoverned"},
+		`"ContainerUnbound"`:        {Kind: "ContainerUnbound"},
 		`{"Error":{"message":"m"}}`: {Kind: "Error", Message: "m"},
 	}
 	for in, want := range cases {

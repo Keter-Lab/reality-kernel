@@ -76,7 +76,9 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--policy" => opts.policy = Some(it.next().ok_or_else(unrecognised)?.clone()),
-            "--k8s-cgroup-root" => opts.k8s_root = Some(it.next().ok_or_else(unrecognised)?.clone()),
+            "--k8s-cgroup-root" => {
+                opts.k8s_root = Some(it.next().ok_or_else(unrecognised)?.clone())
+            }
             "--watch-policy" => opts.watch = true,
             _ => return Err(unrecognised()),
         }
@@ -292,7 +294,10 @@ fn resolve_k8s_root(arg: &str) -> Result<String> {
         bail!("invalid --k8s-cgroup-root `{arg}`");
     }
     if !fs_root.join(root).is_dir() {
-        bail!("--k8s-cgroup-root `{root}` does not exist under {}", policy::CGROUP_FS);
+        bail!(
+            "--k8s-cgroup-root `{root}` does not exist under {}",
+            policy::CGROUP_FS
+        );
     }
     Ok(root.to_string())
 }
@@ -357,7 +362,10 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
                 &mut ebpf,
                 &Path::new(policy::CGROUP_FS).join(root),
             )?);
-            info!(root = root.as_str(), "network programs attached at the Kubernetes cgroup root");
+            info!(
+                root = root.as_str(),
+                "network programs attached at the Kubernetes cgroup root"
+            );
         }
         info!(?attached, lsm_active, "enforcement programs attached");
 

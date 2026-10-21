@@ -2174,7 +2174,10 @@ allowed = ["strict"]
         // Unknown, empty and quarantine profiles are refused everywhere.
         for name in ["nope", "", QUARANTINE] {
             for ns in ["default", "agents"] {
-                assert!(p.resolve_pod_profile(ns, Some(name)).is_err(), "{ns}/{name}");
+                assert!(
+                    p.resolve_pod_profile(ns, Some(name)).is_err(),
+                    "{ns}/{name}"
+                );
             }
         }
     }
@@ -2216,8 +2219,16 @@ allowed = ["strict"]
         let old = policy(K8S);
         let new = policy(&K8S.replace("default = \"research\"", "default = \"strict\""));
         let d = diff(Some(&old), &new);
-        assert!(d.iter().any(|l| l.starts_with("- kubernetes namespace agents: default research")), "{d:?}");
-        assert!(d.iter().any(|l| l.starts_with("+ kubernetes namespace agents: default strict")), "{d:?}");
+        assert!(
+            d.iter()
+                .any(|l| l.starts_with("- kubernetes namespace agents: default research")),
+            "{d:?}"
+        );
+        assert!(
+            d.iter()
+                .any(|l| l.starts_with("+ kubernetes namespace agents: default strict")),
+            "{d:?}"
+        );
         assert!(diff(Some(&old), &old).is_empty());
     }
 }

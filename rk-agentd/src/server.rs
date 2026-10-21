@@ -38,8 +38,11 @@ pub trait PolicyHandler: Send + Sync {
     fn generation(&self) -> u64;
     fn capabilities(&self) -> Vec<CapabilityStatus>;
     /// Profile for a pod's containers (docs/design/phase-5b.md §4).
-    fn resolve_pod_profile(&self, namespace: &str, annotation: Option<&str>)
-        -> Result<Option<String>>;
+    fn resolve_pod_profile(
+        &self,
+        namespace: &str,
+        annotation: Option<&str>,
+    ) -> Result<Option<String>>;
     /// Binds a Kubernetes container cgroup (relative to the cgroupfs root).
     fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64>;
 }
@@ -79,7 +82,9 @@ pub fn container_cgroup(proc_cgroup: &str, root: &str) -> Result<String> {
     let root = root.trim_matches('/');
     if root.is_empty()
         || !rel.starts_with(&format!("{root}/"))
-        || rel.split('/').any(|s| s.is_empty() || s == "." || s == "..")
+        || rel
+            .split('/')
+            .any(|s| s.is_empty() || s == "." || s == "..")
     {
         bail!("container cgroup `{path}` is not under the Kubernetes cgroup root `{root}`");
     }
@@ -406,7 +411,10 @@ async fn handle_connection(
         } => {
             let resp = if cred.uid != 0 {
                 Response::Error {
-                    message: format!("caller uid {} may not bind containers (root only)", cred.uid),
+                    message: format!(
+                        "caller uid {} may not bind containers (root only)",
+                        cred.uid
+                    ),
                 }
             } else {
                 match bind_container(
