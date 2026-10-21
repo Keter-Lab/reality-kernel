@@ -469,7 +469,11 @@ async fn handle_run(
         }
     };
 
-    let agent_id = rel_cgroup.split('/').next_back().unwrap_or("agent").to_string();
+    let agent_id = rel_cgroup
+        .split('/')
+        .next_back()
+        .unwrap_or("agent")
+        .to_string();
 
     let agent = ActiveAgent {
         agent_id: agent_id.clone(),
