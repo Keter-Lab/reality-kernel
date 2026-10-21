@@ -111,23 +111,53 @@ pub struct ProgramReport {
 /// A program type the loader does not know is reported as a failure, so a new
 /// program can never be silently skipped.
 pub fn load_programs(object: Object, ebpf: &mut Ebpf, btf: Option<&Btf>) -> Vec<ProgramReport> {
-    let mut reports: Vec<ProgramReport> = ebpf
-        .programs_mut()
-        .map(|(name, program)| {
-            let (kind, result) = load_program(name, program, btf);
-            ProgramReport {
-                object: object.file_name(),
-                name: name.to_string(),
-                kind,
-                probe: object == Object::Probes,
-                loaded: result.is_ok(),
-                error: result.err().map(|e| tail(&e, MAX_ERROR_LEN)),
-            }
-        })
-        .collect();
+    let report = |name: &str, kind, result: Result<(), String>| ProgramReport {
+        object: object.file_name(),
+        name: name.to_string(),
+        kind,
+        probe: object == Object::Probes,
+        loaded: result.is_ok(),
+        error: result.err().map(|e| tail(&e, MAX_ERROR_LEN)),
+    };
+
+    let mut reports = Vec::new();
+    for (name, program) in ebpf.programs_mut() {
+        if SETATTR_VARIANTS.contains(&name) {
+            continue; // loaded below, in a fixed order
+        }
+        let (kind, result) = load_program(name, program, btf);
+        reports.push(report(name, kind, result));
+    }
+
+    // inode_setattr gained an `idmap` argument in Linux 6.9. v2 reads three
+    // arguments, so the verifier only accepts it where the hook has them; trying
+    // v2 first and v1 only if v2 is rejected therefore selects the matching
+    // variant on every kernel. (programs_mut() iteration order is unspecified:
+    // trying v1 first could load it with shifted arguments on 6.9-6.11.)
+    let mut setattr = Vec::new();
+    for name in SETATTR_VARIANTS {
+        let Some(program) = ebpf.program_mut(name) else {
+            continue;
+        };
+        let (kind, result) = load_program(name, program, btf);
+        let loaded = result.is_ok();
+        setattr.push(report(name, kind, result));
+        if loaded {
+            break;
+        }
+    }
+    // Report the variant that loaded; if none did, report every failure.
+    match setattr.iter().position(|r| r.loaded) {
+        Some(i) => reports.push(setattr.swap_remove(i)),
+        None => reports.extend(setattr),
+    }
+
     reports.sort_by(|a, b| a.name.cmp(&b.name));
     reports
 }
+
+/// `inode_setattr` variants in load order: v2 (6.9+, with `idmap`) first.
+pub const SETATTR_VARIANTS: [&str; 2] = ["rk_file_setattr_v2", "rk_file_setattr_v1"];
 
 /// LSM hook for each LSM program. Every LSM program must be listed here.
 fn lsm_hook(program: &str) -> Option<&'static str> {
@@ -135,6 +165,15 @@ fn lsm_hook(program: &str) -> Option<&'static str> {
         "rk_test_lsm_open" => Some("file_open"),
         "rk_net_socket_create" => Some("socket_create"),
         "rk_exec_check" => Some("bprm_check_security"),
+        "rk_file_open" => Some("file_open"),
+        "rk_file_unlink" => Some("inode_unlink"),
+        "rk_file_rmdir" => Some("inode_rmdir"),
+        "rk_file_rename" => Some("inode_rename"),
+        "rk_file_link" => Some("inode_link"),
+        "rk_file_create" => Some("inode_create"),
+        "rk_file_mkdir" => Some("inode_mkdir"),
+        "rk_file_setattr_v1" => Some("inode_setattr"),
+        "rk_file_setattr_v2" => Some("inode_setattr"),
         _ => None,
     }
 }
@@ -230,6 +269,15 @@ mod tests {
         assert_eq!(lsm_hook("rk_test_lsm_open"), Some("file_open"));
         assert_eq!(lsm_hook("rk_unknown"), None);
         assert_eq!(lsm_hook("rk_exec_check"), Some("bprm_check_security"));
+        assert_eq!(lsm_hook("rk_file_open"), Some("file_open"));
+        assert_eq!(lsm_hook("rk_file_unlink"), Some("inode_unlink"));
+        assert_eq!(lsm_hook("rk_file_rmdir"), Some("inode_rmdir"));
+        assert_eq!(lsm_hook("rk_file_rename"), Some("inode_rename"));
+        assert_eq!(lsm_hook("rk_file_link"), Some("inode_link"));
+        assert_eq!(lsm_hook("rk_file_create"), Some("inode_create"));
+        assert_eq!(lsm_hook("rk_file_mkdir"), Some("inode_mkdir"));
+        assert_eq!(lsm_hook("rk_file_setattr_v1"), Some("inode_setattr"));
+        assert_eq!(lsm_hook("rk_file_setattr_v2"), Some("inode_setattr"));
         assert_eq!(btf_tracepoint("rk_exec_record"), Some("sched_process_exec"));
         assert_eq!(btf_tracepoint("rk_unknown"), None);
     }

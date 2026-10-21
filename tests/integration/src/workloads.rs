@@ -37,6 +37,21 @@ pub fn run_child(args: &[String]) -> i32 {
         "exec_large_argv" => handle_exec_large_argv(rest),
         "exec_reload_workload" => handle_exec_reload_workload(rest),
         "memfd_exec" => handle_memfd_exec(rest),
+        "file_open" => handle_file_open(rest),
+        "file_openat2" => handle_file_openat2(rest),
+        "file_io_uring_openat" => handle_file_io_uring_openat(rest),
+        "file_truncate" => handle_file_truncate(rest),
+        "file_ftruncate" => handle_file_ftruncate(rest),
+        "file_unlink" => handle_file_unlink(rest),
+        "file_rmdir" => handle_file_rmdir(rest),
+        "file_rename" => handle_file_rename(rest),
+        "file_rename_exchange" => handle_file_rename_exchange(rest),
+        "file_link" => handle_file_link(rest),
+        "file_create" => handle_file_create(rest),
+        "file_chmod" => handle_file_chmod(rest),
+        "file_proc_fd_reopen" => handle_file_proc_fd_reopen(rest),
+        "file_relative_open" => handle_file_relative_open(rest),
+        "file_reload_workload" => handle_file_reload_workload(rest),
         other => {
             eprintln!("[child] unknown workload: {other}");
             203
@@ -733,4 +748,583 @@ fn handle_memfd_exec(args: &[String]) -> i32 {
         }
         _ => 306,
     }
+}
+
+#[repr(C)]
+struct OpenHow {
+    flags: u64,
+    mode: u64,
+    resolve: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+const SYS_OPENAT2: libc::c_long = 437;
+#[cfg(target_arch = "aarch64")]
+const SYS_OPENAT2: libc::c_long = 437;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+const SYS_OPENAT2: libc::c_long = libc::SYS_openat2;
+
+#[cfg(target_arch = "x86_64")]
+const SYS_RENAMEAT2: libc::c_long = 316;
+#[cfg(target_arch = "aarch64")]
+const SYS_RENAMEAT2: libc::c_long = 276;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+const SYS_RENAMEAT2: libc::c_long = libc::SYS_renameat2;
+
+fn handle_file_open(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        eprintln!("[child] file_open expects <path> <mode: r|w|rw|o_trunc> <expected: ok|eperm>");
+        return 310;
+    }
+    let path = &args[0];
+    let mode = &args[1];
+    let expected = &args[2];
+
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 311,
+    };
+
+    let flags = match mode.as_str() {
+        "r" => libc::O_RDONLY,
+        "w" => libc::O_WRONLY,
+        "rw" => libc::O_RDWR,
+        "o_trunc" => libc::O_WRONLY | libc::O_TRUNC,
+        _ => return 312,
+    };
+
+    let fd = unsafe { libc::open(c_path.as_ptr(), flags, 0o644) };
+    if fd >= 0 {
+        unsafe { libc::close(fd) };
+        if expected == "ok" {
+            0
+        } else {
+            eprintln!("[child] open({path}) succeeded but expected {expected}");
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            eprintln!("[child] open({path}) failed with error: {err:?}, expected {expected}");
+            2
+        }
+    }
+}
+
+fn handle_file_openat2(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        eprintln!("[child] file_openat2 expects <path> <expected: ok|eperm>");
+        return 313;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 314,
+    };
+
+    let how = OpenHow {
+        flags: libc::O_RDONLY as u64,
+        mode: 0,
+        resolve: 0,
+    };
+
+    let fd = unsafe {
+        libc::syscall(
+            SYS_OPENAT2,
+            libc::AT_FDCWD,
+            c_path.as_ptr(),
+            &how as *const _ as *const libc::c_void,
+            std::mem::size_of::<OpenHow>(),
+        )
+    };
+
+    if fd >= 0 {
+        unsafe { libc::close(fd as libc::c_int) };
+        if expected == "ok" {
+            0
+        } else {
+            eprintln!("[child] openat2({path}) succeeded but expected {expected}");
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            eprintln!("[child] openat2({path}) failed with error: {err:?}");
+            2
+        }
+    }
+}
+
+fn handle_file_io_uring_openat(args: &[String]) -> i32 {
+    if args.is_empty() {
+        return 315;
+    }
+    let path = &args[0];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 316,
+    };
+
+    let mut ring = match io_uring::IoUring::new(8) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[child] io_uring_setup failed: {e}");
+            return 317;
+        }
+    };
+
+    let open_e =
+        io_uring::opcode::OpenAt::new(io_uring::types::Fd(libc::AT_FDCWD), c_path.as_ptr())
+            .flags(libc::O_RDONLY);
+
+    unsafe {
+        if ring.submission().push(&open_e.build()).is_err() {
+            return 318;
+        }
+        if let Err(e) = ring.submit_and_wait(1) {
+            eprintln!("[child] io_uring submit_and_wait error: {e}");
+            return 319;
+        }
+        let cqe = match ring.completion().next() {
+            Some(c) => c,
+            None => return 320,
+        };
+        let res = cqe.result();
+        if res >= 0 {
+            libc::close(res);
+            eprintln!("[child] io_uring openat succeeded, expected -EPERM");
+            1
+        } else if res == -libc::EPERM {
+            0
+        } else {
+            eprintln!("[child] io_uring openat result {res}, expected -EPERM");
+            2
+        }
+    }
+}
+
+fn handle_file_truncate(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 321;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 322,
+    };
+
+    let rc = unsafe { libc::truncate(c_path.as_ptr(), 0) };
+    if rc == 0 {
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_ftruncate(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 323;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 324,
+    };
+
+    unsafe {
+        let fd = libc::open(c_path.as_ptr(), libc::O_WRONLY);
+        if fd < 0 {
+            eprintln!(
+                "[child] open for ftruncate failed: {}",
+                std::io::Error::last_os_error()
+            );
+            return 325;
+        }
+        let rc = libc::ftruncate(fd, 0);
+        let err = std::io::Error::last_os_error();
+        libc::close(fd);
+        if rc == 0 {
+            if expected == "ok" {
+                0
+            } else {
+                1
+            }
+        } else if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_unlink(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 326;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 327,
+    };
+
+    let rc = unsafe { libc::unlink(c_path.as_ptr()) };
+    if rc == 0 {
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_rmdir(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 328;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 329,
+    };
+
+    let rc = unsafe { libc::rmdir(c_path.as_ptr()) };
+    if rc == 0 {
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_rename(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        return 330;
+    }
+    let old_path = &args[0];
+    let new_path = &args[1];
+    let expected = &args[2];
+    let c_old = match std::ffi::CString::new(old_path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 331,
+    };
+    let c_new = match std::ffi::CString::new(new_path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 332,
+    };
+
+    let rc = unsafe { libc::rename(c_old.as_ptr(), c_new.as_ptr()) };
+    if rc == 0 {
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_rename_exchange(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        return 333;
+    }
+    let path_a = &args[0];
+    let path_b = &args[1];
+    let expected = &args[2];
+    let c_a = match std::ffi::CString::new(path_a.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 334,
+    };
+    let c_b = match std::ffi::CString::new(path_b.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 335,
+    };
+
+    const RENAME_EXCHANGE: libc::c_uint = 2;
+    let rc = unsafe {
+        libc::syscall(
+            SYS_RENAMEAT2,
+            libc::AT_FDCWD,
+            c_a.as_ptr(),
+            libc::AT_FDCWD,
+            c_b.as_ptr(),
+            RENAME_EXCHANGE,
+        )
+    };
+    if rc == 0 {
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_link(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        return 336;
+    }
+    let old_path = &args[0];
+    let new_path = &args[1];
+    let expected = &args[2];
+    let c_old = match std::ffi::CString::new(old_path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 337,
+    };
+    let c_new = match std::ffi::CString::new(new_path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 338,
+    };
+
+    let rc = unsafe { libc::link(c_old.as_ptr(), c_new.as_ptr()) };
+    if rc == 0 {
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_create(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 339;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 340,
+    };
+
+    let fd = unsafe {
+        libc::open(
+            c_path.as_ptr(),
+            libc::O_CREAT | libc::O_WRONLY | libc::O_EXCL,
+            0o644,
+        )
+    };
+    if fd >= 0 {
+        unsafe { libc::close(fd) };
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_chmod(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 341;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 342,
+    };
+
+    let rc = unsafe { libc::chmod(c_path.as_ptr(), 0o600) };
+    if rc == 0 {
+        if expected == "ok" {
+            0
+        } else {
+            1
+        }
+    } else {
+        let err = std::io::Error::last_os_error();
+        if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_proc_fd_reopen(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 343;
+    }
+    let path = &args[0];
+    let expected = &args[1];
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 344,
+    };
+
+    unsafe {
+        let fd = libc::open(c_path.as_ptr(), libc::O_RDONLY);
+        if fd < 0 {
+            eprintln!(
+                "[child] open RDONLY failed: {}",
+                std::io::Error::last_os_error()
+            );
+            return 345;
+        }
+        let proc_path = format!("/proc/self/fd/{fd}");
+        let c_proc = std::ffi::CString::new(proc_path).unwrap();
+        let fd2 = libc::open(c_proc.as_ptr(), libc::O_WRONLY);
+        let err = std::io::Error::last_os_error();
+        libc::close(fd);
+        if fd2 >= 0 {
+            libc::close(fd2);
+            if expected == "ok" {
+                0
+            } else {
+                1
+            }
+        } else if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+            0
+        } else {
+            2
+        }
+    }
+}
+
+fn handle_file_relative_open(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        return 346;
+    }
+    let dir = &args[0];
+    let rel_path = &args[1];
+    let expected = &args[2];
+    let c_dir = match std::ffi::CString::new(dir.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 347,
+    };
+    let c_rel = match std::ffi::CString::new(rel_path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 348,
+    };
+
+    unsafe {
+        if libc::chdir(c_dir.as_ptr()) < 0 {
+            eprintln!(
+                "[child] chdir({dir}) failed: {}",
+                std::io::Error::last_os_error()
+            );
+            return 349;
+        }
+        let fd = libc::open(c_rel.as_ptr(), libc::O_RDONLY);
+        if fd >= 0 {
+            libc::close(fd);
+            if expected == "ok" {
+                0
+            } else {
+                1
+            }
+        } else {
+            let err = std::io::Error::last_os_error();
+            if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+                0
+            } else {
+                2
+            }
+        }
+    }
+}
+
+fn handle_file_reload_workload(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        return 350;
+    }
+    let path = &args[0];
+    let count: usize = match args[1].parse() {
+        Ok(c) => c,
+        Err(_) => return 351,
+    };
+    let pace_us: u64 = match args[2].parse() {
+        Ok(p) => p,
+        Err(_) => return 352,
+    };
+
+    let c_path = match std::ffi::CString::new(path.as_str()) {
+        Ok(p) => p,
+        Err(_) => return 353,
+    };
+
+    let mut eperm_count = 0u64;
+    let mut ok_count = 0u64;
+
+    for _ in 0..count {
+        unsafe {
+            let fd = libc::open(c_path.as_ptr(), libc::O_RDONLY);
+            if fd >= 0 {
+                ok_count += 1;
+                libc::close(fd);
+            } else {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EPERM) {
+                    eperm_count += 1;
+                }
+            }
+        }
+        if pace_us > 0 {
+            std::thread::sleep(Duration::from_micros(pace_us));
+        }
+    }
+
+    println!("{{\"eperm\":{eperm_count},\"ok\":{ok_count}}}");
+    0
 }

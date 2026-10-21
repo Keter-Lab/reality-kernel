@@ -40,6 +40,29 @@ pub const QUARANTINE: &str = "quarantine";
 /// Maximum files an `exec.allow_dirs` expansion may add per profile.
 pub const MAX_EXEC_DIR_FILES: usize = 4096;
 
+/// File access bits (`enum rk_file_access` in rk_abi.h).
+pub const FILE_READ: u32 = 1;
+pub const FILE_WRITE: u32 = 2;
+pub const FILE_EXEC: u32 = 4;
+pub const FILE_CREATE: u32 = 8;
+pub const FILE_DELETE: u32 = 16;
+pub const FILE_RENAME: u32 = 32;
+pub const FILE_TRUNCATE: u32 = 64;
+pub const FILE_LINK: u32 = 128;
+pub const FILE_SETATTR: u32 = 256;
+pub const FILE_ALL: u32 = 511;
+
+/// Accesses denied on allow-listed executables when `protect_exec_allowlist`
+/// is on: everything that could change or replace them (Phase 3 gap).
+pub const PROTECT_EXEC_MASK: u32 =
+    FILE_WRITE | FILE_TRUNCATE | FILE_DELETE | FILE_RENAME | FILE_LINK | FILE_SETATTR;
+
+/// Built-in file deny lists that profiles can `files.include`.
+pub const FILE_LISTS: &[(&str, &str)] = &[(
+    "credentials",
+    include_str!("../../deploy/policy/credentials.toml"),
+)];
+
 /// Root of every binding: hooks are attached at `/sys/fs/cgroup/rk.slice`.
 pub const CGROUP_ROOT: &str = "rk.slice";
 
@@ -129,6 +152,45 @@ struct ProfileFile {
     /// Absent: exec policy inactive (every exec allowed), see design §8.1.
     #[serde(default)]
     exec: Option<ExecFile>,
+    #[serde(default)]
+    files: FilesFile,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+struct FilesFile {
+    include: Vec<String>,
+    /// Default: on when the profile has an `[exec]` section.
+    protect_exec_allowlist: Option<bool>,
+    deny: Vec<FileRuleFile>,
+}
+
+impl Default for FilesFile {
+    fn default() -> Self {
+        FilesFile {
+            include: vec!["credentials".to_string()],
+            protect_exec_allowlist: None,
+            deny: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileRuleFile {
+    path: String,
+    #[serde(default)]
+    subtree: bool,
+    access: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileListFile {
+    name: String,
+    #[allow(dead_code)]
+    description: String,
+    deny: Vec<FileRuleFile>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -258,6 +320,25 @@ pub struct Profile {
     pub rules: Vec<Rule>,
     /// `None`: exec policy inactive for this profile (every exec allowed).
     pub exec: Option<ExecPolicy>,
+    pub files: FilePolicy,
+}
+
+/// One file deny rule. Paths are resolved to (device, inode) by the sensor at
+/// apply time; see docs/design/phase-4.md §4.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileRule {
+    pub id: u32,
+    pub path: String,
+    pub subtree: bool,
+    pub deny_mask: u32,
+    /// From a built-in list: skipped if the path does not exist on this host.
+    pub optional: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilePolicy {
+    pub rules: Vec<FileRule>,
+    pub protect_exec_allowlist: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -574,6 +655,14 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             None => None,
             Some(ef) => Some(parse_exec(ef, &ctx, name, &mut next_rule, &mut origins)?),
         };
+        let files = parse_files(
+            &pf.files,
+            exec.is_some(),
+            &ctx,
+            name,
+            &mut next_rule,
+            &mut origins,
+        )?;
 
         profiles.push(Profile {
             id,
@@ -583,6 +672,7 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             deny_raw_sockets: net.deny_raw_sockets,
             rules,
             exec,
+            files,
         });
     }
 
@@ -598,6 +688,14 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
             allow_unlinked: false,
             allow: Vec::new(),
         }),
+        files: parse_files(
+            &FilesFile::default(),
+            true,
+            &format!("profile `{QUARANTINE}`"),
+            QUARANTINE,
+            &mut next_rule,
+            &mut origins,
+        )?,
     });
 
     let mut bindings = Vec::new();
@@ -623,6 +721,108 @@ pub fn parse(text: &str, ids: &mut ProfileIds) -> Result<Policy, PolicyError> {
         profiles,
         bindings,
         origins,
+    })
+}
+
+fn parse_access(list: &[String]) -> Result<u32, String> {
+    if list.is_empty() {
+        return Err("`access` must list at least one access type".to_string());
+    }
+    list.iter().try_fold(0u32, |mask, a| {
+        let bit = match a.as_str() {
+            "read" => FILE_READ,
+            "write" => FILE_WRITE,
+            "exec" => FILE_EXEC,
+            "create" => FILE_CREATE,
+            "delete" => FILE_DELETE,
+            "rename" => FILE_RENAME,
+            "truncate" => FILE_TRUNCATE,
+            "link" => FILE_LINK,
+            "setattr" => FILE_SETATTR,
+            "all" => FILE_ALL,
+            other => {
+                return Err(format!(
+                    "unknown access `{other}` (expected read, write, exec, create, delete, \
+                     rename, truncate, link, setattr or all)"
+                ))
+            }
+        };
+        Ok(mask | bit)
+    })
+}
+
+fn parse_files(
+    ff: &FilesFile,
+    has_exec: bool,
+    ctx: &str,
+    profile: &str,
+    next_rule: &mut u32,
+    origins: &mut Vec<RuleOrigin>,
+) -> Result<FilePolicy, PolicyError> {
+    let mut rules = Vec::new();
+    let mut push = |r: &FileRuleFile, optional: bool, origin: String, rules: &mut Vec<FileRule>| {
+        let rctx = format!("{ctx}, {origin}");
+        if !r.path.starts_with('/') || r.path.contains('\0') {
+            return Err(PolicyError::new(
+                &rctx,
+                format!("`{}` must be an absolute path", r.path),
+            ));
+        }
+        let deny_mask = parse_access(&r.access).map_err(|m| PolicyError::new(&rctx, m))?;
+        rules.push(FileRule {
+            id: *next_rule,
+            path: r.path.clone(),
+            subtree: r.subtree,
+            deny_mask,
+            optional,
+        });
+        origins.push(RuleOrigin {
+            id: *next_rule,
+            profile: profile.to_string(),
+            origin,
+        });
+        *next_rule += 1;
+        Ok(())
+    };
+
+    let mut seen_lists = BTreeSet::new();
+    for list_name in &ff.include {
+        if !seen_lists.insert(list_name.as_str()) {
+            continue;
+        }
+        let text = FILE_LISTS
+            .iter()
+            .find(|(n, _)| *n == list_name.as_str())
+            .map(|(_, t)| *t)
+            .ok_or_else(|| {
+                let known: Vec<_> = FILE_LISTS.iter().map(|(n, _)| *n).collect();
+                PolicyError::new(
+                    ctx,
+                    format!(
+                        "unknown files list `{list_name}` (known: {})",
+                        known.join(", ")
+                    ),
+                )
+            })?;
+        let list: FileListFile = toml::from_str(text).map_err(|e| {
+            PolicyError::new(ctx, format!("built-in list `{list_name}` is invalid: {e}"))
+        })?;
+        if list.name != *list_name {
+            return Err(PolicyError::new(
+                ctx,
+                format!("built-in list `{list_name}` declares name `{}`", list.name),
+            ));
+        }
+        for (i, r) in list.deny.iter().enumerate() {
+            push(r, true, format!("{list_name}[{i}] {}", r.path), &mut rules)?;
+        }
+    }
+    for (i, r) in ff.deny.iter().enumerate() {
+        push(r, false, format!("files.deny[{i}] {}", r.path), &mut rules)?;
+    }
+    Ok(FilePolicy {
+        rules,
+        protect_exec_allowlist: ff.protect_exec_allowlist.unwrap_or(has_exec),
     })
 }
 
@@ -784,6 +984,26 @@ pub struct Compiled {
     pub allow: Vec<Entry>,
     /// Exec allowlist entries, still as paths: the sensor resolves them.
     pub exec: Vec<CompiledExec>,
+    /// File deny rules, still as paths: the sensor resolves them.
+    pub files: Vec<CompiledFile>,
+}
+
+/// What a compiled file rule points at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileTarget {
+    /// A path from a `files` rule (or built-in list).
+    Path { subtree: bool, optional: bool },
+    /// An exec allowlist entry protected by `protect_exec_allowlist`.
+    Exec(ExecPathKind),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledFile {
+    pub profile: u32,
+    pub rule_id: u32,
+    pub path: String,
+    pub target: FileTarget,
+    pub deny_mask: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -807,8 +1027,31 @@ pub fn compile(policy: &Policy, generation: u64) -> Result<Compiled, PolicyError
         deny: Vec::new(),
         allow: Vec::new(),
         exec: Vec::new(),
+        files: Vec::new(),
     };
     for prof in &policy.profiles {
+        out.files
+            .extend(prof.files.rules.iter().map(|r| CompiledFile {
+                profile: prof.id,
+                rule_id: r.id,
+                path: r.path.clone(),
+                target: FileTarget::Path {
+                    subtree: r.subtree,
+                    optional: r.optional,
+                },
+                deny_mask: r.deny_mask,
+            }));
+        if prof.files.protect_exec_allowlist {
+            if let Some(exec) = &prof.exec {
+                out.files.extend(exec.allow.iter().map(|a| CompiledFile {
+                    profile: prof.id,
+                    rule_id: a.id,
+                    path: a.path.clone(),
+                    target: FileTarget::Exec(a.kind),
+                    deny_mask: PROTECT_EXEC_MASK,
+                }));
+            }
+        }
         out.profiles.push(CompiledProfile {
             id: prof.id,
             mode: prof.mode,
@@ -1284,6 +1527,79 @@ mod tests {
         .unwrap();
         let qid = |p: &Policy| p.profiles.iter().find(|p| p.name == QUARANTINE).unwrap().id;
         assert_eq!(qid(&one), qid(&two));
+    }
+
+    #[test]
+    fn parses_files_sections() {
+        let p = policy(
+            r#"
+            [profiles.agent]
+            mode = "enforce"
+            [profiles.agent.exec]
+            allow = ["/usr/bin/git"]
+            [[profiles.agent.files.deny]]
+            path = "/home/agent/.ssh"
+            subtree = true
+            access = ["all"]
+            [[profiles.agent.files.deny]]
+            path = "/etc/hosts"
+            access = ["write", "truncate"]
+        "#,
+        );
+        let agent = p.profiles.iter().find(|p| p.name == "agent").unwrap();
+        // credentials list (optional entries) + two explicit rules.
+        assert!(agent
+            .files
+            .rules
+            .iter()
+            .any(|r| r.path == "/etc/shadow" && r.optional));
+        let hosts = agent
+            .files
+            .rules
+            .iter()
+            .find(|r| r.path == "/etc/hosts")
+            .unwrap();
+        assert_eq!(hosts.deny_mask, FILE_WRITE | FILE_TRUNCATE);
+        assert!(!hosts.optional);
+        let ssh = agent
+            .files
+            .rules
+            .iter()
+            .find(|r| r.path == "/home/agent/.ssh")
+            .unwrap();
+        assert!(ssh.subtree);
+        assert_eq!(ssh.deny_mask, FILE_ALL);
+        // [exec] present: protect_exec_allowlist defaults on.
+        assert!(agent.files.protect_exec_allowlist);
+
+        let c = compile(&p, 1).unwrap();
+        let git = c
+            .files
+            .iter()
+            .find(|f| f.profile == agent.id && f.path == "/usr/bin/git")
+            .unwrap();
+        assert_eq!(git.target, FileTarget::Exec(ExecPathKind::File));
+        assert_eq!(git.deny_mask, PROTECT_EXEC_MASK);
+    }
+
+    #[test]
+    fn files_defaults_and_errors() {
+        let p = policy("[profiles.a]\nmode = \"audit\"\n");
+        let a = &p.profiles[0];
+        assert!(!a.files.protect_exec_allowlist); // no [exec] section
+        assert!(a.files.rules.iter().all(|r| r.optional)); // only the built-in list
+        let none = policy("[profiles.a]\nmode = \"audit\"\n[profiles.a.files]\ninclude = []\n");
+        assert!(none.profiles[0].files.rules.is_empty());
+        assert!(err("[profiles.a]\nmode = \"audit\"\n[[profiles.a.files.deny]]\npath = \"etc/x\"\naccess = [\"read\"]\n")
+            .contains("must be an absolute path"));
+        assert!(err("[profiles.a]\nmode = \"audit\"\n[[profiles.a.files.deny]]\npath = \"/x\"\naccess = [\"eat\"]\n")
+            .contains("unknown access"));
+        assert!(err("[profiles.a]\nmode = \"audit\"\n[[profiles.a.files.deny]]\npath = \"/x\"\naccess = []\n")
+            .contains("at least one access"));
+        assert!(
+            err("[profiles.a]\nmode = \"audit\"\n[profiles.a.files]\ninclude = [\"nope\"]\n")
+                .contains("unknown files list")
+        );
     }
 
     #[test]

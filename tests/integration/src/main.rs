@@ -94,6 +94,103 @@ allow = [
     "/run/rk-test/replaced_bin",
 ]
 
+[profiles.enforce-profile.files]
+protect_exec_allowlist = true
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_read_deny"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_write_deny"
+access = ["write"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_openat2_deny"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_io_uring_deny"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_o_trunc_deny"
+access = ["truncate"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_truncate_deny"
+access = ["truncate"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_ftruncate_deny"
+access = ["truncate"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_unlink_deny"
+access = ["delete"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_unlinkat_dir_deny"
+access = ["delete"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_rename_src_deny"
+access = ["rename"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_rename_replace_deny"
+access = ["delete", "rename"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_rename_exchange_a"
+access = ["rename"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_link_deny"
+access = ["link"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/dir_create_deny"
+access = ["create"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_chmod_deny"
+access = ["setattr"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_hardlink_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_bind_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_symlink_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_proc_fd_base"
+access = ["write"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_relative_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/subtree_dir"
+subtree = true
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/deep"
+subtree = true
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_reload_test"
+access = ["read"]
+
 [profiles.audit-profile]
 mode = "audit"
 network.default = "allow"
@@ -104,6 +201,11 @@ proto = ["tcp", "udp"]
 
 [profiles.audit-profile.exec]
 default = "deny"
+
+[profiles.audit-profile.files]
+[[profiles.audit-profile.files.deny]]
+path = "/run/rk-test/audit_file_deny"
+access = ["read"]
 
 [profiles.unlinked-profile]
 mode = "enforce"
@@ -162,6 +264,99 @@ allow = [
     "/run/rk-test/reload_bin",
 ]
 
+[profiles.enforce-profile.files]
+protect_exec_allowlist = true
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_read_deny"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_write_deny"
+access = ["write"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_openat2_deny"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_io_uring_deny"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_o_trunc_deny"
+access = ["truncate"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_truncate_deny"
+access = ["truncate"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_ftruncate_deny"
+access = ["truncate"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_unlink_deny"
+access = ["delete"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_unlinkat_dir_deny"
+access = ["delete"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_rename_src_deny"
+access = ["rename"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_rename_replace_deny"
+access = ["delete", "rename"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_rename_exchange_a"
+access = ["rename"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_link_deny"
+access = ["link"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/dir_create_deny"
+access = ["create"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_chmod_deny"
+access = ["setattr"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_hardlink_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_bind_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_symlink_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_proc_fd_base"
+access = ["write"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/file_relative_base"
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/subtree_dir"
+subtree = true
+access = ["read"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/deep"
+subtree = true
+access = ["read"]
+
 [profiles.audit-profile]
 mode = "audit"
 network.default = "allow"
@@ -172,6 +367,11 @@ proto = ["tcp", "udp"]
 
 [profiles.audit-profile.exec]
 default = "deny"
+
+[profiles.audit-profile.files]
+[[profiles.audit-profile.files.deny]]
+path = "/run/rk-test/audit_file_deny"
+access = ["read"]
 
 [profiles.unlinked-profile]
 mode = "enforce"
@@ -1283,6 +1483,657 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         )
     });
 
+    run_test(checks, "file_open_read_denied", || {
+        let rule_id = file_rule_id(&engine, "enforce-profile", "/run/rk-test/file_read_deny")?;
+        let cg_id = engine.cgroup_id("rk.slice/enforce").context("cgroup id")?;
+        let (dev, ino) = file_identity("/run/rk-test/file_read_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &["/run/rk-test/file_read_deny", "r", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 {
+            anyhow::bail!("expected RK_VERDICT_DENY, got {}", ev.verdict);
+        }
+        if ev.rule_id != rule_id {
+            anyhow::bail!("expected rule_id {rule_id}, got {}", ev.rule_id);
+        }
+        if ev.cgroup_id != cg_id {
+            anyhow::bail!("expected cgroup_id {cg_id}, got {}", ev.cgroup_id);
+        }
+        if (ev.access & RK_FILE_READ) == 0 {
+            anyhow::bail!("expected RK_FILE_READ in access, got {}", ev.access);
+        }
+        if ev.hook != RK_FILE_HOOK_OPEN {
+            anyhow::bail!("expected RK_FILE_HOOK_OPEN, got {}", ev.hook);
+        }
+        Ok("file open for read denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_open_write_denied", || {
+        let rule_id = file_rule_id(&engine, "enforce-profile", "/run/rk-test/file_write_deny")?;
+        let cg_id = engine.cgroup_id("rk.slice/enforce").context("cgroup id")?;
+        let (dev, ino) = file_identity("/run/rk-test/file_write_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &["/run/rk-test/file_write_deny", "w", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || ev.rule_id != rule_id
+            || ev.cgroup_id != cg_id
+        {
+            anyhow::bail!("header mismatch in file_open_write_denied: {ev:?}");
+        }
+        if (ev.access & RK_FILE_WRITE) == 0 || ev.hook != RK_FILE_HOOK_OPEN {
+            anyhow::bail!("body mismatch in file_open_write_denied: {ev:?}");
+        }
+        Ok("file open for write denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_openat2_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_openat2_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_openat2",
+            &["/run/rk-test/file_openat2_deny", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || ev.hook != RK_FILE_HOOK_OPEN {
+            anyhow::bail!("event mismatch in file_openat2_denied: {ev:?}");
+        }
+        Ok("openat2 denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_io_uring_openat_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_io_uring_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_io_uring_openat",
+            &["/run/rk-test/file_io_uring_deny"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || ev.hook != RK_FILE_HOOK_OPEN {
+            anyhow::bail!("event mismatch in file_io_uring_openat_denied: {ev:?}");
+        }
+        Ok("io_uring openat denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_o_trunc_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_o_trunc_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &["/run/rk-test/file_o_trunc_deny", "o_trunc", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || (ev.access & RK_FILE_TRUNCATE) == 0 {
+            anyhow::bail!("event mismatch in file_o_trunc_denied: {ev:?}");
+        }
+        Ok("O_TRUNC open denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_truncate_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_truncate_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_truncate",
+            &["/run/rk-test/file_truncate_deny", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_TRUNCATE) == 0
+            || ev.hook != RK_FILE_HOOK_SETATTR
+        {
+            anyhow::bail!("event mismatch in file_truncate_denied: {ev:?}");
+        }
+        Ok("truncate(2) denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_ftruncate_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_ftruncate_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_ftruncate",
+            &["/run/rk-test/file_ftruncate_deny", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_TRUNCATE) == 0
+            || ev.hook != RK_FILE_HOOK_SETATTR
+        {
+            anyhow::bail!("event mismatch in file_ftruncate_denied: {ev:?}");
+        }
+        Ok("ftruncate(2) denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_unlink_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_unlink_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_unlink",
+            &["/run/rk-test/file_unlink_deny", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_DELETE) == 0
+            || ev.hook != RK_FILE_HOOK_UNLINK
+        {
+            anyhow::bail!("event mismatch in file_unlink_denied: {ev:?}");
+        }
+        Ok("unlink(2) denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_unlinkat_dir_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_unlinkat_dir_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_rmdir",
+            &["/run/rk-test/file_unlinkat_dir_deny", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_DELETE) == 0
+            || ev.hook != RK_FILE_HOOK_UNLINK
+        {
+            anyhow::bail!("event mismatch in file_unlinkat_dir_denied: {ev:?}");
+        }
+        Ok("rmdir/unlinkat on directory denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_rename_source_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_rename_src_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_rename",
+            &[
+                "/run/rk-test/file_rename_src_deny",
+                "/run/rk-test/renamed_target",
+                "eperm",
+            ],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_RENAME) == 0
+            || ev.hook != RK_FILE_HOOK_RENAME
+        {
+            anyhow::bail!("event mismatch in file_rename_source_denied: {ev:?}");
+        }
+        Ok("rename source denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_rename_replace_target_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_rename_replace_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_rename",
+            &[
+                "/run/rk-test/file_rename_src_allowed",
+                "/run/rk-test/file_rename_replace_deny",
+                "eperm",
+            ],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || ev.hook != RK_FILE_HOOK_RENAME {
+            anyhow::bail!("event mismatch in file_rename_replace_target_denied: {ev:?}");
+        }
+        Ok("rename replace target denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_rename_exchange_denied", || {
+        let (dev_a, ino_a) = file_identity("/run/rk-test/file_rename_exchange_a")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_rename_exchange",
+            &[
+                "/run/rk-test/file_rename_exchange_a",
+                "/run/rk-test/file_rename_exchange_b",
+                "eperm",
+            ],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev_a && e.file_ino == ino_a
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || ev.hook != RK_FILE_HOOK_RENAME {
+            anyhow::bail!("event mismatch in file_rename_exchange_denied: {ev:?}");
+        }
+        Ok("renameat2 RENAME_EXCHANGE denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_link_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_link_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_link",
+            &[
+                "/run/rk-test/file_link_deny",
+                "/run/rk-test/file_link_new",
+                "eperm",
+            ],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_LINK) == 0
+            || ev.hook != RK_FILE_HOOK_LINK
+        {
+            anyhow::bail!("event mismatch in file_link_denied: {ev:?}");
+        }
+        Ok("link(2) denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_create_in_protected_dir_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/dir_create_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_create",
+            &["/run/rk-test/dir_create_deny/new_file", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_CREATE) == 0
+            || ev.hook != RK_FILE_HOOK_CREATE
+        {
+            anyhow::bail!("event mismatch in file_create_in_protected_dir_denied: {ev:?}");
+        }
+        Ok("create in protected directory denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_chmod_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_chmod_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_chmod",
+            &["/run/rk-test/file_chmod_deny", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.access & RK_FILE_SETATTR) == 0
+            || ev.hook != RK_FILE_HOOK_SETATTR
+        {
+            anyhow::bail!("event mismatch in file_chmod_denied: {ev:?}");
+        }
+        Ok("chmod(2) denied with EPERM, event verified".into())
+    });
+
+    run_test(checks, "file_hardlink_same_verdict", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_hardlink_base")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &["/run/rk-test/file_hardlink_alias", "r", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 {
+            anyhow::bail!("event mismatch in file_hardlink_same_verdict: {ev:?}");
+        }
+        Ok("hardlink alias open denied with same verdict".into())
+    });
+
+    run_test(checks, "file_bind_mount_same_verdict", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_bind_base")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &["/run/rk-test/file_bind_alias", "r", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 {
+            anyhow::bail!("event mismatch in file_bind_mount_same_verdict: {ev:?}");
+        }
+        Ok("bind mount open denied with same verdict".into())
+    });
+
+    run_test(checks, "file_symlink_same_verdict", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_symlink_base")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &["/run/rk-test/file_symlink_alias", "r", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 {
+            anyhow::bail!("event mismatch in file_symlink_same_verdict: {ev:?}");
+        }
+        Ok("symlink alias open denied with same verdict".into())
+    });
+
+    run_test(checks, "file_proc_fd_reopen_same_verdict", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_proc_fd_base")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_proc_fd_reopen",
+            &["/run/rk-test/file_proc_fd_base", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || (ev.access & RK_FILE_WRITE) == 0 {
+            anyhow::bail!("event mismatch in file_proc_fd_reopen_same_verdict: {ev:?}");
+        }
+        Ok("/proc/self/fd reopen for write denied with same verdict".into())
+    });
+
+    run_test(checks, "file_relative_path_same_verdict", || {
+        let (dev, ino) = file_identity("/run/rk-test/file_relative_base")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_relative_open",
+            &["/run/rk-test", "file_relative_base", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 {
+            anyhow::bail!("event mismatch in file_relative_path_same_verdict: {ev:?}");
+        }
+        Ok("relative path open denied with same verdict".into())
+    });
+
+    run_test(checks, "file_ungoverned_untouched", || {
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/ungoverned",
+            "file_open",
+            &["/run/rk-test/file_read_deny", "r", "ok"],
+        )?;
+        thread::sleep(Duration::from_millis(50));
+        if ring.next().is_some() {
+            anyhow::bail!("unexpected event emitted for ungoverned file access");
+        }
+        Ok("ungoverned task opened protected file successfully without events".into())
+    });
+
+    run_test(checks, "file_subtree_rule_applies", || {
+        let rule_id = file_rule_id(&engine, "enforce-profile", "/run/rk-test/subtree_dir")?;
+        let (dev, ino) = file_identity("/run/rk-test/subtree_dir/nested/deep/file.txt")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &[
+                "/run/rk-test/subtree_dir/nested/deep/file.txt",
+                "r",
+                "eperm",
+            ],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || ev.rule_id != rule_id
+            || (ev.flags & RK_FILE_EV_SUBTREE) == 0
+        {
+            anyhow::bail!("subtree event mismatch: {ev:?}");
+        }
+        Ok("subtree rule covered nested file and set RK_FILE_EV_SUBTREE".into())
+    });
+
+    run_test(checks, "file_deep_nesting_fails_closed", || {
+        let mut deep_path = std::path::PathBuf::from("/run/rk-test/deep");
+        for i in 1..=35 {
+            deep_path.push(format!("d{i}"));
+        }
+        let deep_file = deep_path.join("file.txt");
+        let (dev, ino) = file_identity(deep_file.to_str().unwrap())?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &[deep_file.to_str().unwrap(), "r", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+            || (ev.flags & RK_FILE_EV_DEPTH_EXCEEDED) == 0
+        {
+            anyhow::bail!("deep nesting event mismatch: {ev:?}");
+        }
+        Ok("access beyond 32 levels failed closed with RK_FILE_EV_DEPTH_EXCEEDED".into())
+    });
+
+    run_test(checks, "file_exec_allowlist_write_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/allowed_script.sh")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_open",
+            &["/run/rk-test/allowed_script.sh", "w", "eperm"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || (ev.access & RK_FILE_WRITE) == 0 {
+            anyhow::bail!("exec allowlist write deny event mismatch: {ev:?}");
+        }
+        Ok("write to allowlisted executable denied by protect_exec_allowlist".into())
+    });
+
+    run_test(checks, "file_exec_allowlist_replace_denied", || {
+        let (dev, ino) = file_identity("/run/rk-test/allowed_script.sh")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_rename",
+            &[
+                "/run/rk-test/file_rename_src_allowed",
+                "/run/rk-test/allowed_script.sh",
+                "eperm",
+            ],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8 || ev.hook != RK_FILE_HOOK_RENAME {
+            anyhow::bail!("exec allowlist replace deny event mismatch: {ev:?}");
+        }
+        Ok("replacing allowlisted executable via rename denied".into())
+    });
+
+    run_test(checks, "file_audit_reports_would_deny", || {
+        let rule_id = file_rule_id(&engine, "audit-profile", "/run/rk-test/audit_file_deny")?;
+        let cg_id = engine.cgroup_id("rk.slice/audit").context("cgroup id")?;
+        let (dev, ino) = file_identity("/run/rk-test/audit_file_deny")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/audit",
+            "file_open",
+            &["/run/rk-test/audit_file_deny", "r", "ok"],
+        )?;
+        let ev = poll_file_event(&mut ring, Duration::from_secs(2), |e| {
+            e.file_dev == dev && e.file_ino == ino
+        })?;
+        if ev.verdict != rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY as u8 {
+            anyhow::bail!("expected RK_VERDICT_AUDIT_WOULD_DENY, got {}", ev.verdict);
+        }
+        if ev.rule_id != rule_id || ev.cgroup_id != cg_id {
+            anyhow::bail!("audit header mismatch: {ev:?}");
+        }
+        Ok("audit profile allowed open and reported audit-would-deny".into())
+    });
+
+    run_test(checks, "file_reload_atomic", || {
+        drain_ringbuf(&mut ring)?;
+        let drops_start = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
+
+        let mut deny_gens = HashSet::new();
+        deny_gens.insert(engine.generation());
+
+        let current_exe = std::env::current_exe().context("current_exe")?;
+        let procs = "/sys/fs/cgroup/rk.slice/enforce/cgroup.procs";
+
+        let child = Command::new(&current_exe)
+            .arg(workloads::CHILD_FLAG)
+            .arg(procs)
+            .arg("file_reload_workload")
+            .arg("/run/rk-test/file_reload_test")
+            .arg("2000")
+            .arg("500")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("spawn file_reload_workload child")?;
+        let child_pid = child.id();
+
+        for i in 0..6 {
+            if i % 2 == 0 {
+                engine.apply_text(&mut ebpf, POLICY_B)?;
+            } else {
+                engine.apply_text(&mut ebpf, POLICY_TEXT)?;
+                deny_gens.insert(engine.generation());
+            }
+        }
+
+        let output = wait_with_deadline(child, "file_reload_workload child", CHILD_DEADLINE)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!(
+                "child failed with exit {:?}: {}",
+                output.status.code(),
+                stderr.trim()
+            );
+        }
+
+        #[derive(Deserialize)]
+        struct ChildCounts {
+            eperm: u64,
+            ok: u64,
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let counts: ChildCounts = serde_json::from_str(stdout.trim())
+            .with_context(|| format!("failed to parse child output: {stdout}"))?;
+
+        if counts.eperm + counts.ok < 2000 {
+            anyhow::bail!(
+                "child performed {} opens, expected >= 2000",
+                counts.eperm + counts.ok
+            );
+        }
+
+        // Drain ring buffer
+        let rb = &mut ring;
+        let mut deny_events = 0u64;
+        let drain_start = Instant::now();
+
+        while let Some(item) = rb.next() {
+            if drain_start.elapsed() > DRAIN_DEADLINE {
+                anyhow::bail!(
+                    "ring buffer still producing after {}s while reading file reload events",
+                    DRAIN_DEADLINE.as_secs()
+                );
+            }
+            if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                if ev.hdr.tgid == child_pid
+                    && ev.hdr.type_ == rk_ebpf_common::rk_event_type::RK_EV_FILE_DENY as u16
+                {
+                    let gen = ev.hdr.policy_gen;
+                    let verdict = ev.hdr.verdict;
+                    if deny_gens.contains(&gen) {
+                        if verdict != rk_verdict::RK_VERDICT_DENY as u8 {
+                            anyhow::bail!(
+                                "event for deny gen {gen} had non-deny verdict {verdict}"
+                            );
+                        }
+                        deny_events += 1;
+                    } else {
+                        anyhow::bail!("unexpected deny event under Policy B with gen {gen}");
+                    }
+                }
+            }
+        }
+
+        let drops_end = get_counter(&ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?;
+        let drops = drops_end.saturating_sub(drops_start);
+        if drops > 0 {
+            anyhow::bail!("expected zero drops during file reload atomic, got {drops}");
+        }
+
+        if counts.eperm != deny_events {
+            anyhow::bail!(
+                "counts.eperm ({}) != deny_events ({deny_events})",
+                counts.eperm
+            );
+        }
+
+        // Restore POLICY_TEXT
+        engine.apply_text(&mut ebpf, POLICY_TEXT)?;
+
+        Ok(format!(
+            "2000 opens across 6 policy flips: child observed {} eperm, {} ok; exactly {deny_events} deny events recorded",
+            counts.eperm, counts.ok
+        ))
+    });
+
+    run_test(checks, "file_unbound_sibling_untouched", || {
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/ungoverned-sibling",
+            "file_open",
+            &["/run/rk-test/file_read_deny", "r", "ok"],
+        )?;
+        thread::sleep(Duration::from_millis(50));
+        if ring.next().is_some() {
+            anyhow::bail!("unexpected event emitted for unbound sibling file access");
+        }
+        Ok("unbound sibling opened protected file successfully without events".into())
+    });
+
     // Drop ring and rk.bpf.o instance before loading rk_emitfail.bpf.o
     drop(ring);
     drop(ebpf);
@@ -1428,6 +2279,117 @@ where
     );
 }
 
+const RK_FILE_READ: u32 = 1;
+const RK_FILE_WRITE: u32 = 2;
+const RK_FILE_CREATE: u32 = 8;
+const RK_FILE_DELETE: u32 = 16;
+const RK_FILE_RENAME: u32 = 32;
+const RK_FILE_TRUNCATE: u32 = 64;
+const RK_FILE_LINK: u32 = 128;
+const RK_FILE_SETATTR: u32 = 256;
+
+const RK_FILE_HOOK_OPEN: u16 = 1;
+const RK_FILE_HOOK_UNLINK: u16 = 2;
+const RK_FILE_HOOK_RENAME: u16 = 3;
+const RK_FILE_HOOK_LINK: u16 = 4;
+const RK_FILE_HOOK_CREATE: u16 = 5;
+const RK_FILE_HOOK_SETATTR: u16 = 6;
+
+const RK_FILE_EV_SUBTREE: u8 = 1;
+const RK_FILE_EV_DEPTH_EXCEEDED: u8 = 2;
+
+#[derive(Debug, Clone)]
+struct CapturedFileEvent {
+    verdict: u8,
+    rule_id: u32,
+    cgroup_id: u64,
+    #[allow(dead_code)]
+    policy_gen: u64,
+    file_dev: u64,
+    file_ino: u64,
+    access: u32,
+    hook: u16,
+    flags: u8,
+    #[allow(dead_code)]
+    path: String,
+}
+
+#[cfg(target_os = "linux")]
+fn poll_file_event<F>(
+    rb: &mut RingBuf<MapData>,
+    timeout: Duration,
+    predicate: F,
+) -> Result<CapturedFileEvent>
+where
+    F: Fn(&CapturedFileEvent) -> bool,
+{
+    let start = Instant::now();
+    let mut records = 0u64;
+    while start.elapsed() < timeout {
+        while let Some(item) = rb.next() {
+            records += 1;
+            if start.elapsed() > DRAIN_DEADLINE {
+                anyhow::bail!("timed out after {records} records while waiting for file event");
+            }
+            if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                if ev.hdr.type_ == rk_ebpf_common::rk_event_type::RK_EV_FILE_DENY as u16 {
+                    if let Payload::FileDeny { body, mut strings } = ev.payload {
+                        let path = strings
+                            .next()
+                            .and_then(|b| std::str::from_utf8(b).ok())
+                            .unwrap_or_default()
+                            .to_string();
+                        let cap = CapturedFileEvent {
+                            verdict: ev.hdr.verdict,
+                            rule_id: ev.hdr.rule_id,
+                            cgroup_id: ev.hdr.cgroup_id,
+                            policy_gen: ev.hdr.policy_gen,
+                            file_dev: body.file_dev,
+                            file_ino: body.file_ino,
+                            access: body.access,
+                            hook: body.hook,
+                            flags: body.flags,
+                            path,
+                        };
+                        if predicate(&cap) {
+                            return Ok(cap);
+                        }
+                    }
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    anyhow::bail!(
+        "timeout waiting for matching file event after {:.2}s ({records} records seen)",
+        timeout.as_secs_f32()
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn file_rule_id(
+    engine: &rk_sensor::policy::PolicyEngine,
+    profile: &str,
+    path: &str,
+) -> Result<u32> {
+    engine
+        .policy()
+        .and_then(|p| {
+            p.origins
+                .iter()
+                .find(|o| o.profile == profile && o.origin.contains(path))
+                .map(|o| o.id)
+        })
+        .with_context(|| format!("file rule for {path} in profile {profile} not found"))
+}
+
+#[cfg(target_os = "linux")]
+fn file_identity(path: &str) -> Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = fs::metadata(path).with_context(|| format!("stat {path}"))?;
+    Ok((meta.dev(), meta.ino()))
+}
+
 #[cfg(target_os = "linux")]
 fn run_verdict_suite() -> Result<()> {
     spawn_child(
@@ -1506,6 +2468,35 @@ fn run_verdict_suite() -> Result<()> {
         "/sys/fs/cgroup/rk.slice/enforce",
         "memfd_exec",
         &["eperm", "/bin/true"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "file_open",
+        &["/run/rk-test/file_read_deny", "r", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "file_open",
+        &["/run/rk-test/file_write_deny", "w", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "file_truncate",
+        &["/run/rk-test/file_truncate_deny", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "file_chmod",
+        &["/run/rk-test/file_chmod_deny", "eperm"],
+    )?;
+    spawn_child(
+        "/sys/fs/cgroup/rk.slice/enforce",
+        "file_open",
+        &[
+            "/run/rk-test/subtree_dir/nested/deep/file.txt",
+            "r",
+            "eperm",
+        ],
     )?;
     Ok(())
 }
@@ -1635,6 +2626,74 @@ fn setup_environment() {
         "/run/rk-test/denied_interp_script.sh",
         "#!/run/rk-test/unlisted_interp\nexit 0\n",
     );
+
+    // Prepare files and directories for file policy tests (Phase 4)
+    let plain_files = [
+        "file_read_deny",
+        "file_write_deny",
+        "file_openat2_deny",
+        "file_io_uring_deny",
+        "file_o_trunc_deny",
+        "file_truncate_deny",
+        "file_ftruncate_deny",
+        "file_unlink_deny",
+        "file_rename_src_deny",
+        "file_rename_replace_deny",
+        "file_rename_exchange_a",
+        "file_rename_exchange_b",
+        "file_rename_src_allowed",
+        "file_link_deny",
+        "file_chmod_deny",
+        "file_hardlink_base",
+        "file_bind_base",
+        "file_bind_alias",
+        "file_symlink_base",
+        "file_proc_fd_base",
+        "file_relative_base",
+        "file_reload_test",
+        "audit_file_deny",
+    ];
+    for f in &plain_files {
+        let p = format!("/run/rk-test/{f}");
+        let _ = fs::write(&p, "test file data\n");
+    }
+
+    let _ = fs::create_dir_all("/run/rk-test/file_unlinkat_dir_deny");
+    let _ = fs::create_dir_all("/run/rk-test/dir_create_deny");
+
+    let _ = fs::remove_file("/run/rk-test/file_hardlink_alias");
+    let _ = fs::hard_link(
+        "/run/rk-test/file_hardlink_base",
+        "/run/rk-test/file_hardlink_alias",
+    );
+
+    let _ = fs::remove_file("/run/rk-test/file_symlink_alias");
+    let _ = std::os::unix::fs::symlink(
+        "/run/rk-test/file_symlink_base",
+        "/run/rk-test/file_symlink_alias",
+    );
+
+    let _ = Command::new("mount")
+        .args([
+            "--bind",
+            "/run/rk-test/file_bind_base",
+            "/run/rk-test/file_bind_alias",
+        ])
+        .status();
+
+    let _ = fs::create_dir_all("/run/rk-test/subtree_dir/nested/deep");
+    let _ = fs::write(
+        "/run/rk-test/subtree_dir/nested/deep/file.txt",
+        "subtree content\n",
+    );
+
+    let mut deep_path = std::path::PathBuf::from("/run/rk-test/deep");
+    for i in 1..=35 {
+        deep_path.push(format!("d{i}"));
+    }
+    let _ = fs::create_dir_all(&deep_path);
+    let deep_file = deep_path.join("file.txt");
+    let _ = fs::write(&deep_file, "deep nested content\n");
 
     if let Ok(entries) = fs::read_dir(test_dir) {
         for entry in entries.flatten() {

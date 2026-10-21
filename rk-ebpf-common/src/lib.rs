@@ -89,6 +89,15 @@ const _: () = {
     assert!(offset_of!(rk_exec_key, dev) == 8);
     assert!(offset_of!(rk_exec_key, ino) == 16);
     assert!(size_of::<rk_exec_rule>() == 8);
+
+    // File policy.
+    assert!(size_of::<rk_file_key>() == 24);
+    assert!(offset_of!(rk_file_key, dev) == 8);
+    assert!(size_of::<rk_file_rule>() == 16);
+    assert!(offset_of!(rk_file_rule, deny_mask) == 4);
+    assert!(size_of::<rk_payload_file_deny>() == 32);
+    assert!(offset_of!(rk_payload_file_deny, access) == 16);
+    assert!(offset_of!(rk_payload_file_deny, str_count) == 24);
 };
 
 #[cfg(test)]
@@ -110,6 +119,9 @@ mod tests {
         assert_eq!(rk_action::RK_ACTION_DENY, 1);
         assert_eq!(rk_profile_flag::RK_PROFILE_EXEC_DENY_DEFAULT, 2);
         assert_eq!(rk_exec_flag::RK_EXEC_DECISION, 8);
+        assert_eq!(rk_event_type::RK_EV_FILE_DENY, 11);
+        assert_eq!(rk_file_access::RK_FILE_ALL, 511);
+        assert_eq!(RK_FILE_MAX_DEPTH, 32);
     }
 
     #[test]
