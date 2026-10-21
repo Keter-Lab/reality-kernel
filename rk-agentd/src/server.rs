@@ -485,9 +485,7 @@ async fn handle_run(
                 let _ = fs::remove_dir(&cgroup_path);
                 error!(pid, actual, %expected, "agent started outside its cgroup; killed");
                 let resp = Response::Error {
-                    message: format!(
-                        "agent started in cgroup {actual}, not {expected}; killed it"
-                    ),
+                    message: format!("agent started in cgroup {actual}, not {expected}; killed it"),
                 };
                 send_response(ctx.client.as_raw_fd(), &resp)?;
                 return Ok(());
