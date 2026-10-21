@@ -19,6 +19,8 @@ pub struct ActiveAgent {
     pub cgroup_id: u64,
     pub caller_uid: u32,
     pub caller_gid: u32,
+    pub target_uid: u32,
+    pub target_gid: u32,
 }
 
 /// Registry of running agents and session ID mappings.

@@ -2,6 +2,7 @@
 
 use std::ffi::CString;
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::PathBuf;
@@ -42,6 +43,8 @@ pub trait PolicyHandler: Send + Sync {
 pub struct ServerConfig {
     pub socket_path: PathBuf,
     pub cgroup_fs: PathBuf,
+    pub service_uid: u32,
+    pub service_gid: u32,
 }
 
 impl Default for ServerConfig {
@@ -49,6 +52,8 @@ impl Default for ServerConfig {
         Self {
             socket_path: PathBuf::from(crate::protocol::DEFAULT_SOCKET_PATH),
             cgroup_fs: PathBuf::from("/sys/fs/cgroup"),
+            service_uid: 65534, // nobody
+            service_gid: 65534, // nogroup / nobody
         }
     }
 }
@@ -85,7 +90,7 @@ pub async fn run_server(
 
     let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
     addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
-    let path_bytes = config.socket_path.to_string_lossy().as_bytes();
+    let path_bytes = config.socket_path.as_os_str().as_bytes();
     if path_bytes.len() >= addr.sun_path.len() {
         bail!("socket path is too long: {}", config.socket_path.display());
     }
@@ -168,11 +173,11 @@ pub async fn run_server(
         let client = unsafe { OwnedFd::from_raw_fd(client_fd) };
         let handler_clone = handler.clone();
         let registry_clone = registry.clone();
-        let cgroup_fs_clone = config.cgroup_fs.clone();
+        let config_clone = Arc::new(config.clone());
 
         tokio::spawn(async move {
             if let Err(e) =
-                handle_connection(client, handler_clone, registry_clone, cgroup_fs_clone).await
+                handle_connection(client, handler_clone, registry_clone, config_clone).await
             {
                 warn!(error = %e, "error handling client connection");
             }
@@ -186,7 +191,7 @@ async fn handle_connection(
     client: OwnedFd,
     handler: Arc<Mutex<dyn PolicyHandler>>,
     registry: Arc<AgentRegistry>,
-    cgroup_fs: PathBuf,
+    config: Arc<ServerConfig>,
 ) -> Result<()> {
     let cred = get_peer_cred(client.as_raw_fd())?;
     debug!(?cred, "accepted client connection");
@@ -201,11 +206,12 @@ async fn handle_connection(
         Request::Run {
             profile,
             session,
+            cwd,
             cmd,
             env,
         } => {
             handle_run(
-                client, cred, profile, session, cmd, env, fds, handler, registry, cgroup_fs,
+                client, cred, profile, session, cwd, cmd, env, fds, handler, registry, config,
             )
             .await
         }
@@ -329,15 +335,16 @@ async fn handle_run(
     cred: PeerCred,
     profile_name: String,
     session: Option<String>,
+    cwd: Option<String>,
     cmd: Vec<String>,
     env: Vec<(String, String)>,
     passed_fds: Vec<OwnedFd>,
     handler: Arc<Mutex<dyn PolicyHandler>>,
     registry: Arc<AgentRegistry>,
-    cgroup_fs: PathBuf,
+    config: Arc<ServerConfig>,
 ) -> Result<()> {
     // 1. Authorisation and validation
-    let (profile_def, rel_cgroup, cgroup_path, cgroup_id, cgroup_dir_fd) = {
+    let (_profile_def, rel_cgroup, cgroup_path, cgroup_id, cgroup_dir_fd) = {
         let mut handler_lock = handler.lock().await;
         let profile_def = match handler_lock.get_profile(&profile_name) {
             Ok(p) => p,
@@ -361,7 +368,7 @@ async fn handle_run(
         // 2. Create agent cgroup directly in cgroupfs
         let uuid = Uuid::new_v4().to_string();
         let rel_cgroup = crate::cgroup::agent_cgroup_rel(&uuid);
-        let (cgroup_path, _) = match create_agent_cgroup(&cgroup_fs, &uuid) {
+        let (cgroup_path, _) = match create_agent_cgroup(&config.cgroup_fs, &uuid) {
             Ok(pair) => pair,
             Err(e) => {
                 let resp = Response::Error {
@@ -418,12 +425,20 @@ async fn handle_run(
         None
     };
 
-    // 5. Spawn unprivileged process directly into cgroup
+    // 5. Never run agents as root: map root caller to configured service user
+    let (target_uid, target_gid) = if cred.uid == 0 {
+        (config.service_uid, config.service_gid)
+    } else {
+        (cred.uid, cred.gid)
+    };
+
+    // 6. Spawn unprivileged process directly into cgroup
     let spawn_res = spawn_in_cgroup(
         cgroup_dir_fd.as_raw_fd(),
         &cgroup_path,
-        cred.uid,
-        cred.gid,
+        target_uid,
+        target_gid,
+        cwd.as_deref(),
         stdio_fds,
         &cmd,
         &env,
@@ -455,6 +470,8 @@ async fn handle_run(
         cgroup_id,
         caller_uid: cred.uid,
         caller_gid: cred.gid,
+        target_uid,
+        target_gid,
     };
     registry.register(agent);
 

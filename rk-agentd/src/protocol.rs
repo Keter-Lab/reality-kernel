@@ -19,6 +19,7 @@ pub enum Request {
     Run {
         profile: String,
         session: Option<String>,
+        cwd: Option<String>,
         cmd: Vec<String>,
         env: Vec<(String, String)>,
     },
@@ -268,6 +269,7 @@ mod tests {
         let req = Request::Run {
             profile: "test-profile".into(),
             session: Some("sess-123".into()),
+            cwd: Some("/home/agent/workspace".into()),
             cmd: vec!["python".into(), "agent.py".into()],
             env: vec![("KEY".into(), "VAL".into())],
         };

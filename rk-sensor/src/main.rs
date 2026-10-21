@@ -269,6 +269,8 @@ fn run_daemon(policy_path: &str) -> Result<()> {
         let server_cfg = ServerConfig {
             socket_path: PathBuf::from(rk_agentd::protocol::DEFAULT_SOCKET_PATH),
             cgroup_fs: PathBuf::from(policy::CGROUP_FS),
+            service_uid: 65534,
+            service_gid: 65534,
         };
 
         let server_handler = handler.clone();

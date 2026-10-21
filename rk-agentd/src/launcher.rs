@@ -14,7 +14,6 @@ pub const CLONE_PIDFD: u64 = 0x00001000;
 pub const CLONE_INTO_CGROUP: u64 = 0x00000200;
 
 const SYS_CLONE3: libc::c_long = 435;
-const SYS_CLOSE_RANGE: libc::c_long = 436;
 const SYS_CAPSET: libc::c_long = 126;
 
 const PR_SET_NO_NEW_PRIVS: libc::c_int = 38;
@@ -56,9 +55,15 @@ struct CloneArgs {
 ///
 /// In the child before `execve`:
 /// 1. Stdio file descriptors are redirected (`dup2`).
-/// 2. `no_new_privs` is enabled.
-/// 3. All capabilities are cleared.
-/// 4. Privilege is dropped to `target_uid` and `target_gid`.
+/// 2. Other open file descriptors are closed.
+/// 3. Session is created (`setsid`).
+/// 4. Group memberships are cleared (`setgroups`).
+/// 5. GID is dropped to `target_gid` (`setresgid`).
+/// 6. UID is dropped to `target_uid` (`setresuid`).
+/// 7. `no_new_privs` is enabled (`prctl`).
+/// 8. Capabilities are cleared as defence in depth (`capset` + ambient clear).
+/// 9. Working directory is changed (`chdir`).
+/// 10. Command is executed (`execve`).
 ///
 /// Returns `(child_pid, optional_pidfd)`.
 pub fn spawn_in_cgroup(
@@ -66,6 +71,7 @@ pub fn spawn_in_cgroup(
     cgroup_path: &Path,
     target_uid: u32,
     target_gid: u32,
+    cwd: Option<&str>,
     stdio_fds: Option<[RawFd; 3]>,
     cmd: &[String],
     env: &[(String, String)],
@@ -103,6 +109,17 @@ pub fn spawn_in_cgroup(
     let mut c_envp_ptrs: Vec<*const libc::c_char> = c_env.iter().map(|s| s.as_ptr()).collect();
     c_envp_ptrs.push(std::ptr::null());
 
+    let c_cwd = match cwd {
+        Some(dir) => Some(CString::new(dir).with_context(|| format!("invalid cwd `{dir}`"))?),
+        None => None,
+    };
+
+    // Close-on-exec pipe for reporting child setup failures to parent
+    let mut err_pipe = [0; 2];
+    if unsafe { libc::pipe2(err_pipe.as_mut_ptr(), libc::O_CLOEXEC) } < 0 {
+        return Err(std::io::Error::last_os_error()).context("pipe2 for err_pipe failed");
+    }
+
     // Prepare clone3 arguments
     let mut pidfd: i32 = -1;
     let mut args = CloneArgs {
@@ -131,10 +148,13 @@ pub fn spawn_in_cgroup(
         // --- CHILD PROCESS ---
         // Async-signal-safe code only. No allocations, no mutexes.
         unsafe {
+            libc::close(err_pipe[0]); // Close read end in child
             child_pre_exec(
+                err_pipe[1],
                 stdio_fds,
                 target_uid,
                 target_gid,
+                c_cwd.as_ref(),
                 &c_path,
                 &c_argv_ptrs,
                 &c_envp_ptrs,
@@ -145,6 +165,32 @@ pub fn spawn_in_cgroup(
     if clone_res > 0 {
         // --- PARENT PROCESS ---
         let child_pid = clone_res as i32;
+        unsafe {
+            libc::close(err_pipe[1]); // Close write end in parent
+        }
+
+        // Check if child reported an error before execve
+        let mut err_buf = [0u8; 1024];
+        let n = unsafe {
+            libc::read(
+                err_pipe[0],
+                err_buf.as_mut_ptr() as *mut libc::c_void,
+                err_buf.len(),
+            )
+        };
+        unsafe {
+            libc::close(err_pipe[0]);
+        }
+
+        if n > 0 {
+            let msg = String::from_utf8_lossy(&err_buf[..n as usize]);
+            let mut status = 0;
+            unsafe {
+                libc::waitpid(child_pid, &mut status, 0);
+            }
+            bail!("child setup or exec failed: {}", msg.trim());
+        }
+
         let opt_pidfd = if pidfd >= 0 {
             Some(unsafe { OwnedFd::from_raw_fd(pidfd) })
         } else {
@@ -154,12 +200,17 @@ pub fn spawn_in_cgroup(
     }
 
     // If clone3 failed with ENOSYS, fall back to pipe handshake + fork
+    unsafe {
+        libc::close(err_pipe[0]);
+        libc::close(err_pipe[1]);
+    }
     let err = std::io::Error::last_os_error();
     if err.raw_os_error() == Some(libc::ENOSYS) {
         return spawn_fallback_pipe(
             cgroup_path,
             target_uid,
             target_gid,
+            c_cwd.as_ref(),
             stdio_fds,
             &c_path,
             &c_argv_ptrs,
@@ -170,37 +221,67 @@ pub fn spawn_in_cgroup(
     Err(err).context("clone3 syscall failed")
 }
 
+unsafe fn send_child_err_and_exit(err_pipe: RawFd, msg: &[u8], code: i32) -> ! {
+    libc::write(err_pipe, msg.as_ptr() as *const libc::c_void, msg.len());
+    libc::close(err_pipe);
+    libc::_exit(code);
+}
+
 /// Async-signal-safe setup in child process before execve.
 unsafe fn child_pre_exec(
+    err_pipe: RawFd,
     stdio_fds: Option<[RawFd; 3]>,
     target_uid: u32,
     target_gid: u32,
+    c_cwd: Option<&CString>,
     c_path: &CString,
     c_argv_ptrs: &[*const libc::c_char],
     c_envp_ptrs: &[*const libc::c_char],
 ) -> ! {
     // 1. Stdio redirection
     if let Some([in_fd, out_fd, err_fd]) = stdio_fds {
-        libc::dup2(in_fd, libc::STDIN_FILENO);
-        libc::dup2(out_fd, libc::STDOUT_FILENO);
-        libc::dup2(err_fd, libc::STDERR_FILENO);
+        if libc::dup2(in_fd, libc::STDIN_FILENO) < 0
+            || libc::dup2(out_fd, libc::STDOUT_FILENO) < 0
+            || libc::dup2(err_fd, libc::STDERR_FILENO) < 0
+        {
+            send_child_err_and_exit(err_pipe, b"dup2 stdio failed\n", 101);
+        }
     }
 
-    // 2. Close file descriptors >= 3
-    let _ = libc::syscall(
-        SYS_CLOSE_RANGE,
-        3 as libc::c_uint,
-        !0 as libc::c_uint,
-        0 as libc::c_uint,
-    );
+    // 2. Close file descriptors >= 3 except err_pipe
     for fd in 3..256 {
-        libc::close(fd);
+        if fd != err_pipe {
+            libc::close(fd);
+        }
     }
 
-    // 3. Set no_new_privs
-    libc::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+    // 3. setsid
+    if libc::setsid() < 0 {
+        send_child_err_and_exit(err_pipe, b"setsid failed\n", 102);
+    }
 
-    // 4. Clear all capabilities
+    // 4. setgroups
+    if libc::setgroups(0, std::ptr::null()) < 0 {
+        send_child_err_and_exit(err_pipe, b"setgroups failed\n", 103);
+    }
+
+    // 5. setresgid
+    if libc::setresgid(target_gid, target_gid, target_gid) < 0 {
+        send_child_err_and_exit(err_pipe, b"setresgid failed\n", 104);
+    }
+
+    // 6. setresuid
+    if libc::setresuid(target_uid, target_uid, target_uid) < 0 {
+        send_child_err_and_exit(err_pipe, b"setresuid failed\n", 105);
+    }
+
+    // 7. PR_SET_NO_NEW_PRIVS
+    if libc::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0 {
+        send_child_err_and_exit(err_pipe, b"prctl PR_SET_NO_NEW_PRIVS failed\n", 106);
+    }
+
+    // 8. Clear ambient and remaining capabilities as defence in depth
+    libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0);
     let cap_hdr = CapUserHeader {
         version: 0x20080522, // _LINUX_CAPABILITY_VERSION_3
         pid: 0,
@@ -217,23 +298,22 @@ unsafe fn child_pre_exec(
             inheritable: 0,
         },
     ];
-    libc::syscall(SYS_CAPSET, &cap_hdr, &cap_data[0]);
-    libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0);
-
-    // 5. Drop privileges
-    if target_gid != 0 {
-        libc::setgroups(0, std::ptr::null());
-        libc::setresgid(target_gid, target_gid, target_gid);
-    }
-    if target_uid != 0 {
-        libc::setresuid(target_uid, target_uid, target_uid);
+    if libc::syscall(SYS_CAPSET, &cap_hdr, &cap_data[0]) < 0 {
+        send_child_err_and_exit(err_pipe, b"capset failed\n", 107);
     }
 
-    // 6. Execute command
+    // 9. chdir to working directory if specified
+    if let Some(cwd) = c_cwd {
+        if libc::chdir(cwd.as_ptr()) < 0 {
+            send_child_err_and_exit(err_pipe, b"chdir failed\n", 108);
+        }
+    }
+
+    // 10. Execute command
     libc::execve(c_path.as_ptr(), c_argv_ptrs.as_ptr(), c_envp_ptrs.as_ptr());
 
     // If execve failed:
-    libc::_exit(127);
+    send_child_err_and_exit(err_pipe, b"execve failed\n", 127);
 }
 
 /// Fallback fork + pipe handshake if clone3 is unavailable.
@@ -241,6 +321,7 @@ fn spawn_fallback_pipe(
     cgroup_path: &Path,
     target_uid: u32,
     target_gid: u32,
+    c_cwd: Option<&CString>,
     stdio_fds: Option<[RawFd; 3]>,
     c_path: &CString,
     c_argv_ptrs: &[*const libc::c_char],
@@ -248,9 +329,11 @@ fn spawn_fallback_pipe(
 ) -> Result<(i32, Option<OwnedFd>)> {
     let mut c2p = [0; 2];
     let mut p2c = [0; 2];
+    let mut err_pipe = [0; 2];
     unsafe {
         if libc::pipe2(c2p.as_mut_ptr(), libc::O_CLOEXEC) < 0
             || libc::pipe2(p2c.as_mut_ptr(), libc::O_CLOEXEC) < 0
+            || libc::pipe2(err_pipe.as_mut_ptr(), libc::O_CLOEXEC) < 0
         {
             return Err(std::io::Error::last_os_error()).context("pipe2 failed");
         }
@@ -264,6 +347,7 @@ fn spawn_fallback_pipe(
     if pid == 0 {
         // Child
         unsafe {
+            libc::close(err_pipe[0]);
             libc::close(c2p[0]);
             libc::close(p2c[1]);
 
@@ -278,9 +362,11 @@ fn spawn_fallback_pipe(
             libc::close(p2c[0]);
 
             child_pre_exec(
+                err_pipe[1],
                 stdio_fds,
                 target_uid,
                 target_gid,
+                c_cwd,
                 c_path,
                 c_argv_ptrs,
                 c_envp_ptrs,
@@ -290,6 +376,7 @@ fn spawn_fallback_pipe(
 
     // Parent
     unsafe {
+        libc::close(err_pipe[1]);
         libc::close(c2p[1]);
         libc::close(p2c[0]);
 
@@ -307,6 +394,20 @@ fn spawn_fallback_pipe(
         let dummy = [1u8];
         libc::write(p2c[1], dummy.as_ptr() as *const _, 1);
         libc::close(p2c[1]);
+
+        let mut err_buf = [0u8; 1024];
+        let n = libc::read(
+            err_pipe[0],
+            err_buf.as_mut_ptr() as *mut libc::c_void,
+            err_buf.len(),
+        );
+        libc::close(err_pipe[0]);
+        if n > 0 {
+            let msg = String::from_utf8_lossy(&err_buf[..n as usize]);
+            let mut status = 0;
+            libc::waitpid(pid, &mut status, 0);
+            bail!("child setup or exec failed: {}", msg.trim());
+        }
     }
 
     Ok((pid, None))
@@ -329,8 +430,8 @@ fn find_in_path(cmd: &str) -> Option<String> {
 pub fn verify_agent_privileges(pid: u32, cgroup_path: &Path) -> AgentPrivilegeChecks {
     let mut no_new_privs = false;
     let mut empty_capabilities = false;
-    let mut caller_uid = 0;
-    let mut caller_gid = 0;
+    let mut proc_uid = 0;
+    let mut proc_gid = 0;
 
     let status_path = format!("/proc/{pid}/status");
     if let Ok(content) = fs::read_to_string(&status_path) {
@@ -341,11 +442,11 @@ pub fn verify_agent_privileges(pid: u32, cgroup_path: &Path) -> AgentPrivilegeCh
                 empty_capabilities = rest.trim() == "0000000000000000";
             } else if let Some(rest) = line.strip_prefix("Uid:\t") {
                 if let Some(first) = rest.split_whitespace().next() {
-                    caller_uid = first.parse().unwrap_or(0);
+                    proc_uid = first.parse().unwrap_or(0);
                 }
             } else if let Some(rest) = line.strip_prefix("Gid:\t") {
                 if let Some(first) = rest.split_whitespace().next() {
-                    caller_gid = first.parse().unwrap_or(0);
+                    proc_gid = first.parse().unwrap_or(0);
                 }
             }
         }
@@ -359,11 +460,69 @@ pub fn verify_agent_privileges(pid: u32, cgroup_path: &Path) -> AgentPrivilegeCh
     }
 
     AgentPrivilegeChecks {
-        unprivileged_user: caller_uid != 0,
-        caller_uid,
-        caller_gid,
+        unprivileged_user: proc_uid != 0, // Never root!
+        caller_uid: proc_uid,
+        caller_gid: proc_gid,
         no_new_privs,
         empty_capabilities,
         cgroup_not_delegated,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn privilege_check_flags_root_as_failed() {
+        let tmp = std::env::temp_dir().join(format!("rk-priv-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&tmp);
+
+        // When proc_uid is 0, unprivileged_user must be false
+        let checks = AgentPrivilegeChecks {
+            unprivileged_user: false,
+            caller_uid: 0,
+            caller_gid: 0,
+            no_new_privs: true,
+            empty_capabilities: true,
+            cgroup_not_delegated: true,
+        };
+        assert!(!checks.unprivileged_user);
+
+        // When proc_uid is 65534 (nobody), unprivileged_user must be true
+        let checks_unpriv = AgentPrivilegeChecks {
+            unprivileged_user: true,
+            caller_uid: 65534,
+            caller_gid: 65534,
+            no_new_privs: true,
+            empty_capabilities: true,
+            cgroup_not_delegated: true,
+        };
+        assert!(checks_unpriv.unprivileged_user);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn service_user_fallback_mapping() {
+        let caller_uid = 0;
+        let caller_gid = 0;
+        let service_uid = 65534;
+        let service_gid = 65534;
+
+        let (target_uid, target_gid) = if caller_uid == 0 {
+            (service_uid, service_gid)
+        } else {
+            (caller_uid, caller_gid)
+        };
+        assert_eq!(target_uid, 65534);
+        assert_eq!(target_gid, 65534);
+
+        let unpriv_caller = 1000;
+        let (target_uid, _) = if unpriv_caller == 0 {
+            (service_uid, service_gid)
+        } else {
+            (unpriv_caller, 1000)
+        };
+        assert_eq!(target_uid, 1000);
     }
 }

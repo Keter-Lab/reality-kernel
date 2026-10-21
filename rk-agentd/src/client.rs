@@ -1,6 +1,7 @@
 //! Client library for communicating with `rk-sensor`'s agentd socket.
 
-use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -37,7 +38,7 @@ impl Client {
 
         let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
         addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
-        let path_bytes = path.to_string_lossy().as_bytes();
+        let path_bytes = path.as_os_str().as_bytes();
         if path_bytes.len() >= addr.sun_path.len() {
             bail!("socket path is too long: {}", path.display());
         }
@@ -72,12 +73,14 @@ impl Client {
         &self,
         profile: &str,
         session: Option<&str>,
+        cwd: Option<&str>,
         cmd: &[String],
         env: &[(String, String)],
     ) -> Result<i32> {
         let req = Request::Run {
             profile: profile.to_string(),
             session: session.map(str::to_string),
+            cwd: cwd.map(str::to_string),
             cmd: cmd.to_vec(),
             env: env.to_vec(),
         };

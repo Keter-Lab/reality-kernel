@@ -135,7 +135,9 @@ fn run_agent(profile: &str, session: Option<&str>, cmd: &[String]) -> ExitCode {
     };
 
     let env = std::env::vars().collect::<Vec<_>>();
-    match client.run(profile, session, cmd, &env) {
+    let cwd_buf = std::env::current_dir().ok();
+    let cwd_str = cwd_buf.as_deref().and_then(|p| p.to_str());
+    match client.run(profile, session, cwd_str, cmd, &env) {
         Ok(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),
         Err(e) => {
             eprintln!("rk run error: {e:#}");
