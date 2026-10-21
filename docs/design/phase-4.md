@@ -1,6 +1,6 @@
 # Design note: Phase 4 — file access policy
 
-Status: **PROPOSED**, waiting for review
+Status: **ACCEPTED** (2026-10-21). All four decisions in §7 approved as recommended.
 Branch: `phase-4-files` (from `main` at eed228f)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 4 and sections 3–5
 
