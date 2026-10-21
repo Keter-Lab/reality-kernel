@@ -31,11 +31,18 @@ struct rk_exec_decision {
     __u32 _pad;
 };
 
+/*
+ * Keyed by the thread id that called exec: sched_process_exec reports it as
+ * old_pid, which stays correct even when exec from a multithreaded process
+ * changes the thread's pid. LRU, so abandoned entries (an exec that failed
+ * after the check) can never accumulate. (Task local storage would fit, but
+ * aya 0.13 cannot load BPF_MAP_TYPE_TASK_STORAGE.)
+ */
 struct {
-    __uint(type, BPF_MAP_TYPE_TASK_STORAGE);
-    __uint(map_flags, BPF_F_NO_PREALLOC);
-    __type(key, int);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __type(key, __u32);
     __type(value, struct rk_exec_decision);
+    __uint(max_entries, 16384);
 } rk_exec_decided SEC(".maps");
 
 static __always_inline void rk_exec_key_of(struct rk_exec_key *key, const struct rk_gov *g, struct inode *inode)
@@ -84,13 +91,13 @@ int BPF_PROG(rk_exec_check, struct linux_binprm *bprm, int ret)
 
     /* Remember this decision for rk_exec_record (every stage overwrites it, so
      * the record sees the decision for the final, executed file). */
-    struct rk_exec_decision *decided =
-        bpf_task_storage_get(&rk_exec_decided, bpf_get_current_task_btf(), 0, BPF_LOCAL_STORAGE_GET_F_CREATE);
-    if (decided) {
-        decided->policy_gen = g.policy_gen;
-        decided->rule_id = rule_id;
-        decided->_pad = 0;
-    }
+    struct rk_exec_decision decided = {
+        .policy_gen = g.policy_gen,
+        .rule_id = rule_id,
+    };
+    __u32 tid = (__u32)bpf_get_current_pid_tgid();
+
+    bpf_map_update_elem(&rk_exec_decided, &tid, &decided, BPF_ANY);
 
     /* Denied (or audit-would-deny) execs never reach sched_process_exec, so the
      * decision is recorded here. Allowed execs are recorded by rk_exec_record. */
@@ -151,11 +158,13 @@ int BPF_PROG(rk_exec_record, struct task_struct *p, pid_t old_pid, struct linux_
 
     /* Prefer the decision recorded by rk_exec_check; fall back to a fresh
      * lookup only if none exists (exec started before governance applied). */
-    decided = bpf_task_storage_get(&rk_exec_decided, p, 0, 0);
+    __u32 tid = (__u32)old_pid;
+
+    decided = bpf_map_lookup_elem(&rk_exec_decided, &tid);
     if (decided) {
         policy_gen = decided->policy_gen;
         rule_id = decided->rule_id;
-        bpf_task_storage_delete(&rk_exec_decided, p);
+        bpf_map_delete_elem(&rk_exec_decided, &tid);
     } else {
         rule = bpf_map_lookup_elem(&rk_exec_allow, &key);
         policy_gen = g.policy_gen;
