@@ -101,7 +101,9 @@ pub fn run_probe(args: &[String]) -> i32 {
     let res = match (mode.as_str(), rest.as_slice()) {
         ("noop", []) => Ok(()),
         ("first", [denied, addr]) => probe_first(denied, addr),
-        ("nest", [depth, expected, denied, addr]) => return probe_nest(depth, expected, denied, addr),
+        ("nest", [depth, expected, denied, addr]) => {
+            return probe_nest(depth, expected, denied, addr)
+        }
         ("privs", [uid]) => probe_privs(uid),
         ("escape", []) => probe_escape(),
         ("connect", [addr, expect]) => probe_connect(addr, expect),
@@ -185,7 +187,14 @@ fn probe_nest(depth: &str, expected: &str, denied: &str, addr: &str) -> i32 {
         }
         let next = (depth - 1).to_string();
         let status = Command::new(std::env::current_exe()?)
-            .args([PROBE_FLAG, "nest", next.as_str(), cgroup.as_str(), denied, addr])
+            .args([
+                PROBE_FLAG,
+                "nest",
+                next.as_str(),
+                cgroup.as_str(),
+                denied,
+                addr,
+            ])
             .status()
             .context("spawn descendant")?;
         Ok(status.code().unwrap_or(1))
@@ -599,7 +608,10 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         let out = rk(&["run", "--profile", "agent", "--", DENIED_BIN])?;
         let stderr = String::from_utf8_lossy(&out.stderr);
         if out.status.success() || !stderr.contains("errno 0001") {
-            bail!("launching a non-allowlisted binary must fail with EPERM: {}", text(&out));
+            bail!(
+                "launching a non-allowlisted binary must fail with EPERM: {}",
+                text(&out)
+            );
         }
         let stdout = run_probe_ok(None, &["first", DENIED_BIN, DENY_ADDR])?;
         let id = parse_ident(&stdout)?;
@@ -632,7 +644,15 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         let mut deny_gens = vec![generation()?];
         let mut allow_gens = Vec::new();
         let child = rk_cmd(&[
-            "run", "--profile", "agent", "--", PROBE, PROBE_FLAG, "paced", FLIP_ADDR, "2000",
+            "run",
+            "--profile",
+            "agent",
+            "--",
+            PROBE,
+            PROBE_FLAG,
+            "paced",
+            FLIP_ADDR,
+            "2000",
             "1000",
         ])
         .spawn()
@@ -684,7 +704,9 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             }
         }
         if deny_events != eperm || allow_events != ok {
-            bail!("agent saw {eperm} EPERM / {ok} allowed, events say {deny_events} / {allow_events}");
+            bail!(
+                "agent saw {eperm} EPERM / {ok} allowed, events say {deny_events} / {allow_events}"
+            );
         }
         if eperm == 0 || ok == 0 {
             bail!("the applies did not overlap the agent ({eperm} denied, {ok} allowed)");
@@ -733,7 +755,9 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             bail!("dry run moved the generation from {before} to {after}");
         }
         run_probe_ok(None, &["connect", FLIP_ADDR, "eperm"])?;
-        Ok(format!("generation stayed {before}; {FLIP_ADDR} still denied"))
+        Ok(format!(
+            "generation stayed {before}; {FLIP_ADDR} still denied"
+        ))
     });
 
     run_test(checks, "policy_diff_reports_changes", || {
@@ -762,21 +786,35 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             let out = finish(child, "rk as nobody")?;
             let stderr = String::from_utf8_lossy(&out.stderr);
             if out.status.success() || !stderr.contains("not authorised") {
-                bail!("`rk {}` as uid {NOBODY} was not refused: {}", args.join(" "), text(&out));
+                bail!(
+                    "`rk {}` as uid {NOBODY} was not refused: {}",
+                    args.join(" "),
+                    text(&out)
+                );
             }
         }
         let after = generation()?;
         if after != before {
             bail!("generation moved from {before} to {after}");
         }
-        Ok(format!("apply and rollback from uid {NOBODY} refused; generation stayed {before}"))
+        Ok(format!(
+            "apply and rollback from uid {NOBODY} refused; generation stayed {before}"
+        ))
     });
 
     let bpftool_ref = &bpftool;
     run_test(checks, "run_rejects_non_launchable_profile", || {
         let cgroups_before = agent_cgroups();
         let bindings_before = kernel_bindings(bpftool_ref)?.len();
-        let out = rk(&["run", "--profile", "restricted", "--", PROBE, PROBE_FLAG, "noop"])?;
+        let out = rk(&[
+            "run",
+            "--profile",
+            "restricted",
+            "--",
+            PROBE,
+            PROBE_FLAG,
+            "noop",
+        ])?;
         let stderr = String::from_utf8_lossy(&out.stderr);
         if out.status.success() || !stderr.contains("not authorised to launch") {
             bail!("root launched `restricted`: {}", text(&out));
@@ -786,14 +824,23 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         }
         let bindings_after = kernel_bindings(bpftool_ref)?.len();
         if bindings_after != bindings_before {
-            bail!("a refused launch changed the binding count {bindings_before} -> {bindings_after}");
+            bail!(
+                "a refused launch changed the binding count {bindings_before} -> {bindings_after}"
+            );
         }
         Ok("refused before any cgroup or binding was created".into())
     });
 
     run_test(checks, "agent_exit_removes_binding_and_cgroup", || {
         let mut child = rk_cmd(&[
-            "run", "--profile", "agent", "--", PROBE, PROBE_FLAG, "hold", "1500",
+            "run",
+            "--profile",
+            "agent",
+            "--",
+            PROBE,
+            PROBE_FLAG,
+            "hold",
+            "1500",
         ])
         .spawn()
         .context("spawn holding agent")?;
@@ -823,9 +870,15 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             bail!("{path} still exists after the agent exited");
         }
         if kernel_bindings(bpftool_ref)?.contains(&id.cgroup_id) {
-            bail!("binding for cgroup {} still in the kernel map", id.cgroup_id);
+            bail!(
+                "binding for cgroup {} still in the kernel map",
+                id.cgroup_id
+            );
         }
-        if agents()?.iter().any(|a| a["cgroup_id"].as_u64() == Some(id.cgroup_id)) {
+        if agents()?
+            .iter()
+            .any(|a| a["cgroup_id"].as_u64() == Some(id.cgroup_id))
+        {
             bail!("agent still listed by `rk status`");
         }
         Ok(format!(
@@ -845,7 +898,10 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
                     && e["verdict"].as_u64() == Some(VERDICT_DENY)
             })
         })?;
-        Ok(format!("deny events for cgroup {} carry session_id {session}", id.cgroup_id))
+        Ok(format!(
+            "deny events for cgroup {} carry session_id {session}",
+            id.cgroup_id
+        ))
     });
 
     drop(daemon);

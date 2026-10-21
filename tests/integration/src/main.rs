@@ -411,7 +411,11 @@ fn main() {
         let mut checks = Vec::new();
         agent::run_suite(&args[2..], &mut checks);
         output_results("RK_AGENT", &checks);
-        std::process::exit(if checks.iter().all(|c| c.passed) { 0 } else { 1 });
+        std::process::exit(if checks.iter().all(|c| c.passed) {
+            0
+        } else {
+            1
+        });
     }
 
     let mut checks = Vec::new();
