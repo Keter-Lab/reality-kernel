@@ -25,6 +25,12 @@ env:
   BPFTOOL_SHA256: 09150596f09356b0ff632dd7f9856e0ea86bf96b269e9bc94278d9a9432a268c
   # Boot-time LSM list for the VMs; unknown names are ignored by older kernels.
   VM_LSM: lockdown,capability,landlock,yama,bpf
+  # Phase 5b kind cluster (docs/design/phase-5b.md §8).
+  KIND_VERSION: v0.32.0
+  KIND_SHA256: 50030de23cf40a18505f20426f6a8506bedf13c6e509244bd1fa9463721b0f54
+  KIND_NODE_IMAGE: kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e940429c2ce42fa3a5619ec2bbc60b949c0ac95
+  HELM_VERSION: v3.22.1
+  HELM_SHA256: 896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea
 
 jobs:
   bpf-build:
@@ -257,6 +263,78 @@ jobs:
             integration-${{ matrix.kernel }}.json
             agent-${{ matrix.kernel }}.json
             vm.log
+          if-no-files-found: warn
+
+  k8s:
+    name: Kubernetes (kind, NRI)
+    needs: sensor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rk-sensor-x86_64
+          path: bin/
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: rk-nri/go.mod
+          cache-dependency-path: rk-nri/go.mod
+
+      - name: Build rk-nri and the images
+        run: |
+          set -euo pipefail
+          mkdir -p image/bin probe/bin
+          (cd rk-nri && go mod tidy && CGO_ENABLED=0 go build -trimpath -o ../image/bin/rk-nri .)
+          cp bin/rk-sensor bin/rk image/bin/
+          cp bin/rk-integration probe/bin/
+          chmod +x image/bin/* probe/bin/*
+          docker build -f deploy/docker/Dockerfile -t reality-kernel:ci image
+          docker build -f deploy/docker/Dockerfile -t rk-probe:ci probe
+
+      - name: Fetch pinned kind and helm
+        run: |
+          set -euo pipefail
+          mkdir -p tools
+          curl -fsSL -o tools/kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+          echo "${KIND_SHA256}  tools/kind" | sha256sum -c -
+          curl -fsSL -o helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tar.gz" | sha256sum -c -
+          tar -xzf helm.tar.gz -C tools --strip-components=1 linux-amd64/helm
+          chmod +x tools/kind tools/helm
+          echo "$PWD/tools" >> "$GITHUB_PATH"
+
+      - name: Create the kind cluster
+        run: |
+          set -euo pipefail
+          echo "runner kernel: $(uname -r); active LSMs: $(cat /sys/kernel/security/lsm)"
+          kind create cluster --name rk --image "$KIND_NODE_IMAGE" --wait 180s
+          kind load docker-image --name rk reality-kernel:ci rk-probe:ci
+          docker exec rk-control-plane containerd --version
+
+      - name: Run the Kubernetes suite
+        run: |
+          set -o pipefail
+          bash tests/k8s/run.sh rk-control-plane 2>&1 | tee k8s.log
+          rc=${PIPESTATUS[0]}
+          sed -n '/===RK_K8S_BEGIN===/,/===RK_K8S_END===/p' k8s.log | sed '1d;$d' > k8s.json
+          if [ "$rc" -ne 0 ]; then
+            jq -r '.[] | select(.passed | not) | "::error title=(.name)::(.detail)"' k8s.json || true
+            kubectl -n reality-kernel logs ds/rk --all-containers --tail=100 > k8s-daemon.log 2>&1 || true
+          fi
+          exit "$rc"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: k8s-results
+          path: |
+            k8s.json
+            k8s.log
+            k8s-daemon.log
+            k8s-logs/
           if-no-files-found: warn
 
   fuzz:

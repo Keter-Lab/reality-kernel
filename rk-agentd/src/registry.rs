@@ -34,6 +34,8 @@ pub struct AgentRegistry {
     agents: RwLock<HashMap<String, ActiveAgent>>,
     cgroup_sessions: RwLock<HashMap<u64, String>>,
     retired: RwLock<VecDeque<u64>>,
+    /// Bound Kubernetes containers (Phase 5b): container id -> cgroup id.
+    containers: RwLock<HashMap<String, u64>>,
 }
 
 impl AgentRegistry {
@@ -61,16 +63,50 @@ impl AgentRegistry {
         let removed = self.agents.write().unwrap().remove(agent_id);
         if let Some(ref agent) = removed {
             if agent.session_id.is_some() {
-                let mut retired = self.retired.write().unwrap();
-                retired.push_back(agent.cgroup_id);
-                if retired.len() > RETAINED_SESSIONS {
-                    if let Some(old) = retired.pop_front() {
-                        self.cgroup_sessions.write().unwrap().remove(&old);
-                    }
-                }
+                self.retire_session(agent.cgroup_id);
             }
         }
         removed
+    }
+
+    fn retire_session(&self, cgroup_id: u64) {
+        let mut retired = self.retired.write().unwrap();
+        retired.push_back(cgroup_id);
+        if retired.len() > RETAINED_SESSIONS {
+            if let Some(old) = retired.pop_front() {
+                self.cgroup_sessions.write().unwrap().remove(&old);
+            }
+        }
+    }
+
+    /// Records a bound Kubernetes container. Binding it again (NRI resync)
+    /// replaces the entry.
+    pub fn register_container(&self, container_id: &str, cgroup_id: u64, session: Option<String>) {
+        if let Some(session) = session {
+            self.cgroup_sessions
+                .write()
+                .unwrap()
+                .insert(cgroup_id, session);
+        }
+        self.containers
+            .write()
+            .unwrap()
+            .insert(container_id.to_string(), cgroup_id);
+    }
+
+    /// Forgets a container and returns its cgroup id, if it was bound. Its
+    /// session mapping is retired like an agent's.
+    pub fn unregister_container(&self, container_id: &str) -> Option<u64> {
+        let id = self.containers.write().unwrap().remove(container_id)?;
+        if self.cgroup_sessions.read().unwrap().contains_key(&id) {
+            self.retire_session(id);
+        }
+        Some(id)
+    }
+
+    /// Number of bound Kubernetes containers.
+    pub fn container_count(&self) -> usize {
+        self.containers.read().unwrap().len()
     }
 
     /// Retrieve an agent by ID.
@@ -124,6 +160,7 @@ impl AgentRegistry {
             generation,
             active_profiles,
             agents: self.snapshot_agents(),
+            containers: self.container_count(),
             capabilities,
         }
     }
@@ -166,5 +203,20 @@ mod tests {
         assert_eq!(reg.session_for_cgroup(1), None);
         assert_eq!(reg.session_for_cgroup(2).as_deref(), Some("s"));
         assert_eq!(reg.retired.read().unwrap().len(), RETAINED_SESSIONS);
+    }
+
+    #[test]
+    fn containers_register_and_unregister() {
+        let reg = AgentRegistry::new();
+        reg.register_container("c1", 10, Some("s".into()));
+        reg.register_container("c1", 10, Some("s".into())); // resync
+        reg.register_container("c2", 11, None);
+        assert_eq!(reg.container_count(), 2);
+        assert_eq!(reg.session_for_cgroup(10).as_deref(), Some("s"));
+        assert_eq!(reg.unregister_container("c1"), Some(10));
+        assert_eq!(reg.unregister_container("c1"), None);
+        // Retired, not dropped: late events keep the session.
+        assert_eq!(reg.session_for_cgroup(10).as_deref(), Some("s"));
+        assert_eq!(reg.container_count(), 1);
     }
 }

@@ -99,8 +99,12 @@ pub fn run_probe(args: &[String]) -> i32 {
     };
     // Every probe first proves it runs inside an agent cgroup: an agent left
     // elsewhere is ungoverned, and the checks below would pass vacuously.
+    // In a Kubernetes pod (RK_PROBE_IN_POD=1) the container's cgroup
+    // namespace shows its cgroup as `/`; the k8s suite instead matches the
+    // printed cgroup id against the daemon's deny events.
+    let in_pod = std::env::var("RK_PROBE_IN_POD").as_deref() == Ok("1");
     match own_cgroup() {
-        Ok(cg) if cg.starts_with("/rk.slice/agent-") => {}
+        Ok(cg) if in_pod || cg.starts_with("/rk.slice/agent-") => {}
         Ok(cg) => {
             eprintln!("[probe] running in cgroup {cg}, not an rk.slice/agent-* cgroup");
             return 3;
@@ -285,6 +289,8 @@ fn probe_escape() -> Result<()> {
 
 fn probe_connect(addr: &str, expect: &str) -> Result<()> {
     let res = udp_connect(addr);
+    // After the connect, so the connect stays the first governed action.
+    print_ident()?;
     match expect {
         "eperm" => expect_eperm(&format!("connect {addr}"), res),
         "notdenied" => match res {

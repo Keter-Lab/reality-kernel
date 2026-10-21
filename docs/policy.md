@@ -23,6 +23,10 @@ launchable_by = ["root"]   # who may `rk run` agents under it
 [[bindings]]               # static cgroup -> profile bindings (optional)
 cgroup = "rk.slice/<name>"
 profile = "<name>"
+
+[kubernetes.namespaces.<ns>]  # namespaces that must be governed (optional)
+default = "<name>"
+allowed = ["<name>"]
 ```
 
 Unknown keys are errors at every level, so a typo can't silently turn into a
@@ -161,12 +165,57 @@ been applied fails closed (enforce, deny everything).
 | `credentials` | file deny list | `/etc/shadow`, `/etc/gshadow`, `/etc/sudoers`, `/etc/sudoers.d/`, `/etc/ssh/`, `/root/.ssh/`. See `deploy/policy/credentials.toml` |
 | `quarantine` | profile | Enforce mode: no exec, no network, no raw sockets. An agent is moved into it with one atomic update (`PolicyEngine::quarantine`). It can't be redefined or launched into |
 
+## `kubernetes` (Phase 5b)
+
+A pod selects the profile for all its containers, init containers and
+sidecars included, with the annotation `realitykernel.dev/profile: NAME`.
+`realitykernel.dev/session: ID` links its events to a session. Binding happens
+in NRI `StartContainer`, after the container's process exists and before its
+command runs. If the binding fails, the container doesn't start.
+
+Any profile restricts more than none, so on an ordinary namespace an annotation
+is honoured as is. A namespace listed here is always governed:
+
+```toml
+[kubernetes.namespaces.agents]
+default = "research-agent"             # pods without an annotation
+allowed = ["research-agent", "strict"]  # what an annotation may name
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `default` | none | Profile for pods without an annotation. With no default, such pods are refused |
+| `allowed` | `[default]` | Profiles an annotation may name; anything else is refused. Must contain `default` |
+
+Unknown profiles and `quarantine` are refused in every namespace. Namespace
+names follow Kubernetes rules (lowercase letters, digits, `-`, at most 63).
+With the Helm chart, set these through the `namespaces` value, which the NRI
+plugin also reads.
+
+## Kernels without BPF LSM
+
+Exec rules, file rules and raw-socket denial run in BPF-LSM programs. Where
+`bpf` isn't in `/sys/kernel/security/lsm`, those programs would load but never
+run, so `rk-sensor` refuses any profile that uses them, instead of reporting
+protection that doesn't exist. `rk status` shows `bpf_lsm: inactive`. Either
+boot with `lsm=...,bpf`, or make the profile network-only:
+
+```toml
+[profiles.web]
+mode = "enforce"
+network.deny_raw_sockets = false   # acknowledges raw sockets are not blocked
+[profiles.web.files]
+include = []                       # and no [exec] section
+```
+
+Raw sockets bypass connect rules, so also drop `CAP_NET_RAW` from such
+workloads.
+
 ## Operations
 
-The `rk` CLI commands below are being delivered in Phase 5 (they call the
-`PolicyEngine` operations that already exist: `apply_text`, `dry_run`,
-`diff_text`, `rollback`). Until the CLI lands, edit the file and send
-`SIGHUP` to `rk-sensor`.
+`rk-sensor` reads the policy file at start and on `SIGHUP`, and with
+`--watch-policy` whenever its content changes (the Helm chart uses this for
+ConfigMap updates). Every route uses the same atomic apply.
 
 | Command | Effect |
 |---|---|

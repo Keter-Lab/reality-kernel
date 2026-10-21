@@ -1,5 +1,6 @@
 //! Protocol types and socket transport for `rk-agentd`.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
 
@@ -33,6 +34,20 @@ pub enum Request {
     Status,
     /// Forward a signal to a running agent.
     Signal { agent_id: String, signal: i32 },
+    /// Bind a Kubernetes container to its pod's profile, sent by `rk-nri` from
+    /// NRI `StartContainer`: the task exists and its command has not run.
+    /// Root only. Wire format is shared with the Go plugin (rk-nri/protocol.go).
+    BindContainer {
+        pid: u32,
+        namespace: String,
+        pod: String,
+        pod_uid: String,
+        container: String,
+        container_id: String,
+        annotations: BTreeMap<String, String>,
+    },
+    /// Remove a container's binding (NRI `StopContainer` / `RemoveContainer`).
+    UnbindContainer { container_id: String },
 }
 
 /// Responses sent from the daemon to the client.
@@ -58,6 +73,12 @@ pub enum Response {
     StatusSuccess { status: DaemonStatus },
     /// Signal delivered successfully.
     SignalSuccess,
+    /// Container bound; its command may start.
+    ContainerBound { cgroup_id: u64, profile: String },
+    /// The pod has no profile; the container starts ungoverned.
+    NotGoverned,
+    /// Container binding removed (or there was none).
+    ContainerUnbound,
     /// Operation failed.
     Error { message: String },
 }
@@ -95,6 +116,9 @@ pub struct DaemonStatus {
     pub active_profiles: Vec<String>,
     pub agents: Vec<AgentStatusInfo>,
     pub capabilities: Vec<CapabilityStatus>,
+    /// Bound Kubernetes containers (Phase 5b).
+    #[serde(default)]
+    pub containers: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -315,6 +339,57 @@ mod tests {
         let json = serde_json::to_string(&resp).unwrap();
         let decoded: Response = serde_json::from_str(&json).unwrap();
         assert_eq!(resp, decoded);
+    }
+
+    /// The exact JSON exchanged with rk-nri. rk-nri/protocol_test.go asserts
+    /// the same strings, so a change on either side fails a test.
+    #[test]
+    fn nri_wire_contract() {
+        let bind = r#"{"BindContainer":{"pid":42,"namespace":"agents","pod":"p","pod_uid":"u","container":"c","container_id":"id1","annotations":{"realitykernel.dev/profile":"strict"}}}"#;
+        let req: Request = serde_json::from_str(bind).unwrap();
+        assert_eq!(
+            req,
+            Request::BindContainer {
+                pid: 42,
+                namespace: "agents".into(),
+                pod: "p".into(),
+                pod_uid: "u".into(),
+                container: "c".into(),
+                container_id: "id1".into(),
+                annotations: [(
+                    "realitykernel.dev/profile".to_string(),
+                    "strict".to_string()
+                )]
+                .into(),
+            }
+        );
+        let unbind = r#"{"UnbindContainer":{"container_id":"id1"}}"#;
+        assert_eq!(
+            serde_json::from_str::<Request>(unbind).unwrap(),
+            Request::UnbindContainer {
+                container_id: "id1".into()
+            }
+        );
+        let cases = [
+            (
+                Response::ContainerBound {
+                    cgroup_id: 7,
+                    profile: "strict".into(),
+                },
+                r#"{"ContainerBound":{"cgroup_id":7,"profile":"strict"}}"#,
+            ),
+            (Response::NotGoverned, r#""NotGoverned""#),
+            (Response::ContainerUnbound, r#""ContainerUnbound""#),
+            (
+                Response::Error {
+                    message: "m".into(),
+                },
+                r#"{"Error":{"message":"m"}}"#,
+            ),
+        ];
+        for (resp, json) in cases {
+            assert_eq!(serde_json::to_string(&resp).unwrap(), json);
+        }
     }
 
     #[test]

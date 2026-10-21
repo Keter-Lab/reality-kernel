@@ -1,5 +1,6 @@
 //! Unix domain socket server handling CLI client requests.
 
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::ffi::OsStrExt;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use rk_policy::net::Profile;
+use rk_policy::net::{Profile, K8S_PROFILE_ANNOTATION, K8S_SESSION_ANNOTATION};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -36,6 +37,14 @@ pub trait PolicyHandler: Send + Sync {
     fn active_profiles(&self) -> Vec<String>;
     fn generation(&self) -> u64;
     fn capabilities(&self) -> Vec<CapabilityStatus>;
+    /// Profile for a pod's containers (docs/design/phase-5b.md §4).
+    fn resolve_pod_profile(
+        &self,
+        namespace: &str,
+        annotation: Option<&str>,
+    ) -> Result<Option<String>>;
+    /// Binds a Kubernetes container cgroup (relative to the cgroupfs root).
+    fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64>;
 }
 
 /// Server configuration.
@@ -45,6 +54,9 @@ pub struct ServerConfig {
     pub cgroup_fs: PathBuf,
     pub service_uid: u32,
     pub service_gid: u32,
+    /// Kubernetes cgroup root relative to `cgroup_fs` (Phase 5b). Container
+    /// bindings are refused when unset or outside it.
+    pub k8s_cgroup_root: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -54,8 +66,62 @@ impl Default for ServerConfig {
             cgroup_fs: PathBuf::from("/sys/fs/cgroup"),
             service_uid: 65534, // nobody
             service_gid: 65534, // nogroup / nobody
+            k8s_cgroup_root: None,
         }
     }
+}
+
+/// The container's cgroup, relative to the cgroupfs root, from the text of
+/// `/proc/<pid>/cgroup`. It must lie under the Kubernetes cgroup `root`.
+pub fn container_cgroup(proc_cgroup: &str, root: &str) -> Result<String> {
+    let path = proc_cgroup
+        .lines()
+        .find_map(|l| l.strip_prefix("0::"))
+        .context("no cgroup v2 entry in /proc/<pid>/cgroup")?;
+    let rel = path.trim_start_matches('/');
+    let root = root.trim_matches('/');
+    if root.is_empty()
+        || !rel.starts_with(&format!("{root}/"))
+        || rel
+            .split('/')
+            .any(|s| s.is_empty() || s == "." || s == "..")
+    {
+        bail!("container cgroup `{path}` is not under the Kubernetes cgroup root `{root}`");
+    }
+    Ok(rel.to_string())
+}
+
+async fn bind_container(
+    handler: &Arc<Mutex<dyn PolicyHandler>>,
+    registry: &AgentRegistry,
+    config: &ServerConfig,
+    pid: u32,
+    namespace: &str,
+    annotations: &BTreeMap<String, String>,
+    container_id: &str,
+) -> Result<Option<(u64, String)>> {
+    let mut h = handler.lock().await;
+    let annotation = annotations.get(K8S_PROFILE_ANNOTATION).map(String::as_str);
+    let Some(profile) = h.resolve_pod_profile(namespace, annotation)? else {
+        return Ok(None);
+    };
+    if pid == 0 {
+        bail!("container has no process yet (pid 0); refusing to start it ungoverned");
+    }
+    let root = config
+        .k8s_cgroup_root
+        .as_deref()
+        .context("this daemon has no Kubernetes cgroup root (start it with --k8s-cgroup-root)")?;
+    let text = fs::read_to_string(format!("/proc/{pid}/cgroup"))
+        .with_context(|| format!("read /proc/{pid}/cgroup"))?;
+    let cgroup = container_cgroup(&text, root)?;
+    let id = h.bind_container(&cgroup, &profile)?;
+    registry.register_container(
+        container_id,
+        id,
+        annotations.get(K8S_SESSION_ANNOTATION).cloned(),
+    );
+    Ok(Some((id, profile)))
 }
 
 /// Start the agent daemon socket server.
@@ -133,58 +199,60 @@ pub async fn run_server(
         "agentd socket server listening"
     );
 
-    let raw_listener = listener.as_raw_fd();
-    // Keep listener alive by not dropping it
-    let _listener_keepalive = listener;
-
-    loop {
-        // Poll for incoming connection
-        let mut pollfd = libc::pollfd {
-            fd: raw_listener,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let poll_res = unsafe { libc::poll(&mut pollfd, 1, 500) };
-        if poll_res < 0 {
-            let err = std::io::Error::last_os_error();
-            if err.raw_os_error() == Some(libc::EINTR) {
+    // The accept loop blocks in poll(2), so it runs on a blocking thread and
+    // hands each connection to the runtime with Handle::spawn, which any idle
+    // worker picks up at once. Spawning from inside a worker that then blocks
+    // parks the new task in that worker's LIFO slot, which other workers
+    // cannot steal: every request used to wait for the poll timeout (~500 ms,
+    // half of rk-nri's budget per NRI call).
+    let rt = tokio::runtime::Handle::current();
+    let accept_loop = tokio::task::spawn_blocking(move || -> Result<()> {
+        let raw_listener = listener.as_raw_fd();
+        loop {
+            let mut pollfd = libc::pollfd {
+                fd: raw_listener,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let poll_res = unsafe { libc::poll(&mut pollfd, 1, 1000) };
+            if poll_res < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(err).context("poll on the agentd socket failed");
+            }
+            if poll_res == 0 || (pollfd.revents & libc::POLLIN) == 0 {
                 continue;
             }
-            error!(error = %err, "poll on socket failed");
-            break;
-        }
-        if poll_res == 0 || (pollfd.revents & libc::POLLIN) == 0 {
-            tokio::task::yield_now().await;
-            continue;
-        }
 
-        let client_fd = unsafe {
-            libc::accept4(
-                raw_listener,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                libc::SOCK_CLOEXEC,
-            )
-        };
-        if client_fd < 0 {
-            continue;
-        }
-
-        let client = unsafe { OwnedFd::from_raw_fd(client_fd) };
-        let handler_clone = handler.clone();
-        let registry_clone = registry.clone();
-        let config_clone = Arc::new(config.clone());
-
-        tokio::spawn(async move {
-            if let Err(e) =
-                handle_connection(client, handler_clone, registry_clone, config_clone).await
-            {
-                warn!(error = %e, "error handling client connection");
+            let client_fd = unsafe {
+                libc::accept4(
+                    raw_listener,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    libc::SOCK_CLOEXEC,
+                )
+            };
+            if client_fd < 0 {
+                continue;
             }
-        });
-    }
 
-    Ok(())
+            let client = unsafe { OwnedFd::from_raw_fd(client_fd) };
+            let handler_clone = handler.clone();
+            let registry_clone = registry.clone();
+            let config_clone = Arc::new(config.clone());
+
+            rt.spawn(async move {
+                if let Err(e) =
+                    handle_connection(client, handler_clone, registry_clone, config_clone).await
+                {
+                    warn!(error = %e, "error handling client connection");
+                }
+            });
+        }
+    });
+    accept_loop.await.context("agentd accept loop panicked")?
 }
 
 async fn handle_connection(
@@ -333,6 +401,66 @@ async fn handle_connection(
                     },
                 )
             }
+        }
+        Request::BindContainer {
+            pid,
+            namespace,
+            pod,
+            pod_uid: _,
+            container,
+            container_id,
+            annotations,
+        } => {
+            let resp = if cred.uid != 0 {
+                Response::Error {
+                    message: format!(
+                        "caller uid {} may not bind containers (root only)",
+                        cred.uid
+                    ),
+                }
+            } else {
+                match bind_container(
+                    &handler,
+                    &registry,
+                    &config,
+                    pid,
+                    &namespace,
+                    &annotations,
+                    &container_id,
+                )
+                .await
+                {
+                    Ok(Some((cgroup_id, profile))) => {
+                        info!(%namespace, %pod, %container, %profile, cgroup_id, "container bound");
+                        Response::ContainerBound { cgroup_id, profile }
+                    }
+                    Ok(None) => Response::NotGoverned,
+                    Err(e) => {
+                        warn!(%namespace, %pod, %container, error = %format!("{e:#}"), "container refused");
+                        Response::Error {
+                            message: format!("{e:#}"),
+                        }
+                    }
+                }
+            };
+            send_response(client.as_raw_fd(), &resp)
+        }
+        Request::UnbindContainer { container_id } => {
+            let resp = if cred.uid != 0 {
+                Response::Error {
+                    message: format!(
+                        "caller uid {} may not unbind containers (root only)",
+                        cred.uid
+                    ),
+                }
+            } else {
+                if let Some(id) = registry.unregister_container(&container_id) {
+                    let _ = handler.lock().await.unbind_dynamic(id);
+                    info!(%container_id, cgroup_id = id, "container unbound");
+                }
+                Response::ContainerUnbound
+            };
+            send_response(client.as_raw_fd(), &resp)
         }
     }
 }
@@ -603,4 +731,34 @@ async fn handle_run(
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn container_cgroup_must_be_under_root() {
+        let root = "kubepods.slice";
+        let ok = "0::/kubepods.slice/kubepods-besteffort.slice/cri-containerd-abc.scope\n";
+        assert_eq!(
+            container_cgroup(ok, root).unwrap(),
+            "kubepods.slice/kubepods-besteffort.slice/cri-containerd-abc.scope"
+        );
+        // cgroup v1 lines before the v2 one are skipped.
+        let mixed = format!("12:cpu:/x\n{ok}");
+        assert!(container_cgroup(&mixed, "/kubepods.slice/").is_ok());
+        for bad in [
+            "0::/\n",                               // root cgroup
+            "0::/kubepods.slice\n",                 // the root itself, not a container
+            "0::/system.slice/evil.scope\n",        // elsewhere
+            "0::/kubepods.slicex/c\n",              // prefix trick
+            "0::/../../kubepods.slice/c\n",         // outside our cgroup namespace
+            "0::/kubepods.slice/../system.slice\n", // traversal
+            "12:cpu:/kubepods.slice/c\n",           // no v2 entry
+        ] {
+            assert!(container_cgroup(bad, root).is_err(), "{bad:?}");
+        }
+        assert!(container_cgroup(ok, "").is_err());
+    }
 }

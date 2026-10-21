@@ -279,6 +279,14 @@ pub fn attach_all(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
     Ok(attached)
 }
 
+/// Whether `bpf` is in the kernel's active LSM list. When it is not, LSM
+/// programs attach but are never called.
+pub fn bpf_lsm_active() -> bool {
+    fs::read_to_string("/sys/kernel/security/lsm")
+        .map(|list| list.trim().split(',').any(|lsm| lsm == "bpf"))
+        .unwrap_or(false)
+}
+
 /// Sends SIGKILL through a pidfd, so a recycled PID can never be hit. Used
 /// together with [`PolicyEngine::quarantine`] when a process must also stop.
 pub fn kill_process(pid: i32) -> Result<()> {
@@ -374,6 +382,15 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
 /// Attaches the network programs (already loaded) to `cgroup_root`, creating
 /// it if needed, and the LSM programs host-wide. Links detach when `ebpf` drops.
 pub fn attach_network(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
+    let mut attached = attach_sock_addr(ebpf, cgroup_root)?;
+    attached.extend(attach_network_lsm(ebpf)?);
+    Ok(attached)
+}
+
+/// Attaches the `sock_addr` programs to one more cgroup subtree, creating it
+/// if needed. Unlike the LSM programs, these can be attached at several roots
+/// (`rk.slice` and the Kubernetes root, Phase 5b).
+pub fn attach_sock_addr(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
     fs::create_dir_all(cgroup_root).with_context(|| format!("create {}", cgroup_root.display()))?;
     let cgroup =
         fs::File::open(cgroup_root).with_context(|| format!("open {}", cgroup_root.display()))?;
@@ -390,6 +407,12 @@ pub fn attach_network(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>
             .with_context(|| format!("attach `{name}` to {}", cgroup_root.display()))?;
         attached.push(format!("{name} -> {}", cgroup_root.display()));
     }
+    Ok(attached)
+}
+
+/// Attaches the network LSM programs (raw-socket denial) host-wide, once.
+pub fn attach_network_lsm(ebpf: &mut Ebpf) -> Result<Vec<String>> {
+    let mut attached = Vec::new();
     for name in LSM_PROGRAMS {
         let program = ebpf
             .program_mut(name)
@@ -447,6 +470,9 @@ pub struct PolicyEngine {
     /// Text of the active and the previous policy, for `rk policy rollback`.
     text: Option<String>,
     previous_text: Option<String>,
+    /// Whether BPF LSM is active on this kernel. Without it, exec and file
+    /// rules are refused (docs/design/phase-5b.md §6).
+    lsm_active: bool,
 }
 
 /// What `rk policy apply --dry-run` reports: the apply that would happen,
@@ -487,11 +513,41 @@ impl PolicyEngine {
             policy: None,
             text: None,
             previous_text: None,
+            lsm_active: true,
         }
     }
 
     pub fn generation(&self) -> u64 {
         self.generation
+    }
+
+    /// Records whether BPF LSM is active (see [`bpf_lsm_active`]).
+    pub fn set_lsm_active(&mut self, active: bool) {
+        self.lsm_active = active;
+    }
+
+    /// Without BPF LSM, exec and file programs load and attach but are never
+    /// called. Refuse such rules instead of reporting protection that does not
+    /// exist. The built-in quarantine profile is exempt; it is network-only
+    /// on such kernels.
+    fn check_capabilities(&self, policy: &Policy) -> Result<()> {
+        if self.lsm_active {
+            return Ok(());
+        }
+        for p in policy.profiles.iter().filter(|p| p.name != net::QUARANTINE) {
+            if p.exec.is_some() || !p.files.rules.is_empty() || p.deny_raw_sockets {
+                anyhow::bail!(
+                    "profile `{}` has exec, file or raw-socket rules, but BPF LSM is not active \
+                     on this kernel (`bpf` is missing from /sys/kernel/security/lsm), so they \
+                     would not be enforced. Boot with `lsm=...,bpf`, or make the profile \
+                     network-only: remove `[exec]`, set `files.include = []` with no \
+                     `files.deny` rules, and set `network.deny_raw_sockets = false` (then drop \
+                     CAP_NET_RAW from the workloads, since raw sockets bypass connect rules)",
+                    p.name
+                );
+            }
+        }
+        Ok(())
     }
 
     pub fn policy(&self) -> Option<&Policy> {
@@ -511,6 +567,7 @@ impl PolicyEngine {
     pub fn apply_text(&mut self, ebpf: &mut Ebpf, text: &str) -> Result<ApplyReport> {
         let mut ids = self.ids.clone();
         let policy = net::parse(text, &mut ids)?;
+        self.check_capabilities(&policy)?;
         let generation = self.generation + 1;
         let compiled = net::compile(&policy, generation)?;
         let mut bindings = self.resolve_bindings(&policy, true)?;
@@ -572,6 +629,7 @@ impl PolicyEngine {
     pub fn dry_run(&self, text: &str) -> Result<DryRun> {
         let mut ids = self.ids.clone();
         let policy = net::parse(text, &mut ids)?;
+        self.check_capabilities(&policy)?;
         let generation = self.generation + 1;
         let compiled = net::compile(&policy, generation)?;
         let mut bindings = self.resolve_bindings(&policy, false)?;
@@ -679,6 +737,46 @@ impl PolicyEngine {
         self.set_binding(ebpf, id, pid)?;
         self.bindings.insert(id, (cgroup.clone(), pid));
         self.dynamic.insert(id, (cgroup, profile.to_string()));
+        Ok(id)
+    }
+
+    /// Binds a Kubernetes container's cgroup (Phase 5b). `cgroup` is relative
+    /// to the cgroupfs root; the caller has checked it lies under the
+    /// Kubernetes cgroup root. Binding an already bound container again (NRI
+    /// resync) updates its profile, except while it is quarantined.
+    /// Returns the cgroup id.
+    pub fn bind_container(&mut self, ebpf: &mut Ebpf, cgroup: &str, profile: &str) -> Result<u64> {
+        let cgroup = cgroup.trim_matches('/');
+        if cgroup.is_empty()
+            || cgroup
+                .split('/')
+                .any(|s| s.is_empty() || s == "." || s == "..")
+        {
+            anyhow::bail!("invalid container cgroup `{cgroup}`");
+        }
+        let pid = self
+            .policy
+            .as_ref()
+            .context("no policy applied yet")?
+            .profiles
+            .iter()
+            .find(|p| p.name == profile && p.name != QUARANTINE)
+            .map(|p| p.id)
+            .with_context(|| format!("unknown profile `{profile}`"))?;
+        let path = self.cgroup_fs.join(cgroup);
+        let id = fs::metadata(&path)
+            .with_context(|| format!("stat cgroup {}", path.display()))?
+            .ino();
+        if self.bindings.contains_key(&id) && !self.dynamic.contains_key(&id) {
+            anyhow::bail!("`{cgroup}` is bound statically by the policy");
+        }
+        if self.quarantined.contains(&id) {
+            return Ok(id);
+        }
+        self.set_binding(ebpf, id, pid)?;
+        self.bindings.insert(id, (cgroup.to_string(), pid));
+        self.dynamic
+            .insert(id, (cgroup.to_string(), profile.to_string()));
         Ok(id)
     }
 
@@ -1111,6 +1209,29 @@ mod tests {
             .dry_run("[profiles.a]\nmode = \"audit\"\n[[profiles.a.files.deny]]\npath = \"/nonexistent/rk\"\naccess = [\"read\"]\n")
             .is_err());
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Phase 5b §6: without BPF LSM, exec and file rules are refused, and
+    /// network-only profiles still apply.
+    #[test]
+    fn lsm_rules_refused_without_bpf_lsm() {
+        let mut engine = PolicyEngine::new(std::env::temp_dir());
+        engine.set_lsm_active(false);
+        let network_only = "[profiles.a]\nmode = \"enforce\"\nnetwork.deny_raw_sockets = false\n\
+                            [profiles.a.files]\ninclude = []\n";
+        assert!(engine.dry_run(network_only).is_ok());
+        for text in [
+            // The built-in credentials list and raw-socket denial are on by default.
+            "[profiles.a]\nmode = \"enforce\"\n",
+            "[profiles.a]\nmode = \"enforce\"\n[profiles.a.files]\ninclude = []\n",
+            "[profiles.a]\nmode = \"enforce\"\nnetwork.deny_raw_sockets = false\n\
+             [profiles.a.exec]\ndefault = \"deny\"\n[profiles.a.files]\ninclude = []\n",
+        ] {
+            let e = engine.dry_run(text).unwrap_err().to_string();
+            assert!(e.contains("BPF LSM is not active"), "{e}");
+        }
+        engine.set_lsm_active(true);
+        assert!(engine.dry_run("[profiles.a]\nmode = \"enforce\"\n").is_ok());
     }
 
     #[test]

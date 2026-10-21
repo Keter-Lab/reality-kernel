@@ -1,0 +1,9 @@
+Reality Kernel is running on every node as DaemonSet {{ include "rk.name" . }}.
+
+Govern a pod by annotating it:
+  metadata:
+    annotations:
+      realitykernel.dev/profile: <profile>
+
+Check a node (bpf_lsm, kubernetes, bound containers):
+  kubectl -n {{ .Release.Namespace }} exec ds/{{ include "rk.name" . }} -c rk-sensor -- rk status

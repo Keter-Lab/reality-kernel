@@ -12,6 +12,7 @@ sdk/build/
 sdk/*.egg-info/
 .venv/
 *.txt
+!deploy/helm/*/templates/NOTES.txt
 patch_*.py
 fix_*.js
 patch_*.js

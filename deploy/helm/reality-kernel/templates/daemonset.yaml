@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "rk.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rk.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "rk.selector" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        {{- include "rk.selector" . | nindent 8 }}
+    spec:
+      # /proc/<pid>/cgroup of containers must resolve: rk-sensor reads it from
+      # PID 1's cgroup namespace (docs/design/phase-5b.md §5).
+      hostPID: true
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rk-sensor
+          image: {{ include "rk.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /usr/local/bin/rk-sensor
+            - --policy
+            - /etc/rk/policy.toml
+            - --watch-policy
+            - --k8s-cgroup-root
+            - {{ .Values.k8sCgroupRoot | quote }}
+          env:
+            - name: RUST_LOG
+              value: {{ .Values.logLevel | quote }}
+          securityContext:
+            # Loads BPF programs, writes maps, enters the host cgroup namespace.
+            privileged: true
+          readinessProbe:
+            exec:
+              command: ["/usr/local/bin/rk", "status"]
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources.sensor | nindent 12 }}
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/rk
+              readOnly: true
+            - name: run-rk
+              mountPath: /run/rk
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+            - name: securityfs
+              mountPath: /sys/kernel/security
+              readOnly: true
+        - name: rk-nri
+          image: {{ include "rk.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /usr/local/bin/rk-nri
+            - -agentd-socket
+            - /run/rk/agentd.sock
+            - -nri-socket
+            - {{ .Values.nri.socket | quote }}
+            - -idx
+            - {{ .Values.nri.pluginIndex | quote }}
+            - -failure-policy
+            - {{ .Values.failurePolicy | quote }}
+            - -governed-namespaces
+            - {{ keys .Values.namespaces | sortAlpha | join "," | quote }}
+          # Ready only once registered with NRI: before that, containers on
+          # this node start without passing through rk-nri.
+          readinessProbe:
+            exec:
+              command: ["/usr/local/bin/rk-nri", "-check-ready"]
+            periodSeconds: 5
+          securityContext:
+            # Root only to reach the root-owned NRI and agentd sockets.
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources.nri | nindent 12 }}
+          volumeMounts:
+            - name: run-rk
+              mountPath: /run/rk
+            - name: nri
+              mountPath: {{ dir .Values.nri.socket }}
+      volumes:
+        - name: policy
+          configMap:
+            name: {{ include "rk.name" . }}-policy
+        - name: run-rk
+          emptyDir: {}
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: securityfs
+          hostPath:
+            path: /sys/kernel/security
+            type: Directory
+        - name: nri
+          hostPath:
+            path: {{ dir .Values.nri.socket }}
+            type: DirectoryOrCreate

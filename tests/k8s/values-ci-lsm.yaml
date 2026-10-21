@@ -1,0 +1,32 @@
+# Adds an exec rule, which needs BPF LSM: apply_rejects_lsm_rules_without_bpf_lsm.
+# Used together with values-ci.yaml; `profiles` here replaces it.
+profiles: |
+  [profiles.k8s-net]
+  mode = "enforce"
+  network.default = "allow"
+  network.deny_raw_sockets = false
+
+  [[profiles.k8s-net.network.deny]]
+  cidr = "10.99.0.1/32"
+  proto = ["tcp", "udp"]
+
+  [profiles.k8s-net.files]
+  include = []
+
+  [profiles.k8s-open]
+  mode = "enforce"
+  network.default = "allow"
+  network.deny_raw_sockets = false
+
+  [profiles.k8s-open.files]
+  include = []
+
+  [profiles.needs-lsm]
+  mode = "enforce"
+  network.deny_raw_sockets = false
+
+  [profiles.needs-lsm.exec]
+  default = "deny"
+
+  [profiles.needs-lsm.files]
+  include = []
