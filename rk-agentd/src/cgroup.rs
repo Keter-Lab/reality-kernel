@@ -161,6 +161,17 @@ mod tests {
         kill_cgroup(&cgroup_dir).unwrap();
         assert_eq!(fs::read_to_string(&kill_file).unwrap(), "1\n");
 
+        // Still populated: drain must give up with an error and leave the
+        // cgroup in place, never report success.
+        fs::write(&events_file, b"populated 1\n").unwrap();
+        assert!(drain_and_remove_cgroup(&cgroup_dir, Duration::from_millis(50)).is_err());
+        assert!(cgroup_dir.exists());
+
+        // In cgroupfs the interface files vanish with the directory, but a plain
+        // temp directory cannot be removed while it holds files. Remove the mock
+        // files to model an emptied cgroup, then drain must remove it.
+        fs::remove_file(&kill_file).unwrap();
+        fs::remove_file(&events_file).unwrap();
         drain_and_remove_cgroup(&cgroup_dir, Duration::from_millis(100)).unwrap();
         assert!(!cgroup_dir.exists());
         let _ = fs::remove_dir_all(&tmp);
