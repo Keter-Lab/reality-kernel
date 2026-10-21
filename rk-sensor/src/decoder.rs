@@ -464,8 +464,15 @@ pub(crate) mod tests {
         };
         let mut payload = bytemuck::bytes_of(&body).to_vec();
         payload.extend(string_tail(&[b"/etc/hosts"]));
-        let rec = record(&hdr(rk_event_type::RK_EV_FILE_DENY, rk_verdict::RK_VERDICT_DENY), &payload);
-        let Payload::FileDeny { body: got, mut strings } = decode(&rec).unwrap().payload else {
+        let rec = record(
+            &hdr(rk_event_type::RK_EV_FILE_DENY, rk_verdict::RK_VERDICT_DENY),
+            &payload,
+        );
+        let Payload::FileDeny {
+            body: got,
+            mut strings,
+        } = decode(&rec).unwrap().payload
+        else {
             panic!("expected file deny payload");
         };
         assert_eq!(got.file_ino, 77);

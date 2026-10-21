@@ -763,7 +763,10 @@ fn parse_files(
     let mut push = |r: &FileRuleFile, optional: bool, origin: String, rules: &mut Vec<FileRule>| {
         let rctx = format!("{ctx}, {origin}");
         if !r.path.starts_with('/') || r.path.contains('\0') {
-            return Err(PolicyError::new(&rctx, format!("`{}` must be an absolute path", r.path)));
+            return Err(PolicyError::new(
+                &rctx,
+                format!("`{}` must be an absolute path", r.path),
+            ));
         }
         let deny_mask = parse_access(&r.access).map_err(|m| PolicyError::new(&rctx, m))?;
         rules.push(FileRule {
@@ -795,11 +798,15 @@ fn parse_files(
                 let known: Vec<_> = FILE_LISTS.iter().map(|(n, _)| *n).collect();
                 PolicyError::new(
                     ctx,
-                    format!("unknown files list `{list_name}` (known: {})", known.join(", ")),
+                    format!(
+                        "unknown files list `{list_name}` (known: {})",
+                        known.join(", ")
+                    ),
                 )
             })?;
-        let list: FileListFile = toml::from_str(text)
-            .map_err(|e| PolicyError::new(ctx, format!("built-in list `{list_name}` is invalid: {e}")))?;
+        let list: FileListFile = toml::from_str(text).map_err(|e| {
+            PolicyError::new(ctx, format!("built-in list `{list_name}` is invalid: {e}"))
+        })?;
         if list.name != *list_name {
             return Err(PolicyError::new(
                 ctx,
@@ -1023,16 +1030,17 @@ pub fn compile(policy: &Policy, generation: u64) -> Result<Compiled, PolicyError
         files: Vec::new(),
     };
     for prof in &policy.profiles {
-        out.files.extend(prof.files.rules.iter().map(|r| CompiledFile {
-            profile: prof.id,
-            rule_id: r.id,
-            path: r.path.clone(),
-            target: FileTarget::Path {
-                subtree: r.subtree,
-                optional: r.optional,
-            },
-            deny_mask: r.deny_mask,
-        }));
+        out.files
+            .extend(prof.files.rules.iter().map(|r| CompiledFile {
+                profile: prof.id,
+                rule_id: r.id,
+                path: r.path.clone(),
+                target: FileTarget::Path {
+                    subtree: r.subtree,
+                    optional: r.optional,
+                },
+                deny_mask: r.deny_mask,
+            }));
         if prof.files.protect_exec_allowlist {
             if let Some(exec) = &prof.exec {
                 out.files.extend(exec.allow.iter().map(|a| CompiledFile {
@@ -1523,7 +1531,8 @@ mod tests {
 
     #[test]
     fn parses_files_sections() {
-        let p = policy(r#"
+        let p = policy(
+            r#"
             [profiles.agent]
             mode = "enforce"
             [profiles.agent.exec]
@@ -1535,14 +1544,29 @@ mod tests {
             [[profiles.agent.files.deny]]
             path = "/etc/hosts"
             access = ["write", "truncate"]
-        "#);
+        "#,
+        );
         let agent = p.profiles.iter().find(|p| p.name == "agent").unwrap();
         // credentials list (optional entries) + two explicit rules.
-        assert!(agent.files.rules.iter().any(|r| r.path == "/etc/shadow" && r.optional));
-        let hosts = agent.files.rules.iter().find(|r| r.path == "/etc/hosts").unwrap();
+        assert!(agent
+            .files
+            .rules
+            .iter()
+            .any(|r| r.path == "/etc/shadow" && r.optional));
+        let hosts = agent
+            .files
+            .rules
+            .iter()
+            .find(|r| r.path == "/etc/hosts")
+            .unwrap();
         assert_eq!(hosts.deny_mask, FILE_WRITE | FILE_TRUNCATE);
         assert!(!hosts.optional);
-        let ssh = agent.files.rules.iter().find(|r| r.path == "/home/agent/.ssh").unwrap();
+        let ssh = agent
+            .files
+            .rules
+            .iter()
+            .find(|r| r.path == "/home/agent/.ssh")
+            .unwrap();
         assert!(ssh.subtree);
         assert_eq!(ssh.deny_mask, FILE_ALL);
         // [exec] present: protect_exec_allowlist defaults on.
@@ -1572,8 +1596,10 @@ mod tests {
             .contains("unknown access"));
         assert!(err("[profiles.a]\nmode = \"audit\"\n[[profiles.a.files.deny]]\npath = \"/x\"\naccess = []\n")
             .contains("at least one access"));
-        assert!(err("[profiles.a]\nmode = \"audit\"\n[profiles.a.files]\ninclude = [\"nope\"]\n")
-            .contains("unknown files list"));
+        assert!(
+            err("[profiles.a]\nmode = \"audit\"\n[profiles.a.files]\ninclude = [\"nope\"]\n")
+                .contains("unknown files list")
+        );
     }
 
     #[test]

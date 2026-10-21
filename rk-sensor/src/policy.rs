@@ -153,7 +153,8 @@ fn resolve_files(entries: &[CompiledFile]) -> Result<Vec<ResolvedFile>> {
                 }),
                 Err(err) if optional && err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(err) => {
-                    return Err(err).with_context(|| format!("file rule: cannot resolve `{}`", e.path))
+                    return Err(err)
+                        .with_context(|| format!("file rule: cannot resolve `{}`", e.path))
                 }
             },
             FileTarget::Exec(kind) => exec_targets.push((
