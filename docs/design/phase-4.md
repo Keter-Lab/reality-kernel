@@ -50,10 +50,15 @@ All hooks are BPF-LSM programs, so they decide on resolved kernel objects.
 | `rk_file_create` | `inode_create`, `inode_mkdir` | create inside a protected directory |
 | `rk_file_setattr_*` | `inode_setattr` | truncate (`ATTR_SIZE`, which covers `truncate(2)` and `ftruncate(2)` on every kernel without needing `CONFIG_SECURITY_PATH`) and set-attributes (mode, owner, times) |
 
-`inode_setattr` gained an `idmap` argument in 6.3. Two programs are compiled:
-`rk_file_setattr_v1` (5.15–6.2) and `rk_file_setattr_v2` (6.3+). The loader loads
-the one whose signature matches the running kernel's BTF and reports which one
-in the selftest. It's an error if neither loads.
+`inode_setattr` gained an `idmap` argument in **6.9** (verified against
+`include/linux/lsm_hook_defs.h`: 6.8 has `(dentry, attr)`, 6.9 has
+`(idmap, dentry, attr)`; an earlier draft of this note said 6.3, which was
+wrong). Two programs are compiled: `rk_file_setattr_v1` (5.15–6.8) and
+`rk_file_setattr_v2` (6.9+). The loader always tries v2 first: v2 reads three
+arguments, so the verifier only accepts it where the hook has them, and v1 is
+tried only if v2 is rejected. This picks the matching variant on every kernel,
+not just the ones in the matrix. The selftest reports which variant loaded
+(5.15, 6.1, 6.6: v1; 6.12, 6.18: v2). It's an error if neither loads.
 
 ## 3. Matching
 
