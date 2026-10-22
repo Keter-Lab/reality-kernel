@@ -92,7 +92,8 @@ static __always_inline void rk_net_emit(const struct rk_gov *g, __u16 type, __u8
 
     if (!msg)
         return;
-    rk_fill_hdr(&msg->hdr, g->cgroup_id, g->policy_gen, type, rk_reported_verdict(g, action), rule_id);
+    rk_fill_hdr(&msg->hdr, g->cgroup_id, g->policy_gen, type, rk_reported_verdict(g, action),
+                rk_rule(g, action, rule_id));
     rk_fill_task(&msg->hdr);
 
     body = (struct rk_payload_net *)msg->payload;
@@ -195,7 +196,8 @@ int BPF_PROG(rk_net_socket_create, int family, int type, int protocol, int kern,
 
     msg = rk_scratch();
     if (msg) {
-        rk_fill_hdr(&msg->hdr, g.cgroup_id, g.policy_gen, RK_EV_SOCK_CREATE, rk_reported_verdict(&g, action), 0);
+        rk_fill_hdr(&msg->hdr, g.cgroup_id, g.policy_gen, RK_EV_SOCK_CREATE, rk_reported_verdict(&g, action),
+                    rk_rule(&g, action, 0));
         rk_fill_task(&msg->hdr);
         body = (struct rk_payload_sock *)msg->payload;
         __builtin_memset(body, 0, sizeof(*body));

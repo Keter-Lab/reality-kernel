@@ -52,6 +52,10 @@ pub fn run_child(args: &[String]) -> i32 {
         "file_proc_fd_reopen" => handle_file_proc_fd_reopen(rest),
         "file_relative_open" => handle_file_relative_open(rest),
         "file_reload_workload" => handle_file_reload_workload(rest),
+        "guard_bpf" => handle_guard_bpf(rest),
+        "guard_signal" => handle_guard_signal(rest),
+        "guard_ptrace" => handle_guard_ptrace(rest),
+        "guard_pins" => handle_guard_pins(),
         other => {
             eprintln!("[child] unknown workload: {other}");
             203
@@ -451,7 +455,28 @@ fn handle_paced_workload(args: &[String]) -> i32 {
     let mut eperm_count = 0u64;
     let mut ok_count = 0u64;
 
-    if proto == "udp" {
+    if proto == "udp_connect" {
+        for _ in 0..count {
+            let sock = match UdpSocket::bind("0.0.0.0:0") {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("[child] udp bind failed: {e}");
+                    return 274;
+                }
+            };
+            match sock.connect(addr) {
+                Ok(_) => ok_count += 1,
+                Err(e) if e.raw_os_error() == Some(libc::EPERM) => eperm_count += 1,
+                Err(e) => {
+                    eprintln!("[child] unexpected udp connect error: {e}");
+                    return 275;
+                }
+            }
+            if pace_us > 0 {
+                std::thread::sleep(Duration::from_micros(pace_us));
+            }
+        }
+    } else if proto == "udp" {
         let sock = match UdpSocket::bind("0.0.0.0:0") {
             Ok(s) => s,
             Err(e) => {
@@ -492,6 +517,184 @@ fn handle_paced_workload(args: &[String]) -> i32 {
 
     println!("{{\"eperm\":{eperm_count},\"ok\":{ok_count}}}");
     0
+}
+
+fn handle_guard_bpf(args: &[String]) -> i32 {
+    let expected = args.first().map(|s| s.as_str()).unwrap_or("eperm");
+    #[repr(C)]
+    struct BpfAttrGetNextId {
+        start_id: u32,
+        next_id: u32,
+        open_flags: u32,
+    }
+    let mut attr = BpfAttrGetNextId {
+        start_id: 0,
+        next_id: 0,
+        open_flags: 0,
+    };
+    let res = unsafe {
+        libc::syscall(
+            libc::SYS_bpf,
+            11, /* BPF_PROG_GET_NEXT_ID */
+            &mut attr as *mut _ as *mut libc::c_void,
+            std::mem::size_of::<BpfAttrGetNextId>() as u32,
+        )
+    };
+    let err = if res < 0 {
+        std::io::Error::last_os_error().raw_os_error()
+    } else {
+        None
+    };
+    match expected {
+        "eperm" => {
+            if err == Some(libc::EPERM) {
+                0
+            } else {
+                eprintln!("[guard_bpf] expected EPERM, got res={res}, err={err:?}");
+                1
+            }
+        }
+        "ok" => {
+            if res >= 0 || err == Some(libc::ENOENT) {
+                0
+            } else {
+                eprintln!("[guard_bpf] expected OK, got res={res}, err={err:?}");
+                1
+            }
+        }
+        _ => 2,
+    }
+}
+
+fn handle_guard_signal(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        eprintln!("[guard_signal] expects <target_pid> <expected: eperm|ok>");
+        return 2;
+    }
+    let target_pid: i32 = match args[0].parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[guard_signal] invalid target_pid {}: {e}", args[0]);
+            return 2;
+        }
+    };
+    let expected = &args[1];
+    let res = unsafe { libc::kill(target_pid, libc::SIGCONT) };
+    let err = if res != 0 {
+        std::io::Error::last_os_error().raw_os_error()
+    } else {
+        None
+    };
+    match expected.as_str() {
+        "eperm" => {
+            if err == Some(libc::EPERM) {
+                0
+            } else {
+                eprintln!("[guard_signal] expected EPERM, got res={res}, err={err:?}");
+                1
+            }
+        }
+        "ok" => {
+            if res == 0 {
+                0
+            } else {
+                eprintln!("[guard_signal] expected OK, got res={res}, err={err:?}");
+                1
+            }
+        }
+        _ => 2,
+    }
+}
+
+fn handle_guard_ptrace(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        eprintln!("[guard_ptrace] expects <target_pid> <expected: eperm|ok>");
+        return 2;
+    }
+    let target_pid: i32 = match args[0].parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[guard_ptrace] invalid target_pid {}: {e}", args[0]);
+            return 2;
+        }
+    };
+    let expected = &args[1];
+    let ptrace_res = unsafe { libc::ptrace(libc::PTRACE_SEIZE, target_pid as libc::pid_t, 0, 0) };
+    let ptrace_err = if ptrace_res != 0 {
+        std::io::Error::last_os_error().raw_os_error()
+    } else {
+        unsafe {
+            libc::ptrace(libc::PTRACE_DETACH, target_pid as libc::pid_t, 0, 0);
+        }
+        None
+    };
+    let mem_path = format!("/proc/{target_pid}/mem");
+    let mem_res = fs::File::open(&mem_path);
+    let mem_err = match &mem_res {
+        Err(e) => e.raw_os_error(),
+        Ok(_) => None,
+    };
+    match expected.as_str() {
+        "eperm" => {
+            // procfs reports any failed ptrace access check on /proc/<pid>/mem
+            // as EACCES, whichever LSM refused it (mm_access in fs/proc/base.c).
+            if ptrace_err == Some(libc::EPERM) && mem_err == Some(libc::EACCES) {
+                0
+            } else {
+                eprintln!(
+                    "[guard_ptrace] expected ptrace EPERM and mem EACCES, got ptrace={ptrace_err:?}, mem={mem_err:?}"
+                );
+                1
+            }
+        }
+        "ok" => {
+            if ptrace_err.is_none() && mem_err.is_none() {
+                0
+            } else {
+                eprintln!("[guard_ptrace] expected OK, got ptrace={ptrace_err:?}, mem={mem_err:?}");
+                1
+            }
+        }
+        _ => 2,
+    }
+}
+
+fn handle_guard_pins() -> i32 {
+    let unlink_res = unsafe { libc::unlink(c"/sys/fs/bpf/rk/maps/rk_meta".as_ptr()) };
+    let unlink_err = if unlink_res != 0 {
+        std::io::Error::last_os_error().raw_os_error()
+    } else {
+        None
+    };
+    let rename_res = unsafe {
+        libc::rename(
+            c"/sys/fs/bpf/rk/maps/rk_meta".as_ptr(),
+            c"/sys/fs/bpf/rk/maps/rk_meta_renamed".as_ptr(),
+        )
+    };
+    let rename_err = if rename_res != 0 {
+        std::io::Error::last_os_error().raw_os_error()
+    } else {
+        None
+    };
+    let umount_res = unsafe { libc::umount(c"/sys/fs/bpf".as_ptr()) };
+    let umount_err = if umount_res != 0 {
+        std::io::Error::last_os_error().raw_os_error()
+    } else {
+        None
+    };
+    if unlink_err == Some(libc::EPERM)
+        && rename_err == Some(libc::EPERM)
+        && umount_err == Some(libc::EPERM)
+    {
+        0
+    } else {
+        eprintln!(
+            "[guard_pins] expected EPERM, unlink={unlink_err:?}, \
+             rename={rename_err:?}, umount={umount_err:?}"
+        );
+        1
+    }
 }
 
 fn handle_exec_cmd(args: &[String]) -> i32 {

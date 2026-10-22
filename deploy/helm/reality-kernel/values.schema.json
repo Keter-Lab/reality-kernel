@@ -28,6 +28,7 @@
     },
     "extraPolicy": {"type": "string"},
     "failurePolicy": {"enum": ["Fail", "Ignore"]},
+    "heartbeatTimeoutSeconds": {"type": "integer", "minimum": 1},
     "k8sCgroupRoot": {"type": "string", "minLength": 1},
     "nri": {
       "type": "object",

@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::{Array, HashMap as BpfHashMap};
+use aya::programs::links::FdLink;
 use aya::programs::{BtfTracePoint, CgroupAttachMode, CgroupSockAddr, Lsm};
 use aya::Ebpf;
 use bytemuck::Zeroable;
@@ -27,7 +28,9 @@ use rk_policy::net::{
     self, Action, Compiled, CompiledExec, CompiledFile, Entry, ExecPathKind, FileTarget, Mode,
     Policy, ProfileIds, MAX_EXEC_DIR_FILES, QUARANTINE,
 };
+use serde::{Deserialize, Serialize};
 
+use crate::loader::SETATTR_VARIANTS;
 use crate::selftest::kernel_dev;
 
 /// cgroup v2 mount point.
@@ -194,29 +197,73 @@ fn resolve_files(entries: &[CompiledFile]) -> Result<(Vec<ResolvedFile>, Vec<Str
     Ok((merged.into_values().collect(), skipped))
 }
 
+/// Pinned link file for a program; cgroup links are pinned once per root.
+fn link_pin(links: Option<&Path>, name: &str, root: Option<&Path>) -> Option<PathBuf> {
+    let dir = links?;
+    Some(match root {
+        None => dir.join(name),
+        Some(root) => {
+            let rel = root.strip_prefix(CGROUP_FS).unwrap_or(root);
+            let tag = rel
+                .to_string_lossy()
+                .trim_matches('/')
+                .replace('/', "+")
+                .replace('.', "_");
+            dir.join(format!("{name}@{tag}"))
+        }
+    })
+}
+
+/// Attaches one LSM program. With a pin path (docs/design/phase-6.md §3), a
+/// link already pinned there by an earlier sensor is adopted as is, and a new
+/// link is pinned so it outlives this process.
+fn attach_lsm(ebpf: &mut Ebpf, name: &str, pin: Option<&Path>) -> Result<String> {
+    if pin.is_some_and(Path::exists) {
+        return Ok(format!("{name} (lsm, adopted)"));
+    }
+    let program: &mut Lsm = ebpf
+        .program_mut(name)
+        .with_context(|| format!("program `{name}` missing from rk.bpf.o"))?
+        .try_into()?;
+    let id = program
+        .attach()
+        .with_context(|| format!("attach LSM program `{name}`"))?;
+    if let Some(pin) = pin {
+        let link: FdLink = program.take_link(id)?.into();
+        link.pin(pin)
+            .with_context(|| format!("pin {}", pin.display()))?;
+    }
+    Ok(format!("{name} (lsm)"))
+}
+
 /// Attaches the exec programs (already loaded): the host-wide LSM exec check
-/// and the `sched_process_exec` record. Links detach when `ebpf` drops.
-pub fn attach_exec(ebpf: &mut Ebpf) -> Result<Vec<String>> {
-    let program = ebpf
-        .program_mut(EXEC_LSM_PROGRAM)
-        .with_context(|| format!("program `{EXEC_LSM_PROGRAM}` missing from rk.bpf.o"))?;
-    let program: &mut Lsm = program.try_into()?;
-    program
-        .attach()
-        .with_context(|| format!("attach LSM program `{EXEC_LSM_PROGRAM}`"))?;
-
-    let program = ebpf
-        .program_mut(EXEC_RECORD_PROGRAM)
-        .with_context(|| format!("program `{EXEC_RECORD_PROGRAM}` missing from rk.bpf.o"))?;
-    let program: &mut BtfTracePoint = program.try_into()?;
-    program
-        .attach()
-        .with_context(|| format!("attach `{EXEC_RECORD_PROGRAM}`"))?;
-
-    Ok(vec![
-        format!("{EXEC_LSM_PROGRAM} (lsm)"),
-        format!("{EXEC_RECORD_PROGRAM} (tp_btf/sched_process_exec)"),
-    ])
+/// and the `sched_process_exec` record. Without `links`, links detach when
+/// `ebpf` drops.
+pub fn attach_exec(ebpf: &mut Ebpf, links: Option<&Path>) -> Result<Vec<String>> {
+    let mut attached = vec![attach_lsm(
+        ebpf,
+        EXEC_LSM_PROGRAM,
+        link_pin(links, EXEC_LSM_PROGRAM, None).as_deref(),
+    )?];
+    let pin = link_pin(links, EXEC_RECORD_PROGRAM, None);
+    if pin.as_deref().is_some_and(Path::exists) {
+        attached.push(format!("{EXEC_RECORD_PROGRAM} (tp_btf, adopted)"));
+    } else {
+        let program: &mut BtfTracePoint = ebpf
+            .program_mut(EXEC_RECORD_PROGRAM)
+            .with_context(|| format!("program `{EXEC_RECORD_PROGRAM}` missing from rk.bpf.o"))?
+            .try_into()?;
+        let id = program
+            .attach()
+            .with_context(|| format!("attach `{EXEC_RECORD_PROGRAM}`"))?;
+        if let Some(pin) = &pin {
+            let link: FdLink = program.take_link(id)?.into();
+            link.pin(pin)
+                .with_context(|| format!("pin {}", pin.display()))?;
+        }
+        attached.push(format!("{EXEC_RECORD_PROGRAM} (tp_btf/sched_process_exec)"));
+    }
+    Ok(attached)
 }
 
 const FILE_PROGRAMS: &[&str] = &[
@@ -229,53 +276,59 @@ const FILE_PROGRAMS: &[&str] = &[
     "rk_file_mkdir",
 ];
 
-/// Attaches the file LSM programs (already loaded).
-pub fn attach_file(ebpf: &mut Ebpf) -> Result<Vec<String>> {
-    let mut attached = Vec::new();
-    for &name in FILE_PROGRAMS {
-        let program = ebpf
-            .program_mut(name)
-            .with_context(|| format!("program `{name}` missing from rk.bpf.o"))?;
-        let program: &mut Lsm = program.try_into()?;
-        program
-            .attach()
-            .with_context(|| format!("attach LSM program `{name}`"))?;
-        attached.push(format!("{name} (lsm)"));
+/// Self-protection LSM programs (guard.bpf.c, docs/design/phase-6.md §5).
+pub const GUARD_PROGRAMS: &[&str] = &[
+    "rk_guard_bpf",
+    "rk_guard_task_kill",
+    "rk_guard_ptrace",
+    "rk_guard_pin_unlink",
+    "rk_guard_pin_rename",
+    "rk_guard_pin_rmdir",
+    "rk_guard_umount",
+];
+
+/// Attaches the self-protection LSM programs (already loaded).
+pub fn attach_guard(ebpf: &mut Ebpf, links: Option<&Path>) -> Result<Vec<String>> {
+    GUARD_PROGRAMS
+        .iter()
+        .map(|name| attach_lsm(ebpf, name, link_pin(links, name, None).as_deref()))
+        .collect()
+}
+
+/// Attaches the file LSM programs (already loaded). One `inode_setattr`
+/// variant is used: v2 where the hook has the `idmap` argument (6.9+), else
+/// v1; its link is pinned as `rk_file_setattr` either way.
+pub fn attach_file(ebpf: &mut Ebpf, links: Option<&Path>) -> Result<Vec<String>> {
+    let mut attached = FILE_PROGRAMS
+        .iter()
+        .map(|name| attach_lsm(ebpf, name, link_pin(links, name, None).as_deref()))
+        .collect::<Result<Vec<_>>>()?;
+
+    let pin = link_pin(links, "rk_file_setattr", None);
+    if pin.as_deref().is_some_and(Path::exists) {
+        attached.push("rk_file_setattr (lsm, adopted)".to_string());
+        return Ok(attached);
     }
-
-    // Attach whichever setattr variant was loaded
-    let setattr_attached = if let Some(prog) = ebpf.program_mut("rk_file_setattr_v2") {
-        let lsm: &mut Lsm = prog.try_into()?;
-        match lsm.attach() {
-            Ok(_) => "rk_file_setattr_v2 (lsm)".to_string(),
-            Err(_) => {
-                let prog = ebpf
-                    .program_mut("rk_file_setattr_v1")
-                    .with_context(|| "rk_file_setattr_v1 missing from rk.bpf.o")?;
-                let lsm: &mut Lsm = prog.try_into()?;
-                lsm.attach().with_context(|| "attach rk_file_setattr_v1")?;
-                "rk_file_setattr_v1 (lsm)".to_string()
-            }
-        }
+    let v2_loaded = ebpf.program_mut(SETATTR_VARIANTS[0]).is_some();
+    let v2 = if v2_loaded {
+        attach_lsm(ebpf, SETATTR_VARIANTS[0], pin.as_deref())
     } else {
-        let prog = ebpf
-            .program_mut("rk_file_setattr_v1")
-            .with_context(|| "rk_file_setattr_v1 missing from rk.bpf.o")?;
-        let lsm: &mut Lsm = prog.try_into()?;
-        lsm.attach().with_context(|| "attach rk_file_setattr_v1")?;
-        "rk_file_setattr_v1 (lsm)".to_string()
+        Err(anyhow::anyhow!("{} not loaded", SETATTR_VARIANTS[0]))
     };
-    attached.push(setattr_attached);
-
+    attached.push(match v2 {
+        Ok(name) => name,
+        Err(_) => attach_lsm(ebpf, SETATTR_VARIANTS[1], pin.as_deref())?,
+    });
     Ok(attached)
 }
 
-/// Attaches every enforcement program: network hooks on `cgroup_root`, exec
-/// programs, and file programs.
+/// Attaches every enforcement program: network hooks on `cgroup_root`, exec,
+/// file and self-protection programs. Links are not pinned (test harness).
 pub fn attach_all(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
-    let mut attached = attach_network(ebpf, cgroup_root)?;
-    attached.extend(attach_exec(ebpf)?);
-    attached.extend(attach_file(ebpf)?);
+    let mut attached = attach_network(ebpf, cgroup_root, None)?;
+    attached.extend(attach_exec(ebpf, None)?);
+    attached.extend(attach_file(ebpf, None)?);
+    attached.extend(attach_guard(ebpf, None)?);
     Ok(attached)
 }
 
@@ -380,50 +433,60 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
 }
 
 /// Attaches the network programs (already loaded) to `cgroup_root`, creating
-/// it if needed, and the LSM programs host-wide. Links detach when `ebpf` drops.
-pub fn attach_network(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
-    let mut attached = attach_sock_addr(ebpf, cgroup_root)?;
-    attached.extend(attach_network_lsm(ebpf)?);
+/// it if needed, and the LSM programs host-wide.
+pub fn attach_network(
+    ebpf: &mut Ebpf,
+    cgroup_root: &Path,
+    links: Option<&Path>,
+) -> Result<Vec<String>> {
+    let mut attached = attach_sock_addr(ebpf, cgroup_root, links)?;
+    attached.extend(attach_network_lsm(ebpf, links)?);
     Ok(attached)
 }
 
 /// Attaches the `sock_addr` programs to one more cgroup subtree, creating it
 /// if needed. Unlike the LSM programs, these can be attached at several roots
-/// (`rk.slice` and the Kubernetes root, Phase 5b).
-pub fn attach_sock_addr(ebpf: &mut Ebpf, cgroup_root: &Path) -> Result<Vec<String>> {
+/// (`rk.slice` and the Kubernetes root, Phase 5b); each root has its own pins.
+pub fn attach_sock_addr(
+    ebpf: &mut Ebpf,
+    cgroup_root: &Path,
+    links: Option<&Path>,
+) -> Result<Vec<String>> {
     fs::create_dir_all(cgroup_root).with_context(|| format!("create {}", cgroup_root.display()))?;
     let cgroup =
         fs::File::open(cgroup_root).with_context(|| format!("open {}", cgroup_root.display()))?;
 
     let mut attached = Vec::new();
     for name in SOCK_ADDR_PROGRAMS {
-        let program = ebpf
+        let pin = link_pin(links, name, Some(cgroup_root));
+        if pin.as_deref().is_some_and(Path::exists) {
+            attached.push(format!("{name} -> {} (adopted)", cgroup_root.display()));
+            continue;
+        }
+        let program: &mut CgroupSockAddr = ebpf
             .program_mut(name)
-            .with_context(|| format!("program `{name}` missing from rk.bpf.o"))?;
-        let program: &mut CgroupSockAddr = program.try_into()?;
+            .with_context(|| format!("program `{name}` missing from rk.bpf.o"))?
+            .try_into()?;
         // bpf_link based cgroup attachments take no flags and are always multi-attach.
-        program
+        let id = program
             .attach(&cgroup, CgroupAttachMode::Single)
             .with_context(|| format!("attach `{name}` to {}", cgroup_root.display()))?;
+        if let Some(pin) = &pin {
+            let link = FdLink::try_from(program.take_link(id)?)?;
+            link.pin(pin)
+                .with_context(|| format!("pin {}", pin.display()))?;
+        }
         attached.push(format!("{name} -> {}", cgroup_root.display()));
     }
     Ok(attached)
 }
 
 /// Attaches the network LSM programs (raw-socket denial) host-wide, once.
-pub fn attach_network_lsm(ebpf: &mut Ebpf) -> Result<Vec<String>> {
-    let mut attached = Vec::new();
-    for name in LSM_PROGRAMS {
-        let program = ebpf
-            .program_mut(name)
-            .with_context(|| format!("program `{name}` missing from rk.bpf.o"))?;
-        let program: &mut Lsm = program.try_into()?;
-        program
-            .attach()
-            .with_context(|| format!("attach LSM program `{name}`"))?;
-        attached.push(format!("{name} (lsm)"));
-    }
-    Ok(attached)
+pub fn attach_network_lsm(ebpf: &mut Ebpf, links: Option<&Path>) -> Result<Vec<String>> {
+    LSM_PROGRAMS
+        .iter()
+        .map(|name| attach_lsm(ebpf, name, link_pin(links, name, None).as_deref()))
+        .collect()
 }
 
 /// Keys written into one slot, so it can be cleared before reuse.
@@ -473,6 +536,23 @@ pub struct PolicyEngine {
     /// Whether BPF LSM is active on this kernel. Without it, exec and file
     /// rules are refused (docs/design/phase-5b.md §6).
     lsm_active: bool,
+    /// Where the engine persists its state after every change, and the pin
+    /// epoch that state belongs to (docs/design/phase-6.md §3.3).
+    state_file: Option<PathBuf>,
+    epoch: String,
+}
+
+/// What survives a sensor restart beyond the kernel maps themselves.
+#[derive(Debug, Serialize, Deserialize)]
+struct EngineState {
+    epoch: String,
+    ids: ProfileIds,
+    generation: u64,
+    bindings: BTreeMap<u64, (String, u32)>,
+    quarantined: BTreeSet<u64>,
+    dynamic: BTreeMap<u64, (String, String)>,
+    text: Option<String>,
+    previous_text: Option<String>,
 }
 
 /// What `rk policy apply --dry-run` reports: the apply that would happen,
@@ -514,7 +594,122 @@ impl PolicyEngine {
             text: None,
             previous_text: None,
             lsm_active: true,
+            state_file: None,
+            epoch: String::new(),
         }
+    }
+
+    /// Persists the engine state to `path` after every change, tagged with
+    /// the pin set's `epoch`. Nothing is written yet, so [`Self::adopt`]
+    /// can still read the previous sensor's file.
+    pub fn set_state_file(&mut self, path: PathBuf, epoch: &[u8; 16]) {
+        self.state_file = Some(path);
+        self.epoch = hex::encode(epoch);
+    }
+
+    /// Writes the state file atomically (temporary file, then rename), 0600.
+    /// A failure is logged: the kernel change it follows has already happened.
+    fn persist(&self) {
+        let Some(path) = &self.state_file else {
+            return;
+        };
+        let state = EngineState {
+            epoch: self.epoch.clone(),
+            ids: self.ids.clone(),
+            generation: self.generation,
+            bindings: self.bindings.clone(),
+            quarantined: self.quarantined.clone(),
+            dynamic: self.dynamic.clone(),
+            text: self.text.clone(),
+            previous_text: self.previous_text.clone(),
+        };
+        let write = || -> Result<()> {
+            use std::io::Write as _;
+            use std::os::unix::fs::OpenOptionsExt as _;
+            use std::os::unix::fs::PermissionsExt as _;
+            if let Some(dir) = path.parent() {
+                fs::create_dir_all(dir)?;
+                let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
+            }
+            let tmp = path.with_extension("tmp");
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&tmp)?;
+            file.write_all(&serde_json::to_vec(&state)?)?;
+            file.sync_all()?;
+            fs::rename(&tmp, path)?;
+            Ok(())
+        };
+        if let Err(e) = write() {
+            tracing::error!(path = %path.display(), error = %format!("{e:#}"), "engine state not saved");
+        }
+    }
+
+    /// Takes over the kernel state of an adopted pin set
+    /// (docs/design/phase-6.md §3.3). The live slot, both slots' contents and
+    /// the newest generation always come from the maps, so the next apply can
+    /// never write into the live slot. The state file adds what the maps
+    /// cannot say (profile id allocation, binding paths, agent bindings,
+    /// quarantine, policy text) when it belongs to the same pin set; call
+    /// [`Self::set_state_file`] first. Returns whether it was used.
+    pub fn adopt(&mut self, ebpf: &mut Ebpf) -> Result<bool> {
+        let active =
+            Array::<_, u32>::try_from(ebpf.map(MAP_ACTIVE).context("rk_active_slot missing")?)?;
+        self.active_slot = active.get(&0, 0).context("read rk_active_slot")? & 1;
+        self.written = [scan_slot(ebpf, 0)?, scan_slot(ebpf, 1)?];
+
+        let profiles =
+            Array::<_, Profile>::try_from(ebpf.map(MAP_PROFILES).context("rk_profiles missing")?)?;
+        let mut kernel_gen = 0;
+        for &id in &self.written[self.active_slot as usize].profiles {
+            let p = profiles.get(&profile_index(self.active_slot, id), 0)?;
+            kernel_gen = kernel_gen.max(p.0.policy_gen);
+        }
+
+        let state = self
+            .state_file
+            .as_ref()
+            .and_then(|path| fs::read(path).ok())
+            .and_then(|bytes| serde_json::from_slice::<EngineState>(&bytes).ok())
+            .filter(|s| !self.epoch.is_empty() && s.epoch == self.epoch);
+        let used = state.is_some();
+        match state {
+            Some(s) => {
+                self.ids = s.ids;
+                self.generation = s.generation.max(kernel_gen);
+                self.bindings = s.bindings;
+                self.quarantined = s.quarantined;
+                self.dynamic = s.dynamic;
+                self.text = s.text;
+                self.previous_text = s.previous_text;
+            }
+            None => {
+                // Only the kernel's view: binding paths are unknown, and a
+                // new id allocation is checked against live bindings on apply.
+                self.generation = kernel_gen;
+                let map = ebpf
+                    .map(MAP_BINDINGS)
+                    .context("rk_cgroup_profile missing")?;
+                let bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
+                self.bindings = bindings
+                    .iter()
+                    .filter_map(|entry| entry.ok())
+                    .map(|(id, b)| (id, (String::new(), b.0.profile)))
+                    .collect();
+            }
+        }
+        if let Some(text) = self.text.clone() {
+            let mut ids = self.ids.clone();
+            if let Ok(policy) = net::parse(&text, &mut ids) {
+                self.ids = ids;
+                self.policy = Some(policy);
+            }
+        }
+        self.persist();
+        Ok(used)
     }
 
     pub fn generation(&self) -> u64 {
@@ -611,6 +806,7 @@ impl PolicyEngine {
         };
         self.policy = Some(policy);
         self.previous_text = self.text.replace(text.to_string());
+        self.persist();
         Ok(report)
     }
 
@@ -737,6 +933,7 @@ impl PolicyEngine {
         self.set_binding(ebpf, id, pid)?;
         self.bindings.insert(id, (cgroup.clone(), pid));
         self.dynamic.insert(id, (cgroup, profile.to_string()));
+        self.persist();
         Ok(id)
     }
 
@@ -777,6 +974,7 @@ impl PolicyEngine {
         self.bindings.insert(id, (cgroup.to_string(), pid));
         self.dynamic
             .insert(id, (cgroup.to_string(), profile.to_string()));
+        self.persist();
         Ok(id)
     }
 
@@ -792,6 +990,7 @@ impl PolicyEngine {
             .context("rk_cgroup_profile missing")?;
         let mut bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
         let _ = bindings.remove(&id);
+        self.persist();
         Ok(())
     }
 
@@ -981,6 +1180,7 @@ impl PolicyEngine {
             .context("no policy applied yet: quarantine profile unknown")?;
         self.set_binding(ebpf, id, qid)?;
         self.quarantined.insert(id);
+        self.persist();
         Ok(())
     }
 
@@ -1005,7 +1205,9 @@ impl PolicyEngine {
             })
             .with_context(|| format!("`{cgroup}` has no binding in the active policy"))?;
         self.quarantined.remove(&id);
-        self.set_binding(ebpf, id, profile)
+        self.set_binding(ebpf, id, profile)?;
+        self.persist();
+        Ok(())
     }
 
     fn set_binding(&mut self, ebpf: &mut Ebpf, id: u64, profile: u32) -> Result<()> {
@@ -1023,6 +1225,55 @@ impl PolicyEngine {
         }
         Ok(())
     }
+}
+
+/// What one generation slot holds in the kernel maps, found by scanning them
+/// (keys carry the slot in bit 31 of their scope). Used on adoption, when the
+/// record of what an earlier sensor wrote is gone.
+fn scan_slot(ebpf: &Ebpf, slot: u32) -> Result<SlotContents> {
+    let in_slot = |scope: u32| scope >> 31 == slot;
+    let mut contents = SlotContents::default();
+
+    let profiles =
+        Array::<_, Profile>::try_from(ebpf.map(MAP_PROFILES).context("rk_profiles missing")?)?;
+    for id in 0..RK_MAX_PROFILES {
+        if profiles.get(&profile_index(slot, id), 0)?.0.policy_gen != 0 {
+            contents.profiles.push(id);
+        }
+    }
+    for (name, out) in [
+        (MAP_DENY, &mut contents.deny),
+        (MAP_ALLOW, &mut contents.allow),
+    ] {
+        let trie = LpmTrie::<_, KeyData, NetRule>::try_from(
+            ebpf.map(name).with_context(|| format!("{name} missing"))?,
+        )?;
+        for key in trie.keys() {
+            let key = key?;
+            if in_slot(key.data().scope) {
+                out.push((key.prefix_len(), key.data()));
+            }
+        }
+    }
+    let exec = BpfHashMap::<_, ExecKey, ExecRule>::try_from(
+        ebpf.map(MAP_EXEC).context("rk_exec_allow missing")?,
+    )?;
+    for key in exec.keys() {
+        let key = key?;
+        if in_slot(key.0.scope) {
+            contents.exec.push(key);
+        }
+    }
+    let files = BpfHashMap::<_, FileKey, FileRule>::try_from(
+        ebpf.map(MAP_FILE).context("rk_file_protect missing")?,
+    )?;
+    for key in files.keys() {
+        let key = key?;
+        if in_slot(key.0.scope) {
+            contents.files.push(key);
+        }
+    }
+    Ok(contents)
 }
 
 fn profile_index(slot: u32, profile: u32) -> u32 {
@@ -1238,5 +1489,19 @@ mod tests {
     fn profile_index_separates_slots() {
         assert_eq!(profile_index(0, 3), 3);
         assert_eq!(profile_index(1, 3), RK_MAX_PROFILES + 3);
+    }
+
+    #[test]
+    fn link_pin_replaces_dots_and_slashes_for_bpffs() {
+        let dir = Path::new("/sys/fs/bpf/rk/links");
+        let pin = link_pin(
+            Some(dir),
+            "rk_net_connect4",
+            Some(Path::new("/sys/fs/cgroup/rk.slice")),
+        )
+        .unwrap();
+        let fname = pin.file_name().unwrap().to_string_lossy();
+        assert!(!fname.contains('.'));
+        assert_eq!(fname, "rk_net_connect4@rk_slice");
     }
 }

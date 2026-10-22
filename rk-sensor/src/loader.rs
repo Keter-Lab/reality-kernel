@@ -174,6 +174,13 @@ fn lsm_hook(program: &str) -> Option<&'static str> {
         "rk_file_mkdir" => Some("inode_mkdir"),
         "rk_file_setattr_v1" => Some("inode_setattr"),
         "rk_file_setattr_v2" => Some("inode_setattr"),
+        "rk_guard_bpf" => Some("bpf"),
+        "rk_guard_task_kill" => Some("task_kill"),
+        "rk_guard_ptrace" => Some("ptrace_access_check"),
+        "rk_guard_pin_unlink" => Some("inode_unlink"),
+        "rk_guard_pin_rename" => Some("inode_rename"),
+        "rk_guard_pin_rmdir" => Some("inode_rmdir"),
+        "rk_guard_umount" => Some("sb_umount"),
         _ => None,
     }
 }

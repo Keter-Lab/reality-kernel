@@ -85,6 +85,43 @@ struct {
     __uint(max_entries, 1);
 } rk_active_slot SEC(".maps");
 
+/*
+ * Phase 6 (docs/design/phase-6.md). Written only by rk-sensor:
+ * BPF_F_RDONLY_PROG makes the verifier reject any program write.
+ */
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, __u32);
+    __type(value, __u64); /* CLOCK_BOOTTIME ns of the last sensor heartbeat */
+    __uint(max_entries, 1);
+    __uint(map_flags, BPF_F_RDONLY_PROG);
+} rk_heartbeat SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, __u32);
+    __type(value, struct rk_config);
+    __uint(max_entries, 1);
+    __uint(map_flags, BPF_F_RDONLY_PROG);
+} rk_config SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, __u32);
+    __type(value, struct rk_guard_target);
+    __uint(max_entries, 1);
+    __uint(map_flags, BPF_F_RDONLY_PROG);
+} rk_guard SEC(".maps");
+
+/* Never read by programs; pinned with the set so a restart can check it. */
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, __u32);
+    __type(value, struct rk_meta);
+    __uint(max_entries, 1);
+    __uint(map_flags, BPF_F_RDONLY_PROG);
+} rk_meta SEC(".maps");
+
 static __always_inline void rk_count(__u32 idx)
 {
     __u64 *val = bpf_map_lookup_elem(&rk_counters, &idx);
@@ -109,7 +146,32 @@ struct rk_gov {
     __u8  mode;
     __u8  net_default;
     __u16 flags;
+    __u8  stale;          /* sensor heartbeat older than the timeout */
 };
+
+/*
+ * True when the sensor's heartbeat is older than the configured timeout.
+ * Missing maps, a timeout never configured (0) and a heartbeat never written
+ * (0) all count as stale: fail closed (docs/design/phase-6.md §4).
+ */
+static __always_inline __u8 rk_heartbeat_stale(void)
+{
+    __u32 zero = 0;
+    __u64 *beat = bpf_map_lookup_elem(&rk_heartbeat, &zero);
+    struct rk_config *cfg = bpf_map_lookup_elem(&rk_config, &zero);
+    __u64 last, timeout, now;
+
+    if (!beat || !cfg)
+        return 1;
+    last = *beat;
+    timeout = cfg->heartbeat_timeout_ns;
+    if (!last || !timeout)
+        return 1;
+    now = bpf_ktime_get_boot_ns();
+    if (last >= now)
+        return 0;
+    return now - last > timeout;
+}
 
 /*
  * Returns 0 for an ungoverned task (fast path: one hash lookup). A cgroup bound
@@ -146,6 +208,8 @@ static __always_inline int rk_governance(struct rk_gov *g)
     g->mode = prof->mode;
     g->net_default = prof->net_default;
     g->flags = prof->flags;
+    /* Only ENFORCE acts on it; AUDIT skips the two lookups. */
+    g->stale = g->mode == RK_MODE_ENFORCE ? rk_heartbeat_stale() : 0;
     return 1;
 
 fail_closed:
@@ -154,20 +218,35 @@ fail_closed:
     g->mode = RK_MODE_ENFORCE;
     g->net_default = RK_ACTION_DENY;
     g->flags = RK_PROFILE_DENY_RAW_SOCKETS | RK_PROFILE_EXEC_DENY_DEFAULT;
+    g->stale = rk_heartbeat_stale();
     return 1;
 }
 
 /* Verdict reported in events: AUDIT turns a deny into audit-would-deny. */
+/* A stale heartbeat turns every governed ENFORCE action into a deny. */
+static __always_inline int rk_effective_deny(const struct rk_gov *g, __u8 action)
+{
+    return action == RK_ACTION_DENY || (g->stale && g->mode == RK_MODE_ENFORCE);
+}
+
 static __always_inline __u8 rk_reported_verdict(const struct rk_gov *g, __u8 action)
 {
-    if (action != RK_ACTION_DENY)
+    if (!rk_effective_deny(g, action))
         return RK_VERDICT_ALLOW;
     return g->mode == RK_MODE_ENFORCE ? RK_VERDICT_DENY : RK_VERDICT_AUDIT_WOULD_DENY;
 }
 
 static __always_inline int rk_enforced_deny(const struct rk_gov *g, __u8 action)
 {
-    return action == RK_ACTION_DENY && g->mode == RK_MODE_ENFORCE;
+    return rk_effective_deny(g, action) && g->mode == RK_MODE_ENFORCE;
+}
+
+/* rule_id for events: RK_RULE_HEARTBEAT when only the stale heartbeat denied. */
+static __always_inline __u32 rk_rule(const struct rk_gov *g, __u8 action, __u32 rule_id)
+{
+    if (action != RK_ACTION_DENY && g->stale && g->mode == RK_MODE_ENFORCE)
+        return RK_RULE_HEARTBEAT;
+    return rule_id;
 }
 
 static __always_inline struct rk_scratch_msg *rk_scratch(void)

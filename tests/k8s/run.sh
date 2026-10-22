@@ -251,13 +251,30 @@ t_configmap_update() {
 }
 
 t_restart_resyncs() {
-    kubectl -n "$NS" delete pods -l app.kubernetes.io/name=reality-kernel --wait=true >/dev/null
+    # Phase 6: pins outlive the sensor, so a running governed pod must stay
+    # denied *while* the DaemonSet pod is replaced, not only afterwards.
+    local old allowed=0 denied=0 out i
+    old="$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=reality-kernel -o jsonpath='{.items[0].metadata.name}')"
+    kubectl -n "$NS" delete pod "$old" --wait=false >/dev/null
+    for i in $(seq 1 60); do
+        if out="$(kubectl exec hold1 -- "$PROBE" --agent-probe connect "$DENY" eperm 2>&1)"; then
+            denied=$((denied + 1))
+        elif grep -q "expected EPERM" <<<"$out"; then
+            allowed=$((allowed + 1))
+        fi
+        if ! kubectl -n "$NS" get pod "$old" >/dev/null 2>&1 \
+            && kubectl -n "$NS" rollout status ds/rk --timeout=1s >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    [ "$allowed" -eq 0 ] || fail "$allowed probes reached $DENY during the restart (protection paused)"
+    [ "$denied" -ge 1 ] || fail "no probe completed during the restart"
     kubectl -n "$NS" rollout status ds/rk --timeout=180s >/dev/null || fail "DaemonSet did not come back"
-    local i
     for i in $(seq 1 30); do
         if [ "$(containers 2>/dev/null || echo 0)" -ge 1 ] \
             && kubectl exec hold1 -- "$PROBE" --agent-probe connect "$DENY" eperm >/dev/null 2>&1; then
-            echo "after a DaemonSet pod restart, the running pod is governed again ($(containers) bound)"
+            echo "denied throughout the DaemonSet pod restart ($denied probes, none allowed); rebound after ($(containers) bound)"
             return 0
         fi
         sleep 2

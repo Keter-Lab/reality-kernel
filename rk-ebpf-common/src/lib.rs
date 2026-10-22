@@ -98,6 +98,15 @@ const _: () = {
     assert!(size_of::<rk_payload_file_deny>() == 32);
     assert!(offset_of!(rk_payload_file_deny, access) == 16);
     assert!(offset_of!(rk_payload_file_deny, str_count) == 24);
+
+    // Phase 6 (docs/design/phase-6.md).
+    assert!(size_of::<rk_config>() == 8);
+    assert!(size_of::<rk_guard_target>() == 16);
+    assert!(offset_of!(rk_guard_target, start_ticks) == 8);
+    assert!(size_of::<rk_meta>() == 56);
+    assert!(offset_of!(rk_meta, epoch) == 40);
+    assert!(size_of::<rk_payload_tamper>() == 16);
+    assert!(offset_of!(rk_payload_tamper, detail) == 8);
 };
 
 #[cfg(test)]
@@ -113,6 +122,9 @@ mod tests {
         assert_eq!(rk_counter::RK_CNT_MAX, 2);
         assert_eq!(rk_event_type::RK_EV_SOCK_CREATE, 10);
         assert_eq!(RK_MAX_PROFILES, 1024);
+        assert_eq!(RK_RULE_HEARTBEAT, u32::MAX);
+        assert_eq!(RK_NSEC_PER_CLOCK_TICK, 10_000_000);
+        assert_eq!(rk_tamper_hook::RK_TAMPER_UMOUNT, 7);
         assert_eq!(RK_POLICY_SLOTS, 2);
         assert_eq!(rk_proto_bit::RK_PROTO_ANY, 7);
         assert_eq!(rk_mode::RK_MODE_ENFORCE, 1);

@@ -97,11 +97,11 @@ static __always_inline int rk_file_check(
     }
 
 decided:
-    if (action == RK_ACTION_DENY) {
+    if (rk_effective_deny(g, action)) {
         msg = rk_scratch();
         if (msg) {
             rk_fill_hdr(&msg->hdr, g->cgroup_id, g->policy_gen, RK_EV_FILE_DENY,
-                        rk_reported_verdict(g, action), rule_id);
+                        rk_reported_verdict(g, action), rk_rule(g, action, rule_id));
             rk_fill_task(&msg->hdr);
             body = (struct rk_payload_file_deny *)msg->payload;
             __builtin_memset(body, 0, sizeof(*body));

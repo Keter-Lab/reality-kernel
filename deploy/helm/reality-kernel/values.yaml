@@ -37,6 +37,10 @@ extraPolicy: ""
 # Fail refuses the container (secure default); Ignore starts it ungoverned.
 failurePolicy: Fail
 
+# Seconds without the sensor's heartbeat before governed ENFORCE workloads
+# are denied everything (docs/design/phase-6.md §4). Fail-closed by design.
+heartbeatTimeoutSeconds: 10
+
 # Kubernetes cgroup root relative to /sys/fs/cgroup, or `auto`.
 k8sCgroupRoot: auto
 

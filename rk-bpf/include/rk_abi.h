@@ -290,6 +290,68 @@ struct rk_payload_file_deny {
     __u32 _pad3;          /* offset 28 */
 };
 
+/*
+ * ------------------------------------------------------------------------
+ * Phase 6: heartbeat, self-protection and pin metadata
+ * (docs/design/phase-6.md §3-§6). These maps are BPF_F_RDONLY_PROG:
+ * programs read them, only rk-sensor writes them.
+ * ------------------------------------------------------------------------
+ */
+
+/* rule_id of a governed action denied only because the heartbeat is stale. */
+#define RK_RULE_HEARTBEAT 0xFFFFFFFFu
+
+/* /proc/<pid>/stat starttime unit (USER_HZ) in nanoseconds. */
+#define RK_NSEC_PER_CLOCK_TICK 10000000ull
+
+/* rk_config[0]. A timeout of 0 means never configured: fail closed. */
+struct rk_config {
+    __u64 heartbeat_timeout_ns; /* offset 0 */
+};
+
+/* rk_guard[0]: the sensor process the guard hooks protect. */
+struct rk_guard_target {
+    __u32 tgid;           /* offset 0 */
+    __u32 _pad;           /* offset 4 */
+    __u64 start_ticks;    /* offset 8: /proc/<tgid>/stat starttime */
+};
+
+/* rk_meta[0]: identifies the object a pin set was created by. */
+struct rk_meta {
+    __u32 abi;            /* offset  0: RK_ABI_VERSION */
+    __u32 _pad;           /* offset  4 */
+    __u8  object_sha256[32]; /* offset 8 */
+    __u8  epoch[16];      /* offset 40: random per pin set */
+};
+
+enum rk_tamper_hook {
+    RK_TAMPER_BPF        = 1, /* bpf() syscall; detail = cmd */
+    RK_TAMPER_SIGNAL     = 2, /* signal to the sensor; detail = signal */
+    RK_TAMPER_PTRACE     = 3, /* ptrace access to the sensor; detail = mode */
+    RK_TAMPER_PIN_UNLINK = 4, /* unlink in bpffs */
+    RK_TAMPER_PIN_RENAME = 5, /* rename in bpffs */
+    RK_TAMPER_PIN_RMDIR  = 6, /* rmdir in bpffs */
+    RK_TAMPER_UMOUNT     = 7, /* umount of a bpffs mount */
+};
+
+/* RK_EV_TAMPER payload (16 bytes). */
+struct rk_payload_tamper {
+    __u16 hook;           /* offset  0: enum rk_tamper_hook */
+    __u16 _pad;           /* offset  2 */
+    __u32 target_tgid;    /* offset  4: sensor tgid for SIGNAL/PTRACE, else 0 */
+    __u64 detail;         /* offset  8 */
+};
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(sizeof(struct rk_config) == 8, "config size");
+_Static_assert(sizeof(struct rk_guard_target) == 16, "guard_target size");
+_Static_assert(__builtin_offsetof(struct rk_guard_target, start_ticks) == 8, "guard start_ticks");
+_Static_assert(sizeof(struct rk_meta) == 56, "meta size");
+_Static_assert(__builtin_offsetof(struct rk_meta, epoch) == 40, "meta epoch");
+_Static_assert(sizeof(struct rk_payload_tamper) == 16, "payload_tamper size");
+_Static_assert(__builtin_offsetof(struct rk_payload_tamper, detail) == 8, "tamper detail");
+#endif
+
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert(sizeof(struct rk_exec_key) == 24, "exec_key size");
 _Static_assert(__builtin_offsetof(struct rk_exec_key, dev) == 8, "exec_key dev");
