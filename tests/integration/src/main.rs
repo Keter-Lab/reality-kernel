@@ -13,6 +13,8 @@ mod bpf;
 #[cfg(target_os = "linux")]
 mod conformance;
 #[cfg(target_os = "linux")]
+mod observability;
+#[cfg(target_os = "linux")]
 mod resilience;
 mod workloads;
 
@@ -450,6 +452,17 @@ fn main() {
         let mut checks = Vec::new();
         agent::run_suite(&args[2..], &mut checks);
         output_results("RK_AGENT", &checks);
+        std::process::exit(if checks.iter().all(|c| c.passed) {
+            0
+        } else {
+            1
+        });
+    }
+    #[cfg(target_os = "linux")]
+    if args.len() > 1 && args[1] == observability::SUITE_FLAG {
+        let mut checks = Vec::new();
+        observability::run_suite(&args[2..], &mut checks);
+        output_results("RK_OBSERVABILITY", &checks);
         std::process::exit(if checks.iter().all(|c| c.passed) {
             0
         } else {

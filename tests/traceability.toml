@@ -304,3 +304,39 @@ phase = "8"
 id = "coverage"
 text = "Userspace line coverage is reported on every run"
 tests = ["ci:coverage", "py:test_groups_by_crate_and_skips_dependencies"]
+
+[[criterion]]
+phase = "9"
+id = "audit_complete"
+text = "Every enforced or audit-would-deny decision appears in the audit log with its rule id, and lost events are recorded, not silent"
+tests = ["vm:audit_every_decision_logged", "vm:audit_records_loss", "unit:deny_and_audit_map_to_ocsf_dispositions"]
+
+[[criterion]]
+phase = "9"
+id = "audit_tamper"
+text = "Tampering with a stored audit batch is detected by verification"
+tests = ["vm:audit_tamper_detected", "unit:audit_verify_detects_modified_record", "unit:audit_verify_detects_deleted_batch", "unit:audit_verify_detects_reordered_batches", "unit:audit_verify_detects_inserted_batch", "unit:audit_verify_detects_bad_signature_and_pinned_key", "unit:deleting_the_middle_segment_is_detected", "unit:reopening_continues_the_chain_and_seals_leftovers"]
+
+[[criterion]]
+phase = "9"
+id = "ocsf_schema"
+text = "Audit records are valid OCSF 1.9.0"
+tests = ["unit:ocsf_records_validate", "unit:validator_rejects_broken_records"]
+
+[[criterion]]
+phase = "9"
+id = "metrics"
+text = "A Prometheus endpoint exposes decisions, losses, policy generation, heartbeat age and enforcement availability; the dashboard queries only exported metrics"
+tests = ["vm:metrics_endpoint_serves", "unit:renders_every_family", "unit:serves_metrics_over_http", "py:test_dashboard_metrics_exist"]
+
+[[criterion]]
+phase = "9"
+id = "otlp"
+text = "Decisions in an agent session are exported as OTLP spans in the session's trace, which the launched agent also receives"
+tests = ["unit:spans_join_the_session_trace", "unit:exports_to_a_collector", "unit:a_full_queue_counts_the_loss", "unit:traceparent_is_w3c_shaped_and_stable"]
+
+[[criterion]]
+phase = "9"
+id = "process_table"
+text = "The process table enriches records from exec records, falls back to procfs, is bounded, and says where enrichment came from"
+tests = ["unit:exec_records_fill_the_table_and_procfs_adds_the_parent", "unit:misses_fall_back_to_procfs_and_exited_processes_are_unavailable", "unit:the_table_is_bounded"]

@@ -5,7 +5,7 @@ behind the layout is in [docs/testing.md](../docs/testing.md).
 
 | Path | What it proves | Runs in |
 |---|---|---|
-| `integration/` | Every kernel-facing acceptance criterion, by real operations against the loaded programs: verdict suite (`main.rs`), agent/NRI path (`agent.rs`), restart and tamper resilience (`resilience.rs`), the conformance corpus (`conformance.rs`), the Phase 7 bench (`bench.rs`) | `kernel.yml` / vm-matrix, as root in a VM per kernel (5.15, 6.1, 6.6, 6.12, 6.18) |
+| `integration/` | Every kernel-facing acceptance criterion, by real operations against the loaded programs: verdict suite (`main.rs`), agent/NRI path (`agent.rs`), restart and tamper resilience (`resilience.rs`), the conformance corpus (`conformance.rs`), the audit log, metrics and loss accounting against the real daemon (`observability.rs`), the Phase 7 bench (`bench.rs`) | `kernel.yml` / vm-matrix, as root in a VM per kernel (5.15, 6.1, 6.6, 6.12, 6.18) |
 | `vm/selftest.sh` | The VM entry point: loads, runs each suite, extracts the JSON reports | vm-matrix |
 | `k8s/run.sh` | The DaemonSet, NRI plugin and annotation binding on a kind cluster | `kernel.yml` / k8s |
 | `conformance/` | One TOML file per policy semantic, with expected verdicts. The **same files** are checked by the userspace evaluator (`rk-policy/tests/conformance.rs`) and by the kernel (`integration/src/conformance.rs`), so the two engines cannot drift | `ci.yml` / test, and vm-matrix |
@@ -14,6 +14,7 @@ behind the layout is in [docs/testing.md](../docs/testing.md).
 | `traceability.toml` | Every acceptance criterion of every phase, mapped to the named tests that prove it | see below |
 | `traceability.py` | `static`: every criterion has tests, and every named test exists. `reports`: every named VM and k8s test passed on every kernel in this run | `ci.yml` / python, and `kernel.yml` / traceability |
 | `coverage_summary.py` | The per-crate line coverage table | `ci.yml` / coverage |
+| `test_dashboard.py` | The Grafana dashboard (`deploy/grafana/`) queries only metrics the sensor exports | `ci.yml` / python |
 | `test_*.py` | Unit tests for the scripts above, and the security regressions | `ci.yml` / python |
 
 Fuzz targets live in `../fuzz/` (`decoder_fuzz`, `policy_fuzz`; five minutes
