@@ -1,0 +1,30 @@
+name = "port_range"
+description = "A port range denies inside the range only"
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+
+[[profiles.case.network.deny]]
+cidr = "10.99.0.0/24"
+ports = ["8000-8100"]
+proto = ["udp"]
+"""
+
+[[op]]
+kind = "connect"
+target = "10.99.0.4:8050"
+proto = "udp"
+expect = "deny"
+
+[[op]]
+kind = "connect"
+target = "10.99.0.4:8000"
+proto = "udp"
+expect = "deny"
+
+[[op]]
+kind = "connect"
+target = "10.99.0.4:8101"
+proto = "udp"
+expect = "allow"

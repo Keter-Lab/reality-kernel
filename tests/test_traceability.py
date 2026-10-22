@@ -68,6 +68,7 @@ def write_reports(d, kernels, vm_passed=True, k8s_passed=True):
         )
         (d / f"agent-{k}.json").write_text("[]")
         (d / f"resilience-{k}.json").write_text("[]")
+        (d / f"conformance-{k}.json").write_text("[]")
     (d / "k8s.json").write_text(json.dumps([{"name": "k8s_demo", "passed": k8s_passed}]))
 
 

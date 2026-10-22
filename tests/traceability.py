@@ -22,8 +22,9 @@ import tomllib
 
 KINDS = ("vm", "k8s", "unit", "go", "py", "ci")
 VM_SOURCES = ("tests/integration/src/main.rs", "tests/integration/src/agent.rs",
+              "tests/integration/src/conformance.rs",
               "tests/integration/src/resilience.rs")
-VM_REPORTS = ("integration", "agent", "resilience")
+VM_REPORTS = ("integration", "agent", "resilience", "conformance")
 
 
 def load_criteria(root):

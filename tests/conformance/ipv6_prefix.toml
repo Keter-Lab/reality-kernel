@@ -1,0 +1,23 @@
+name = "ipv6_prefix"
+description = "IPv6 deny prefixes match inside and only inside"
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+
+[[profiles.case.network.deny]]
+cidr = "fd99::/64"
+proto = ["udp"]
+"""
+
+[[op]]
+kind = "connect"
+target = "[fd99::7]:80"
+proto = "udp"
+expect = "deny"
+
+[[op]]
+kind = "connect"
+target = "[fd99:0:0:1::7]:80"
+proto = "udp"
+expect = "allow"

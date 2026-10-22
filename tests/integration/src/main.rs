@@ -9,6 +9,8 @@
 mod agent;
 #[cfg(target_os = "linux")]
 mod bench;
+#[cfg(target_os = "linux")]
+mod conformance;
 mod bpf;
 #[cfg(target_os = "linux")]
 mod resilience;
@@ -408,6 +410,13 @@ fn main() {
     if args.len() > 1 && args[1] == workloads::CHILD_FLAG {
         let code = workloads::run_child(&args[2..]);
         std::process::exit(code);
+    }
+    #[cfg(target_os = "linux")]
+    if args.len() > 2 && args[1] == conformance::CONFORMANCE_FLAG {
+        let mut checks = Vec::new();
+        conformance::run(std::path::Path::new(&args[2]), &mut checks);
+        output_results("RK_CONFORMANCE", &checks);
+        std::process::exit(if checks.iter().all(|c| c.passed) { 0 } else { 1 });
     }
     #[cfg(target_os = "linux")]
     if args.len() > 1 && args[1] == bench::BENCH_FLAG {

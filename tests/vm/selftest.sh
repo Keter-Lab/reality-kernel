@@ -65,6 +65,13 @@ if [ -n "$integration" ]; then
         integ_rc=$?
         echo "rk-integration exit code: $integ_rc"
         [ "$integ_rc" -eq 0 ] || rc=1
+
+        # Phase 8: the policy conformance corpus, checked by the real kernel
+        # (the same files rk-policy checks in userspace).
+        "$integration" --conformance "$(dirname "$0")/../conformance" 2>&1
+        conf_rc=$?
+        echo "conformance exit code: $conf_rc"
+        [ "$conf_rc" -eq 0 ] || rc=1
     else
         echo "FAIL integration binary given but not executable: $integration"
         rc=1
