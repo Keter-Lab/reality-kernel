@@ -73,9 +73,7 @@ impl Heartbeat {
     /// never meets a stale heartbeat because of startup order.
     pub fn start(ebpf: &mut Ebpf, timeout: Duration) -> Result<Self> {
         if timeout < MIN_TIMEOUT {
-            bail!(
-                "heartbeat timeout {timeout:?} is below the minimum {MIN_TIMEOUT:?}"
-            );
+            bail!("heartbeat timeout {timeout:?} is below the minimum {MIN_TIMEOUT:?}");
         }
         let mut config: Array<MapData, Config> = owned_array(ebpf, MAP_CONFIG)?;
         let mut cfg = rk_config::zeroed();

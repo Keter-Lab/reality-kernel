@@ -91,8 +91,7 @@ fn ensure_bpffs(mount_point: &Path) -> Result<()> {
     {
         return Ok(());
     }
-    fs::create_dir_all(mount_point)
-        .with_context(|| format!("create {}", mount_point.display()))?;
+    fs::create_dir_all(mount_point).with_context(|| format!("create {}", mount_point.display()))?;
     let fstype = CString::new("bpf")?;
     // SAFETY: valid NUL-terminated strings; no mount data.
     let rc = unsafe {

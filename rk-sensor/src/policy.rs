@@ -19,7 +19,6 @@ use aya::maps::{Array, HashMap as BpfHashMap};
 use aya::programs::{BtfTracePoint, CgroupAttachMode, CgroupSockAddr, FdLink, Lsm};
 use aya::Ebpf;
 use bytemuck::Zeroable;
-use serde::{Deserialize, Serialize};
 use rk_ebpf_common::{
     rk_binding, rk_exec_key, rk_exec_rule, rk_file_key, rk_file_rule, rk_net_range, rk_net_rule,
     rk_profile, RK_MAX_PROFILES,
@@ -28,6 +27,7 @@ use rk_policy::net::{
     self, Action, Compiled, CompiledExec, CompiledFile, Entry, ExecPathKind, FileTarget, Mode,
     Policy, ProfileIds, MAX_EXEC_DIR_FILES, QUARANTINE,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::loader::SETATTR_VARIANTS;
 use crate::selftest::kernel_dev;
@@ -649,11 +649,13 @@ impl PolicyEngine {
     /// quarantine, policy text) when it belongs to the same pin set; call
     /// [`Self::set_state_file`] first. Returns whether it was used.
     pub fn adopt(&mut self, ebpf: &mut Ebpf) -> Result<bool> {
-        let active = Array::<_, u32>::try_from(ebpf.map(MAP_ACTIVE).context("rk_active_slot missing")?)?;
+        let active =
+            Array::<_, u32>::try_from(ebpf.map(MAP_ACTIVE).context("rk_active_slot missing")?)?;
         self.active_slot = active.get(&0, 0).context("read rk_active_slot")? & 1;
         self.written = [scan_slot(ebpf, 0)?, scan_slot(ebpf, 1)?];
 
-        let profiles = Array::<_, Profile>::try_from(ebpf.map(MAP_PROFILES).context("rk_profiles missing")?)?;
+        let profiles =
+            Array::<_, Profile>::try_from(ebpf.map(MAP_PROFILES).context("rk_profiles missing")?)?;
         let mut kernel_gen = 0;
         for &id in &self.written[self.active_slot as usize].profiles {
             let p = profiles.get(&profile_index(self.active_slot, id), 0)?;
@@ -681,7 +683,9 @@ impl PolicyEngine {
                 // Only the kernel's view: binding paths are unknown, and a
                 // new id allocation is checked against live bindings on apply.
                 self.generation = kernel_gen;
-                let map = ebpf.map(MAP_BINDINGS).context("rk_cgroup_profile missing")?;
+                let map = ebpf
+                    .map(MAP_BINDINGS)
+                    .context("rk_cgroup_profile missing")?;
                 let bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
                 self.bindings = bindings
                     .iter()
@@ -1223,13 +1227,17 @@ fn scan_slot(ebpf: &Ebpf, slot: u32) -> Result<SlotContents> {
     let in_slot = |scope: u32| scope >> 31 == slot;
     let mut contents = SlotContents::default();
 
-    let profiles = Array::<_, Profile>::try_from(ebpf.map(MAP_PROFILES).context("rk_profiles missing")?)?;
+    let profiles =
+        Array::<_, Profile>::try_from(ebpf.map(MAP_PROFILES).context("rk_profiles missing")?)?;
     for id in 0..RK_MAX_PROFILES {
         if profiles.get(&profile_index(slot, id), 0)?.0.policy_gen != 0 {
             contents.profiles.push(id);
         }
     }
-    for (name, out) in [(MAP_DENY, &mut contents.deny), (MAP_ALLOW, &mut contents.allow)] {
+    for (name, out) in [
+        (MAP_DENY, &mut contents.deny),
+        (MAP_ALLOW, &mut contents.allow),
+    ] {
         let trie = LpmTrie::<_, KeyData, NetRule>::try_from(
             ebpf.map(name).with_context(|| format!("{name} missing"))?,
         )?;
@@ -1240,14 +1248,18 @@ fn scan_slot(ebpf: &Ebpf, slot: u32) -> Result<SlotContents> {
             }
         }
     }
-    let exec = BpfHashMap::<_, ExecKey, ExecRule>::try_from(ebpf.map(MAP_EXEC).context("rk_exec_allow missing")?)?;
+    let exec = BpfHashMap::<_, ExecKey, ExecRule>::try_from(
+        ebpf.map(MAP_EXEC).context("rk_exec_allow missing")?,
+    )?;
     for key in exec.keys() {
         let key = key?;
         if in_slot(key.0.scope) {
             contents.exec.push(key);
         }
     }
-    let files = BpfHashMap::<_, FileKey, FileRule>::try_from(ebpf.map(MAP_FILE).context("rk_file_protect missing")?)?;
+    let files = BpfHashMap::<_, FileKey, FileRule>::try_from(
+        ebpf.map(MAP_FILE).context("rk_file_protect missing")?,
+    )?;
     for key in files.keys() {
         let key = key?;
         if in_slot(key.0.scope) {

@@ -409,11 +409,14 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             epoch,
             links,
         } = pins::open(bytes, Path::new(pins::PIN_ROOT))?;
-        let timeout =
-            Duration::from_secs(opts.heartbeat_secs.unwrap_or(DEFAULT_HEARTBEAT_SECS));
+        let timeout = Duration::from_secs(opts.heartbeat_secs.unwrap_or(DEFAULT_HEARTBEAT_SECS));
         let _heartbeat = Heartbeat::start(&mut ebpf, timeout)?;
         resilience::protect_self(&mut ebpf)?;
-        info!(?adoption, heartbeat_timeout_s = timeout.as_secs(), "pin set ready");
+        info!(
+            ?adoption,
+            heartbeat_timeout_s = timeout.as_secs(),
+            "pin set ready"
+        );
 
         let btf = aya::Btf::from_sys_fs().ok();
         let programs = loader::load_programs(Object::Production, &mut ebpf, btf.as_ref());
@@ -613,7 +616,12 @@ mod tests {
         assert!(parse_args(&args(&["--policy"])).is_err());
         assert!(parse_args(&args(&["--k8s-cgroup-root"])).is_err());
         assert_eq!(
-            parse_args(&args(&["--heartbeat-timeout", "3", "--state-file", "/s.json"])),
+            parse_args(&args(&[
+                "--heartbeat-timeout",
+                "3",
+                "--state-file",
+                "/s.json"
+            ])),
             Ok(Mode::Run(RunOpts {
                 heartbeat_secs: Some(3),
                 state_file: Some("/s.json".into()),

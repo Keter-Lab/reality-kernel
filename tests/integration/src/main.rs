@@ -2190,7 +2190,8 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
         // Kept alive for the whole run: a stale heartbeat denies every
         // governed ENFORCE action (docs/design/phase-6.md §4).
-        let _heartbeat = rk_sensor::resilience::Heartbeat::start(&mut ebpf_fail, HARNESS_HEARTBEAT)?;
+        let _heartbeat =
+            rk_sensor::resilience::Heartbeat::start(&mut ebpf_fail, HARNESS_HEARTBEAT)?;
         rk_sensor::policy::attach_all(&mut ebpf_fail, cgroup_slice)?;
         let mut engine_fail = rk_sensor::policy::PolicyEngine::default();
         engine_fail.apply_text(&mut ebpf_fail, POLICY_TEXT)?;
