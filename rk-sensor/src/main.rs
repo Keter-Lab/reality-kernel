@@ -185,10 +185,6 @@ struct SensorPolicyHandler {
     engine: PolicyEngine,
     lsm_active: bool,
     k8s_root: Option<String>,
-    /// Seconds without a heartbeat before governed ENFORCE workloads are
-    /// denied (Phase 6 §4); `None` means the default.
-    heartbeat_secs: Option<u64>,
-    state_file: Option<String>,
 }
 
 impl PolicyHandler for SensorPolicyHandler {
