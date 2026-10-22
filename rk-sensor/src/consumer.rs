@@ -253,28 +253,28 @@ impl Consumer {
             .spawn(move || {
                 let mut stop_seen: Option<Instant> = None;
                 loop {
-                match rx.recv_timeout(tick_every) {
-                    Ok(batch) => {
-                        if worker_stop.load(Ordering::Relaxed) {
-                            let since = *stop_seen.get_or_insert_with(Instant::now);
-                            if since.elapsed() >= STOP_BUDGET {
-                                worker_stats
-                                    .userspace_drops
-                                    .fetch_add(batch.len() as u64, Ordering::Relaxed);
-                                continue;
+                    match rx.recv_timeout(tick_every) {
+                        Ok(batch) => {
+                            if worker_stop.load(Ordering::Relaxed) {
+                                let since = *stop_seen.get_or_insert_with(Instant::now);
+                                if since.elapsed() >= STOP_BUDGET {
+                                    worker_stats
+                                        .userspace_drops
+                                        .fetch_add(batch.len() as u64, Ordering::Relaxed);
+                                    continue;
+                                }
                             }
+                            for record in &batch {
+                                handler.record(record, &worker_stats.decode);
+                            }
+                            handler.tick();
                         }
-                        for record in &batch {
-                            handler.record(record, &worker_stats.decode);
+                        Err(RecvTimeoutError::Timeout) => handler.tick(),
+                        Err(RecvTimeoutError::Disconnected) => {
+                            handler.tick();
+                            break;
                         }
-                        handler.tick();
                     }
-                    Err(RecvTimeoutError::Timeout) => handler.tick(),
-                    Err(RecvTimeoutError::Disconnected) => {
-                        handler.tick();
-                        break;
-                    }
-                }
                 }
             })
             .context("spawn worker thread")?;
