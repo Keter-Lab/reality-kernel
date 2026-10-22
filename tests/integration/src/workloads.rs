@@ -57,6 +57,7 @@ pub fn run_child(args: &[String]) -> i32 {
         "guard_signal" => handle_guard_signal(rest),
         "guard_ptrace" => handle_guard_ptrace(rest),
         "guard_pins" => handle_guard_pins(),
+        "gap_probe" => handle_gap_probe(rest),
         other => {
             eprintln!("[child] unknown workload: {other}");
             203
@@ -1622,6 +1623,51 @@ fn handle_bench(args: &[String]) -> i32 {
         "{{\"p50\":{},\"p99\":{},\"mean\":{mean},\"n\":{n}}}",
         samples[n / 2],
         samples[(n * 99 / 100).min(n - 1)]
+    );
+    0
+}
+
+/// Phase 10 §7: keeps trying actions the policy denies for `duration_ms` and
+/// reports how many got through. Any success while a sensor is replaced means
+/// protection had a gap. Args: `<udp addr> <duration_ms> [exec path]`; the
+/// exec probe (one fork per try) runs every 20th iteration. Prints one JSON
+/// line and exits 0: the caller judges the counts.
+fn handle_gap_probe(args: &[String]) -> i32 {
+    let (Some(addr), Some(ms)) = (
+        args.first().and_then(|a| a.parse::<SocketAddr>().ok()),
+        args.get(1).and_then(|m| m.parse::<u64>().ok()),
+    ) else {
+        eprintln!("[child] gap_probe expects <udp addr> <duration_ms> [exec path]");
+        return 290;
+    };
+    let exec = args.get(2);
+    let deadline = std::time::Instant::now() + Duration::from_millis(ms);
+    let (mut net_tries, mut net_ok, mut net_other) = (0u64, 0u64, 0u64);
+    let (mut exec_tries, mut exec_ok) = (0u64, 0u64);
+    while std::time::Instant::now() < deadline {
+        net_tries += 1;
+        match UdpSocket::bind("0.0.0.0:0").and_then(|s| s.connect(addr)) {
+            Ok(()) => net_ok += 1,
+            Err(e) if e.raw_os_error() == Some(libc::EPERM) => {}
+            Err(_) => net_other += 1,
+        }
+        if let Some(path) = exec {
+            if net_tries.is_multiple_of(20) {
+                exec_tries += 1;
+                if std::process::Command::new(path)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .is_ok()
+                {
+                    exec_ok += 1;
+                }
+            }
+        }
+    }
+    println!(
+        "{{\"net_tries\":{net_tries},\"net_ok\":{net_ok},\"net_other\":{net_other},\"exec_tries\":{exec_tries},\"exec_ok\":{exec_ok}}}"
     );
     0
 }

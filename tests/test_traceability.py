@@ -70,6 +70,7 @@ def write_reports(d, kernels, vm_passed=True, k8s_passed=True):
         (d / f"resilience-{k}.json").write_text("[]")
         (d / f"conformance-{k}.json").write_text("[]")
         (d / f"observability-{k}.json").write_text("[]")
+        (d / f"upgrade-{k}.json").write_text("[]")
     (d / "k8s.json").write_text(json.dumps([{"name": "k8s_demo", "passed": k8s_passed}]))
 
 
@@ -102,6 +103,36 @@ def test_reports_flag_missing_kernel(tmp_path):
     write_reports(art, ["5.15"])
     _, failures = tr.check_reports(root, art, ["5.15", "6.1"])
     assert any("Linux 6.1: no integration report" in f for f in failures)
+
+
+PKG = GOOD + """
+[[criterion]]
+phase = "10"
+id = "pkg"
+text = "pkg"
+tests = ["pkg:pkg_demo"]
+"""
+
+
+def pkg_tree(tmp_path):
+    root = tree(tmp_path / "repo", PKG)
+    (root / "tests" / "packaging").mkdir()
+    (root / "tests" / "packaging" / "run.sh").write_text("    run_test pkg_demo t_pkg\n")
+    return root
+
+
+def test_reports_check_package_tests_per_distribution(tmp_path):
+    root = pkg_tree(tmp_path)
+    assert tr.check_static(root)[1] == []
+    art = tmp_path / "art"
+    art.mkdir()
+    write_reports(art, ["5.15"])
+    (art / "pkg-ubuntu-24.04.json").write_text(json.dumps([{"name": "pkg_demo", "passed": True}]))
+    assert tr.check_reports(root, art, ["5.15"], ["ubuntu-24.04"])[1] == []
+    _, failures = tr.check_reports(root, art, ["5.15"], ["ubuntu-24.04", "rockylinux-9"])
+    assert any("rockylinux-9: no package test report" in f for f in failures)
+    _, failures = tr.check_reports(root, art, ["5.15"])
+    assert any("no --distros" in f for f in failures)
 
 
 def test_repository_index_is_complete():

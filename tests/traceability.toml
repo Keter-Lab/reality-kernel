@@ -340,3 +340,27 @@ phase = "9"
 id = "process_table"
 text = "The process table enriches records from exec records, falls back to procfs, is bounded, and says where enrichment came from"
 tests = ["unit:exec_records_fill_the_table_and_procfs_adds_the_parent", "unit:misses_fall_back_to_procfs_and_exited_processes_are_unavailable", "unit:the_table_is_bounded"]
+
+[[criterion]]
+phase = "10"
+id = "upgrade_continuous"
+text = "Upgrade keeps enforcement continuous: a different object replaces the running one with zero denied actions getting through"
+tests = ["vm:upgrade_replaces_object_without_gap", "vm:upgrade_gap_detector_works", "pkg:pkg_upgrade_keeps_enforcement", "unit:reconcile_drops_an_unfinished_replacement", "unit:reconcile_completes_an_interrupted_switch", "unit:finish_replacement_swaps_and_abort_keeps_the_old_set"]
+
+[[criterion]]
+phase = "10"
+id = "install_upgrade_uninstall"
+text = "Fresh install, upgrade and uninstall are tested on two distributions (Ubuntu 24.04 deb, Rocky Linux 9 rpm)"
+tests = ["pkg:pkg_fresh_install_enforces", "pkg:pkg_upgrade_keeps_enforcement", "pkg:pkg_uninstall_removes_everything", "ci:package"]
+
+[[criterion]]
+phase = "10"
+id = "systemd_unit"
+text = "The systemd unit verifies and runs the sensor, including rk run, under its bounded capability set"
+tests = ["pkg:pkg_unit_verifies", "pkg:pkg_fresh_install_enforces"]
+
+[[criterion]]
+phase = "10"
+id = "doctor"
+text = "rk doctor explains missing kernel features, and passes on every supported kernel"
+tests = ["vm:doctor_passes_on_supported_kernels", "unit:healthy_host_passes", "unit:missing_bpf_lsm_is_explained_as_a_warning", "unit:blocking_problems_fail", "unit:kernel_versions_are_graded", "unit:stale_pins_without_a_sensor_are_flagged"]

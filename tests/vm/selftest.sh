@@ -110,6 +110,19 @@ if [ -x "$integration" ]; then
         rc=1
     fi
 
+    # Phase 10: upgrade suite. rk-sensor-next embeds a different object
+    # (rk-bpf/build/<arch>-next), so switching between them is a real upgrade.
+    sensor_next="$(dirname "$sensor")/rk-sensor-next"
+    if [ -x "$sensor_next" ] && [ -x "$rk_cli" ]; then
+        "$integration" --upgrade-suite "$sensor" "$sensor_next" "$rk_cli" 2>&1
+        up_rc=$?
+        echo "upgrade suite exit code: $up_rc"
+        [ "$up_rc" -eq 0 ] || rc=1
+    else
+        echo "FAIL upgrade suite needs executable rk-sensor-next and rk: $sensor_next $rk_cli"
+        rc=1
+    fi
+
     # Phase 7: benchmarks, last, once nothing else is attached. The report
     # is checked against tests/bench/budget.json by the bench-report job.
     "$integration" --bench "$bpftool" 2>&1

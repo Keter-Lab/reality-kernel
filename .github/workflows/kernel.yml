@@ -117,11 +117,25 @@ jobs:
           .github/scripts/run-logged.sh "rk-integration release build" cargo build --release -p rk-integration --features embedded-bpf --target ${{ matrix.target }}
           .github/scripts/run-logged.sh "rk release build" cargo build --release -p rk-cli --target ${{ matrix.target }}
 
+      # Phase 10 §7: a second sensor embedding the `next` object variant, so
+      # the upgrade suite and the package tests replace one object with another.
+      - name: Release build of rk-sensor-next (upgrade-test variant)
+        run: |
+          out=target/${{ matrix.target }}/release
+          cp "$out/rk-sensor" "$out/rk-sensor.main"
+          RK_BPF_VARIANT=next .github/scripts/run-logged.sh "rk-sensor-next release build" cargo build --release -p rk-sensor --features embedded-bpf --target ${{ matrix.target }}
+          mv "$out/rk-sensor" "$out/rk-sensor-next"
+          mv "$out/rk-sensor.main" "$out/rk-sensor"
+          if cmp -s "$out/rk-sensor" "$out/rk-sensor-next"; then
+            echo "::error::rk-sensor-next is identical to rk-sensor"; exit 1
+          fi
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rk-sensor-${{ matrix.arch }}
           path: |
             target/${{ matrix.target }}/release/rk-sensor
+            target/${{ matrix.target }}/release/rk-sensor-next
             target/${{ matrix.target }}/release/rk-integration
             target/${{ matrix.target }}/release/rk
           if-no-files-found: error
@@ -187,7 +201,7 @@ jobs:
           curl -fsSL -o bpftool.tar.gz "https://github.com/libbpf/bpftool/releases/download/${BPFTOOL_VERSION}/bpftool-${BPFTOOL_VERSION}-amd64.tar.gz"
           echo "${BPFTOOL_SHA256}  bpftool.tar.gz" | sha256sum -c -
           tar -xzf bpftool.tar.gz -C tools
-          chmod +x tools/vmtest tools/bpftool bin/rk-sensor bin/rk-integration bin/rk
+          chmod +x tools/vmtest tools/bpftool bin/rk-sensor bin/rk-sensor-next bin/rk-integration bin/rk
 
       - name: Extract kernel ${{ matrix.kernel }}
         run: |
@@ -249,11 +263,13 @@ jobs:
             | sed '1d;$d' > "conformance-${{ matrix.kernel }}.json"
           sed -n '/===RK_OBSERVABILITY_BEGIN===/,/===RK_OBSERVABILITY_END===/p' vm.log \
             | sed '1d;$d' > "observability-${{ matrix.kernel }}.json"
+          sed -n '/===RK_UPGRADE_BEGIN===/,/===RK_UPGRADE_END===/p' vm.log \
+            | sed '1d;$d' > "upgrade-${{ matrix.kernel }}.json"
           sed -n '/===RK_BENCH_BEGIN===/,/===RK_BENCH_END===/p' vm.log \
             | sed '1d;$d' > "bench-${{ matrix.kernel }}.json"
           if [ "$rc" -ne 0 ]; then
             .github/scripts/annotate.sh vm.log "Linux ${{ matrix.kernel }}"
-            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" "conformance-${{ matrix.kernel }}.json" "observability-${{ matrix.kernel }}.json" <<'PY'
+            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" "conformance-${{ matrix.kernel }}.json" "observability-${{ matrix.kernel }}.json" "upgrade-${{ matrix.kernel }}.json" <<'PY'
           import json, os, sys
           for fname in sys.argv[1:]:
             if os.path.exists(fname) and os.path.getsize(fname) > 0:
@@ -286,6 +302,7 @@ jobs:
             resilience-${{ matrix.kernel }}.json
             conformance-${{ matrix.kernel }}.json
             observability-${{ matrix.kernel }}.json
+            upgrade-${{ matrix.kernel }}.json
             vm.log
           if-no-files-found: warn
 
@@ -402,9 +419,126 @@ jobs:
             k8s-logs/
           if-no-files-found: warn
 
+  # docs/design/phase-10.md §5: deb and rpm from the static binaries, plus the
+  # release-2 packages whose sensor embeds the `next` object (upgrade test).
+  package:
+    name: Packages (deb, rpm)
+    needs: sensor
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rk-sensor-x86_64
+          path: dist/bin-amd64/
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rk-sensor-arm64
+          path: dist/bin-arm64/
+
+      - name: Install nFPM (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          v=2.47.0
+          curl -sSfL -o /tmp/nfpm.tgz "https://github.com/goreleaser/nfpm/releases/download/v${v}/nfpm_${v}_Linux_x86_64.tar.gz"
+          echo "0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783  /tmp/nfpm.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/nfpm.tgz -C /usr/local/bin nfpm
+          nfpm --version
+
+      - name: Build packages
+        run: |
+          set -euo pipefail
+          chmod +x dist/bin-amd64/* dist/bin-arm64/*
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          deploy/packaging/build.sh amd64 dist/bin-amd64 "$version" 1 dist/packages
+          deploy/packaging/build.sh arm64 dist/bin-arm64 "$version" 1 dist/packages
+          mkdir -p dist/bin-next
+          cp dist/bin-amd64/rk-sensor-next dist/bin-next/rk-sensor
+          cp dist/bin-amd64/rk dist/bin-next/rk
+          deploy/packaging/build.sh amd64 dist/bin-next "$version" 2 dist/packages-next
+          cp dist/bin-amd64/rk-integration dist/packages-next/
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages
+          path: dist/packages/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages-next
+          path: dist/packages-next/
+          if-no-files-found: error
+
+  # docs/design/phase-10.md §7: install, upgrade (to the `next` object, with a
+  # gap probe running) and uninstall, on a systemd host per distribution.
+  package-test:
+    name: Package test (${{ matrix.distro }})
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: ubuntu-24.04
+            format: deb
+          - distro: rockylinux-9
+            format: rpm
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: packages
+          path: dist/
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: packages-next
+          path: dist/
+
+      - name: Run the package suite
+        run: |
+          set +e -o pipefail
+          chmod +x dist/rk-integration
+          log="pkg-${{ matrix.distro }}.log"
+          if [ "${{ matrix.format }}" = deb ]; then
+            # The runner itself: real systemd, real dpkg.
+            sudo tests/packaging/run.sh deb "$PWD/dist" 2>&1 | tee "$log"
+            rc=${PIPESTATUS[0]}
+          else
+            docker build -t rk-rocky9 -f tests/packaging/rocky9.Containerfile tests/packaging
+            docker run -d --name rk-rocky9 --privileged --cgroupns=private \
+              --tmpfs /run --tmpfs /tmp -v "$PWD:/src:ro" rk-rocky9
+            for _ in $(seq 1 60); do
+              state="$(docker exec rk-rocky9 systemctl is-system-running 2>/dev/null)"
+              case "$state" in running | degraded) break ;; esac
+              sleep 1
+            done
+            echo "container systemd: $state"
+            docker exec rk-rocky9 /src/tests/packaging/run.sh rpm /src/dist 2>&1 | tee "$log"
+            rc=${PIPESTATUS[0]}
+          fi
+          sed -n '/===RK_PKG_BEGIN===/,/===RK_PKG_END===/p' "$log" | sed '1d;$d' > "pkg-${{ matrix.distro }}.json"
+          if [ "$rc" -ne 0 ]; then
+            .github/scripts/annotate.sh "$log" "Package test ${{ matrix.distro }}"
+          fi
+          exit "$rc"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: pkg-${{ matrix.distro }}
+          path: |
+            pkg-${{ matrix.distro }}.json
+            pkg-${{ matrix.distro }}.log
+          if-no-files-found: warn
+
   traceability:
     name: Traceability (every criterion's tests passed)
-    needs: [vm-matrix, k8s]
+    needs: [vm-matrix, k8s, package-test]
     if: always() && needs.vm-matrix.result != 'cancelled'
     runs-on: ubuntu-24.04
     steps:
@@ -421,12 +555,19 @@ jobs:
           name: k8s-results
           path: reports/
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: reports/
+
       # docs/design/phase-8.md §3.1: a deleted, renamed, skipped or failing test
       # fails against the criterion it proves, on every kernel.
       - name: Check the reports
         run: |
           set -o pipefail
-          python3 tests/traceability.py reports --kernels 5.15,6.1,6.6,6.12,6.18 reports/ \
+          python3 tests/traceability.py reports --kernels 5.15,6.1,6.6,6.12,6.18 \
+            --distros ubuntu-24.04,rockylinux-9 reports/ \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
   fuzz:
