@@ -151,9 +151,7 @@ impl ResilienceDaemon {
             if let Some(st) = daemon.child.try_wait()? {
                 bail!("rk-sensor exited early ({st}): {}", log_tail());
             }
-            if Path::new(SOCKET).exists()
-                && Path::new(META_PIN).exists()
-                && is_socket_ready(SOCKET)
+            if Path::new(SOCKET).exists() && Path::new(META_PIN).exists() && is_socket_ready(SOCKET)
             {
                 return Ok(daemon);
             }
