@@ -443,8 +443,10 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         let pid_str = daemon.pid().to_string();
         run_workload_ok(ENFORCE_CGROUP, "guard_ptrace", &[&pid_str, "eperm"])?;
         run_workload_ok(UNGOVERNED_CGROUP, "guard_ptrace", &[&pid_str, "ok"])?;
-        Ok("ptrace and /proc/<pid>/mem returned EPERM for governed task, succeeded for control"
-            .to_string())
+        Ok(
+            "ptrace and /proc/<pid>/mem returned EPERM for governed task, succeeded for control"
+                .to_string(),
+        )
     });
 
     // 8. guard_pins_cannot_be_removed
