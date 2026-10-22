@@ -9,9 +9,9 @@
 mod agent;
 #[cfg(target_os = "linux")]
 mod bench;
+mod bpf;
 #[cfg(target_os = "linux")]
 mod conformance;
-mod bpf;
 #[cfg(target_os = "linux")]
 mod resilience;
 mod workloads;
@@ -416,7 +416,11 @@ fn main() {
         let mut checks = Vec::new();
         conformance::run(std::path::Path::new(&args[2]), &mut checks);
         output_results("RK_CONFORMANCE", &checks);
-        std::process::exit(if checks.iter().all(|c| c.passed) { 0 } else { 1 });
+        std::process::exit(if checks.iter().all(|c| c.passed) {
+            0
+        } else {
+            1
+        });
     }
     #[cfg(target_os = "linux")]
     if args.len() > 1 && args[1] == bench::BENCH_FLAG {

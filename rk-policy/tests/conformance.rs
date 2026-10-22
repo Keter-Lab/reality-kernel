@@ -60,18 +60,43 @@ fn corpus() -> Vec<(PathBuf, Case)> {
 #[test]
 fn conformance_corpus_is_well_formed() {
     let cases = corpus();
-    assert!(cases.len() >= 10, "corpus unexpectedly small: {}", cases.len());
+    assert!(
+        cases.len() >= 10,
+        "corpus unexpectedly small: {}",
+        cases.len()
+    );
     let mut names = BTreeSet::new();
     for (path, case) in &cases {
         let file = path.file_stem().unwrap().to_string_lossy();
-        assert_eq!(case.name, file, "{}: name must match the file name", path.display());
-        assert!(names.insert(case.name.clone()), "duplicate case {}", case.name);
-        assert!(!case.description.is_empty(), "{}: needs a description", case.name);
+        assert_eq!(
+            case.name,
+            file,
+            "{}: name must match the file name",
+            path.display()
+        );
+        assert!(
+            names.insert(case.name.clone()),
+            "duplicate case {}",
+            case.name
+        );
+        assert!(
+            !case.description.is_empty(),
+            "{}: needs a description",
+            case.name
+        );
         assert!(!case.op.is_empty(), "{}: needs at least one op", case.name);
         for fixture in &case.setup {
             let (kind, target) = fixture.split_once(':').expect("setup is kind:path");
-            assert!(matches!(kind, "exec" | "file"), "{}: setup kind {kind}", case.name);
-            assert!(target.starts_with("/run/rk-conf/"), "{}: fixtures live in /run/rk-conf", case.name);
+            assert!(
+                matches!(kind, "exec" | "file"),
+                "{}: setup kind {kind}",
+                case.name
+            );
+            assert!(
+                target.starts_with("/run/rk-conf/"),
+                "{}: fixtures live in /run/rk-conf",
+                case.name
+            );
         }
         for op in &case.op {
             assert!(
@@ -86,7 +111,11 @@ fn conformance_corpus_is_well_formed() {
                         .parse::<SocketAddr>()
                         .unwrap_or_else(|e| panic!("{}: target {}: {e}", case.name, op.target));
                     let proto = op.proto.as_deref().unwrap_or("udp");
-                    assert!(matches!(proto, "udp" | "tcp"), "{}: proto {proto}", case.name);
+                    assert!(
+                        matches!(proto, "udp" | "tcp"),
+                        "{}: proto {proto}",
+                        case.name
+                    );
                     // An allowed TCP connect needs a listener; the runner has none.
                     assert!(
                         !(proto == "tcp" && op.expect != "deny"),

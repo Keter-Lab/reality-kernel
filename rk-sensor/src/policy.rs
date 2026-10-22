@@ -1340,7 +1340,9 @@ mod tests {
         engine.generation = 42;
         engine.bindings.insert(1234, ("rk.slice/agent".into(), 3));
         engine.quarantined.insert(99);
-        engine.dynamic.insert(1234, ("ns/pod".into(), "restricted".into()));
+        engine
+            .dynamic
+            .insert(1234, ("ns/pod".into(), "restricted".into()));
         engine.text = Some("[profiles.p]\nmode = \"audit\"\n".into());
         engine.persist();
 
@@ -1350,7 +1352,10 @@ mod tests {
         assert_eq!(s.quarantined, engine.quarantined);
         assert_eq!(s.dynamic, engine.dynamic);
         assert_eq!(s.text, engine.text);
-        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

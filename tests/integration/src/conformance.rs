@@ -66,7 +66,11 @@ fn fixtures(case: &Case) -> Result<()> {
     if let Ok(entries) = fs::read_dir(FIXTURES) {
         for e in entries.flatten() {
             let p = e.path();
-            let _ = if p.is_dir() { fs::remove_dir_all(&p) } else { fs::remove_file(&p) };
+            let _ = if p.is_dir() {
+                fs::remove_dir_all(&p)
+            } else {
+                fs::remove_file(&p)
+            };
         }
     }
     for fixture in &case.setup {
@@ -79,7 +83,8 @@ fn fixtures(case: &Case) -> Result<()> {
         }
         match kind {
             "exec" => {
-                fs::copy("/bin/true", path).with_context(|| format!("copy to {}", path.display()))?;
+                fs::copy("/bin/true", path)
+                    .with_context(|| format!("copy to {}", path.display()))?;
                 fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
             }
             "file" => fs::write(path, b"rk")?,
@@ -93,12 +98,18 @@ fn fixtures(case: &Case) -> Result<()> {
 fn perform(op: &Op) -> Result<(bool, String)> {
     let outcome = if op.expect == "deny" { "eperm" } else { "ok" };
     let (workload, args): (&str, Vec<&str>) = match op.kind.as_str() {
-        "connect" if op.proto.as_deref() == Some("tcp") => ("tcp_connect", vec![op.target.as_str(), outcome]),
+        "connect" if op.proto.as_deref() == Some("tcp") => {
+            ("tcp_connect", vec![op.target.as_str(), outcome])
+        }
         "connect" => ("udp_connect", vec![op.target.as_str(), outcome]),
         "exec" => ("exec_cmd", vec![outcome, op.target.as_str()]),
         "open" => (
             "file_open",
-            vec![op.target.as_str(), op.access.as_deref().unwrap_or("r"), outcome],
+            vec![
+                op.target.as_str(),
+                op.access.as_deref().unwrap_or("r"),
+                outcome,
+            ],
         ),
         other => bail!("unknown op kind {other}"),
     };
@@ -150,7 +161,8 @@ pub fn run(dir: &Path, checks: &mut Vec<TestCheck>) {
                 bail!("{} failed to load: {:?}", r.name, r.error);
             }
         }
-        let heartbeat = rk_sensor::resilience::Heartbeat::start(&mut ebpf, Duration::from_secs(30))?;
+        let heartbeat =
+            rk_sensor::resilience::Heartbeat::start(&mut ebpf, Duration::from_secs(30))?;
         rk_sensor::policy::attach_all(&mut ebpf, Path::new("/sys/fs/cgroup/rk.slice"))?;
         Ok((cases, ebpf, heartbeat))
     })();
@@ -183,13 +195,22 @@ pub fn run(dir: &Path, checks: &mut Vec<TestCheck>) {
                         "{}: {} {} expected {} ({}): {stderr}",
                         case.name, op.kind, op.target, op.expect, case.description
                     )),
-                    Err(e) => failures.push(format!("{}: {} {}: {e:#}", case.name, op.kind, op.target)),
+                    Err(e) => {
+                        failures.push(format!("{}: {} {}: {e:#}", case.name, op.kind, op.target))
+                    }
                 }
             }
         }
         if !failures.is_empty() {
-            bail!("{} of {ops} operations disagree: {}", failures.len(), failures.join("; "));
+            bail!(
+                "{} of {ops} operations disagree: {}",
+                failures.len(),
+                failures.join("; ")
+            );
         }
-        Ok(format!("{} cases, {ops} operations: the kernel agrees with every expectation", cases.len()))
+        Ok(format!(
+            "{} cases, {ops} operations: the kernel agrees with every expectation",
+            cases.len()
+        ))
     });
 }
