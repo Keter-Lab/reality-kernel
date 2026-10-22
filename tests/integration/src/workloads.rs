@@ -636,11 +636,13 @@ fn handle_guard_ptrace(args: &[String]) -> i32 {
     };
     match expected.as_str() {
         "eperm" => {
-            if ptrace_err == Some(libc::EPERM) && mem_err == Some(libc::EPERM) {
+            // procfs reports any failed ptrace access check on /proc/<pid>/mem
+            // as EACCES, whichever LSM refused it (mm_access in fs/proc/base.c).
+            if ptrace_err == Some(libc::EPERM) && mem_err == Some(libc::EACCES) {
                 0
             } else {
                 eprintln!(
-                    "[guard_ptrace] expected EPERM, got ptrace={ptrace_err:?}, mem={mem_err:?}"
+                    "[guard_ptrace] expected ptrace EPERM and mem EACCES, got ptrace={ptrace_err:?}, mem={mem_err:?}"
                 );
                 1
             }

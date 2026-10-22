@@ -520,8 +520,19 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         if Path::new(PIN_ROOT).exists() {
             bail!("{PIN_ROOT} still exists after --uninstall");
         }
-        // Previously denied connect should now succeed
-        run_workload_ok(ENFORCE_CGROUP, "udp_connect", &[DENY_ADDR, "ok"])?;
+        // Previously denied connect should now succeed. Unlinking a pin only
+        // drops a reference; the kernel detaches the link once the bpffs inode
+        // is released after an RCU grace period, so allow it a moment.
+        let start = Instant::now();
+        loop {
+            match run_workload_ok(ENFORCE_CGROUP, "udp_connect", &[DENY_ADDR, "ok"]) {
+                Ok(_) => break,
+                Err(e) if start.elapsed() > Duration::from_secs(5) => {
+                    return Err(e.context("still denied 5s after --uninstall"));
+                }
+                Err(_) => thread::sleep(Duration::from_millis(200)),
+            }
+        }
         Ok("uninstall removed pins and unblocked previously denied connects".to_string())
     });
 
