@@ -66,7 +66,9 @@ fn text(bytes: &[u8]) -> String {
 /// Milliseconds since the epoch at which an event with boot-time stamp
 /// `ts_ns` happened.
 fn wall_ms(ts_ns: u64) -> i64 {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
     let age_ns = boottime_ns().saturating_sub(ts_ns);
     let ms = now.as_nanos().saturating_sub(u128::from(age_ns)) / 1_000_000;
     i64::try_from(ms).unwrap_or(i64::MAX)
@@ -134,7 +136,9 @@ impl Observer {
                 self.failing = false;
             }
             Err(e) => {
-                self.metrics.audit_write_errors.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .audit_write_errors
+                    .fetch_add(1, Ordering::Relaxed);
                 if !self.failing {
                     error!(error = %format!("{e:#}"), "audit log write failed");
                     self.failing = true;
@@ -150,7 +154,9 @@ impl Observer {
         };
         let sealed = w.head().next_seq.saturating_sub(before);
         if sealed > 0 {
-            self.metrics.audit_batches.fetch_add(sealed, Ordering::Relaxed);
+            self.metrics
+                .audit_batches
+                .fetch_add(sealed, Ordering::Relaxed);
             self.publish_head();
         }
     }
@@ -228,7 +234,11 @@ impl Observer {
         if dk == 0 && dc == 0 {
             return;
         }
-        warn!(kernel = dk, channel = dc, "decision events lost before the audit log");
+        warn!(
+            kernel = dk,
+            channel = dc,
+            "decision events lost before the audit log"
+        );
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
@@ -260,7 +270,9 @@ impl RecordHandler for Observer {
         if let Some(w) = self.writer.as_mut() {
             let before = w.head().next_seq;
             if let Err(e) = w.tick() {
-                self.metrics.audit_write_errors.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .audit_write_errors
+                    .fetch_add(1, Ordering::Relaxed);
                 error!(error = %format!("{e:#}"), "audit batch seal failed");
             }
             self.after_write(before);
@@ -278,18 +290,45 @@ impl Drop for Observer {
                 Err(e) => error!(error = %format!("{e:#}"), "final audit seal failed"),
             }
             let sealed = w.head().next_seq.saturating_sub(before);
-            self.metrics.audit_batches.fetch_add(sealed, Ordering::Relaxed);
+            self.metrics
+                .audit_batches
+                .fetch_add(sealed, Ordering::Relaxed);
         }
     }
 }
 
 /// An [`Activity`] with owned strings, built from a decoded event.
 enum OwnedActivity {
-    Connect { addr: IpAddr, port: u16, protocol: u8, sendmsg: bool },
-    SocketCreate { family: u16, sock_type: u32, protocol: u32 },
-    Exec { path: Option<String>, argv: Option<String>, dev: u64, ino: u64, committed: bool },
-    File { path: Option<String>, hook: u16, access: u32, dev: u64, ino: u64 },
-    Tamper { hook: u16, target_tgid: u32, detail: u64 },
+    Connect {
+        addr: IpAddr,
+        port: u16,
+        protocol: u8,
+        sendmsg: bool,
+    },
+    SocketCreate {
+        family: u16,
+        sock_type: u32,
+        protocol: u32,
+    },
+    Exec {
+        path: Option<String>,
+        argv: Option<String>,
+        dev: u64,
+        ino: u64,
+        committed: bool,
+    },
+    File {
+        path: Option<String>,
+        hook: u16,
+        access: u32,
+        dev: u64,
+        ino: u64,
+    },
+    Tamper {
+        hook: u16,
+        target_tgid: u32,
+        detail: u64,
+    },
 }
 
 fn first(strings: &Strings<'_>) -> Option<String> {
@@ -316,7 +355,9 @@ impl OwnedActivity {
                 let mut it = *strings;
                 let path = it.next().map(text);
                 // The argument area is NUL-separated.
-                let argv = it.next().map(|a| text(a).trim_end_matches('\0').replace('\0', " "));
+                let argv = it
+                    .next()
+                    .map(|a| text(a).trim_end_matches('\0').replace('\0', " "));
                 Self::Exec {
                     path,
                     argv,
@@ -350,32 +391,57 @@ impl OwnedActivity {
 
     fn as_activity(&self) -> Activity<'_> {
         match self {
-            Self::Connect { addr, port, protocol, sendmsg } => Activity::Connect {
+            Self::Connect {
+                addr,
+                port,
+                protocol,
+                sendmsg,
+            } => Activity::Connect {
                 addr: *addr,
                 port: *port,
                 protocol: *protocol,
                 sendmsg: *sendmsg,
             },
-            Self::SocketCreate { family, sock_type, protocol } => Activity::SocketCreate {
+            Self::SocketCreate {
+                family,
+                sock_type,
+                protocol,
+            } => Activity::SocketCreate {
                 family: *family,
                 sock_type: *sock_type,
                 protocol: *protocol,
             },
-            Self::Exec { path, argv, dev, ino, committed } => Activity::Exec {
+            Self::Exec {
+                path,
+                argv,
+                dev,
+                ino,
+                committed,
+            } => Activity::Exec {
                 path: path.as_deref(),
                 argv: argv.as_deref(),
                 dev: *dev,
                 ino: *ino,
                 committed: *committed,
             },
-            Self::File { path, hook, access, dev, ino } => Activity::File {
+            Self::File {
+                path,
+                hook,
+                access,
+                dev,
+                ino,
+            } => Activity::File {
                 path: path.as_deref(),
                 hook: *hook,
                 access: *access,
                 dev: *dev,
                 ino: *ino,
             },
-            Self::Tamper { hook, target_tgid, detail } => Activity::Tamper {
+            Self::Tamper {
+                hook,
+                target_tgid,
+                detail,
+            } => Activity::Tamper {
                 hook: *hook,
                 target_tgid: *target_tgid,
                 detail: *detail,

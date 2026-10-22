@@ -35,7 +35,10 @@ mod tests {
         let tp = traceparent("sess-1");
         let parts: Vec<&str> = tp.split('-').collect();
         assert_eq!(parts.len(), 4);
-        assert_eq!((parts[0], parts[1].len(), parts[2].len(), parts[3]), ("00", 32, 16, "01"));
+        assert_eq!(
+            (parts[0], parts[1].len(), parts[2].len(), parts[3]),
+            ("00", 32, 16, "01")
+        );
         assert_eq!(tp, traceparent("sess-1"));
         assert_ne!(tp, traceparent("sess-2"));
         assert_ne!(parts[1], "0".repeat(32));

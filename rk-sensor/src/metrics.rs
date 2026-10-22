@@ -90,7 +90,9 @@ pub struct Snapshot {
 }
 
 fn escape(v: &str) -> String {
-    v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
+    v.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
 }
 
 fn family(out: &mut String, name: &str, kind: &str, help: &str) {
@@ -102,7 +104,12 @@ pub fn render(m: &Metrics, s: &Snapshot) -> String {
     let mut out = String::new();
     let c = |k: &str| s.counters.get(k).copied().unwrap_or(0);
 
-    family(&mut out, "rk_decisions_total", "counter", "Governed decisions by hook and verdict, counted in the kernel.");
+    family(
+        &mut out,
+        "rk_decisions_total",
+        "counter",
+        "Governed decisions by hook and verdict, counted in the kernel.",
+    );
     for hook in HOOKS {
         for verdict in VERDICTS {
             let _ = writeln!(
@@ -113,7 +120,12 @@ pub fn render(m: &Metrics, s: &Snapshot) -> String {
         }
     }
 
-    family(&mut out, "rk_rule_hits_total", "counter", "Deny and audit-would-deny decisions by rule, from events.");
+    family(
+        &mut out,
+        "rk_rule_hits_total",
+        "counter",
+        "Deny and audit-would-deny decisions by rule, from events.",
+    );
     for ((rule, verdict, profile), n) in m.rule_hits.lock().unwrap().iter() {
         let _ = writeln!(
             out,
@@ -122,7 +134,12 @@ pub fn render(m: &Metrics, s: &Snapshot) -> String {
         );
     }
 
-    family(&mut out, "rk_events_lost_total", "counter", "Decision events lost before the audit log, by stage.");
+    family(
+        &mut out,
+        "rk_events_lost_total",
+        "counter",
+        "Decision events lost before the audit log, by stage.",
+    );
     let lost = [
         ("kernel", c("ringbuf_drops") + c("scratch_misses")),
         ("channel", c("userspace_drops")),
@@ -132,31 +149,75 @@ pub fn render(m: &Metrics, s: &Snapshot) -> String {
         let _ = writeln!(out, "rk_events_lost_total{{stage=\"{stage}\"}} {n}");
     }
 
-    family(&mut out, "rk_decoder_errors_total", "counter", "Ring buffer records rejected by the decoder, by kind.");
+    family(
+        &mut out,
+        "rk_decoder_errors_total",
+        "counter",
+        "Ring buffer records rejected by the decoder, by kind.",
+    );
     for (kind, n) in &s.decoder_errors {
         let _ = writeln!(out, "rk_decoder_errors_total{{kind=\"{kind}\"}} {n}");
     }
 
-    family(&mut out, "rk_policy_generation", "gauge", "Generation of the active policy.");
+    family(
+        &mut out,
+        "rk_policy_generation",
+        "gauge",
+        "Generation of the active policy.",
+    );
     let _ = writeln!(out, "rk_policy_generation {}", s.policy_generation);
 
     if let Some(age) = s.heartbeat_age_seconds {
-        family(&mut out, "rk_heartbeat_age_seconds", "gauge", "Seconds since the sensor last renewed the kernel heartbeat.");
+        family(
+            &mut out,
+            "rk_heartbeat_age_seconds",
+            "gauge",
+            "Seconds since the sensor last renewed the kernel heartbeat.",
+        );
         let _ = writeln!(out, "rk_heartbeat_age_seconds {age:.3}");
     }
 
-    family(&mut out, "rk_enforcement_available", "gauge", "Whether enforcement of each rule family is available on this node.");
+    family(
+        &mut out,
+        "rk_enforcement_available",
+        "gauge",
+        "Whether enforcement of each rule family is available on this node.",
+    );
     for (capability, name) in [("network", "cgroup_v2"), ("lsm", "bpf_lsm")] {
         let ok = s.capabilities.iter().any(|(n, ok)| n == name && *ok);
-        let _ = writeln!(out, "rk_enforcement_available{{capability=\"{capability}\"}} {}", u8::from(ok));
+        let _ = writeln!(
+            out,
+            "rk_enforcement_available{{capability=\"{capability}\"}} {}",
+            u8::from(ok)
+        );
     }
 
     let counters = [
-        ("rk_audit_records_total", "Records written to the audit log.", &m.audit_records),
-        ("rk_audit_batches_total", "Audit batches sealed.", &m.audit_batches),
-        ("rk_audit_write_errors_total", "Failed audit log writes.", &m.audit_write_errors),
-        ("rk_otlp_spans_exported_total", "Decision spans accepted by the OTLP collector.", &m.otlp_exported),
-        ("rk_otlp_export_errors_total", "Failed OTLP export requests.", &m.otlp_errors),
+        (
+            "rk_audit_records_total",
+            "Records written to the audit log.",
+            &m.audit_records,
+        ),
+        (
+            "rk_audit_batches_total",
+            "Audit batches sealed.",
+            &m.audit_batches,
+        ),
+        (
+            "rk_audit_write_errors_total",
+            "Failed audit log writes.",
+            &m.audit_write_errors,
+        ),
+        (
+            "rk_otlp_spans_exported_total",
+            "Decision spans accepted by the OTLP collector.",
+            &m.otlp_exported,
+        ),
+        (
+            "rk_otlp_export_errors_total",
+            "Failed OTLP export requests.",
+            &m.otlp_errors,
+        ),
     ];
     for (name, help, v) in counters {
         family(&mut out, name, "counter", help);
@@ -164,9 +225,23 @@ pub fn render(m: &Metrics, s: &Snapshot) -> String {
     }
 
     if let Some(info) = m.audit_info() {
-        family(&mut out, "rk_audit_head_seq", "gauge", "Sequence number of the next audit batch (the chain head).");
-        let _ = writeln!(out, "rk_audit_head_seq {}", m.audit_head_seq.load(Ordering::Relaxed));
-        family(&mut out, "rk_audit_info", "gauge", "Audit signing key and chain head hash.");
+        family(
+            &mut out,
+            "rk_audit_head_seq",
+            "gauge",
+            "Sequence number of the next audit batch (the chain head).",
+        );
+        let _ = writeln!(
+            out,
+            "rk_audit_head_seq {}",
+            m.audit_head_seq.load(Ordering::Relaxed)
+        );
+        family(
+            &mut out,
+            "rk_audit_info",
+            "gauge",
+            "Audit signing key and chain head hash.",
+        );
         let _ = writeln!(
             out,
             "rk_audit_info{{key_id=\"{}\",head_hash=\"{}\"}} 1",
@@ -188,13 +263,20 @@ struct ServerState {
 async fn scrape(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let snapshot = (state.snapshot)().await;
     (
-        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
         render(&state.metrics, &snapshot),
     )
 }
 
 /// Serves `GET /metrics` on `listener` until the task is dropped.
-pub async fn serve_on(listener: tokio::net::TcpListener, metrics: Arc<Metrics>, snapshot: SnapshotFn) -> Result<()> {
+pub async fn serve_on(
+    listener: tokio::net::TcpListener,
+    metrics: Arc<Metrics>,
+    snapshot: SnapshotFn,
+) -> Result<()> {
     let app = Router::new()
         .route("/metrics", get(scrape))
         .with_state(Arc::new(ServerState { metrics, snapshot }));
@@ -251,7 +333,10 @@ mod tests {
             "rk_audit_head_seq 12",
             "rk_audit_info{key_id=\"abcd\",head_hash=\"ff\"} 1",
         ] {
-            assert!(text.lines().any(|l| l == line), "missing `{line}` in:\n{text}");
+            assert!(
+                text.lines().any(|l| l == line),
+                "missing `{line}` in:\n{text}"
+            );
         }
         // Every sample belongs to a declared family.
         let declared: Vec<&str> = text
@@ -276,7 +361,8 @@ mod tests {
         let body = tokio::task::spawn_blocking(move || {
             use std::io::{Read as _, Write as _};
             let mut s = std::net::TcpStream::connect(addr).unwrap();
-            s.write_all(b"GET /metrics HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").unwrap();
+            s.write_all(b"GET /metrics HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+                .unwrap();
             let mut out = String::new();
             s.read_to_string(&mut out).unwrap();
             out

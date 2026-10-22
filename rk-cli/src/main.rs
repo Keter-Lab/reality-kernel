@@ -178,7 +178,14 @@ fn main() -> ExitCode {
                     session,
                     lines,
                 },
-        } => match run_audit_tail(&dir, follow, json, verdict.as_deref(), session.as_deref(), lines) {
+        } => match run_audit_tail(
+            &dir,
+            follow,
+            json,
+            verdict.as_deref(),
+            session.as_deref(),
+            lines,
+        ) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("rk audit tail: {e:#}");
@@ -200,12 +207,21 @@ fn main() -> ExitCode {
 
 /// The output line for one audit log line, if it is a record that passes
 /// the filters.
-fn audit_line(line: &str, json: bool, verdict: Option<&str>, session: Option<&str>) -> Option<String> {
+fn audit_line(
+    line: &str,
+    json: bool,
+    verdict: Option<&str>,
+    session: Option<&str>,
+) -> Option<String> {
     let v: serde_json::Value = serde_json::from_str(line).ok()?;
     if !rk_audit::tail::is_record(&v) || !rk_audit::tail::matches(&v, verdict, session) {
         return None;
     }
-    Some(if json { line.to_string() } else { rk_audit::tail::render(&v) })
+    Some(if json {
+        line.to_string()
+    } else {
+        rk_audit::tail::render(&v)
+    })
 }
 
 /// Complete lines appended to `path` since `offset`; a partial last line is
@@ -237,7 +253,10 @@ fn run_audit_tail(
     let mut shown: VecDeque<String> = VecDeque::new();
     for seg in segments.iter().rev() {
         let text = fs::read_to_string(seg).with_context(|| format!("read {}", seg.display()))?;
-        let found: Vec<String> = text.lines().filter_map(|l| audit_line(l, json, verdict, session)).collect();
+        let found: Vec<String> = text
+            .lines()
+            .filter_map(|l| audit_line(l, json, verdict, session))
+            .collect();
         for line in found.into_iter().rev() {
             shown.push_front(line);
         }

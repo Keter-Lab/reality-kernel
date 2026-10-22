@@ -61,7 +61,11 @@ fn str_at<'a>(v: &'a Value, pointer: &str) -> Option<&'a str> {
 
 /// One human-readable line for a record.
 pub fn render(v: &Value) -> String {
-    let time = v.get("time").and_then(Value::as_i64).map(format_time).unwrap_or_default();
+    let time = v
+        .get("time")
+        .and_then(Value::as_i64)
+        .map(format_time)
+        .unwrap_or_default();
     let rk = rk_fields(v);
     if v.get("class_uid").and_then(Value::as_u64) == Some(6008) {
         let msg = v.get("message").and_then(Value::as_str).unwrap_or("error");
@@ -75,13 +79,22 @@ pub fn render(v: &Value) -> String {
     };
     let activity = str_at(v, "/activity_name").unwrap_or("?");
     let what = if let Some(ip) = str_at(v, "/dst_endpoint/ip") {
-        let port = v.pointer("/dst_endpoint/port").and_then(Value::as_u64).unwrap_or(0);
+        let port = v
+            .pointer("/dst_endpoint/port")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         let proto = str_at(v, "/connection_info/protocol_name").unwrap_or("?");
-        let host = if ip.contains(':') { format!("[{ip}]") } else { ip.to_string() };
+        let host = if ip.contains(':') {
+            format!("[{ip}]")
+        } else {
+            ip.to_string()
+        };
         format!("{activity} {host}:{port}/{proto}")
     } else if let Some(path) = str_at(v, "/file/path").or_else(|| str_at(v, "/file/name")) {
         format!("{activity} {path}")
-    } else if let Some(path) = str_at(v, "/process/file/path").or_else(|| str_at(v, "/process/file/name")) {
+    } else if let Some(path) =
+        str_at(v, "/process/file/path").or_else(|| str_at(v, "/process/file/name"))
+    {
         format!("{activity} {path}")
     } else {
         activity.to_string()
@@ -89,9 +102,14 @@ pub fn render(v: &Value) -> String {
     let rule = str_at(v, "/policy/uid").unwrap_or("?");
     let profile = str_at(v, "/policy/name").unwrap_or("-");
     let generation = str_at(v, "/policy/version").unwrap_or("?");
-    let pid = v.pointer("/actor/process/pid").and_then(Value::as_u64).unwrap_or(0);
+    let pid = v
+        .pointer("/actor/process/pid")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     let exe = str_at(v, "/actor/process/file/path").unwrap_or("?");
-    let mut line = format!("{time} {verdict}  {what}  rule {rule} ({profile}) gen {generation}  pid {pid} {exe}");
+    let mut line = format!(
+        "{time} {verdict}  {what}  rule {rule} ({profile}) gen {generation}  pid {pid} {exe}"
+    );
     if let Some(s) = str_at(v, "/actor/session/uid") {
         line.push_str("  session ");
         line.push_str(s);
@@ -149,7 +167,11 @@ mod tests {
         assert!(matches(&deny, Some("deny"), Some("s1")));
         assert!(!matches(&deny, Some("audit"), None));
         assert!(!matches(&deny, None, Some("s2")));
-        assert!(matches(&record(Verdict::AuditWouldDeny), Some("audit"), None));
+        assert!(matches(
+            &record(Verdict::AuditWouldDeny),
+            Some("audit"),
+            None
+        ));
     }
 
     #[test]

@@ -32,7 +32,9 @@ impl AuditKey {
         let mut filled = 0;
         while filled < SEED_LEN {
             // SAFETY: writes at most SEED_LEN - filled bytes into `seed`.
-            let n = unsafe { libc::getrandom(seed[filled..].as_mut_ptr().cast(), SEED_LEN - filled, 0) };
+            let n = unsafe {
+                libc::getrandom(seed[filled..].as_mut_ptr().cast(), SEED_LEN - filled, 0)
+            };
             if n < 0 {
                 let err = std::io::Error::last_os_error();
                 if err.raw_os_error() == Some(libc::EINTR) {
@@ -59,10 +61,9 @@ impl AuditKey {
                         mode & 0o777
                     );
                 }
-                let seed: [u8; SEED_LEN] = bytes
-                    .as_slice()
-                    .try_into()
-                    .with_context(|| format!("{}: expected a {SEED_LEN}-byte key", path.display()))?;
+                let seed: [u8; SEED_LEN] = bytes.as_slice().try_into().with_context(|| {
+                    format!("{}: expected a {SEED_LEN}-byte key", path.display())
+                })?;
                 let key = Self::from_seed(seed);
                 key.write_public(&public_path(path))?;
                 Ok(key)
@@ -136,7 +137,8 @@ pub fn verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bo
     let Ok(key) = VerifyingKey::from_bytes(public_key) else {
         return false;
     };
-    key.verify(message, &Signature::from_bytes(signature)).is_ok()
+    key.verify(message, &Signature::from_bytes(signature))
+        .is_ok()
 }
 
 #[cfg(test)]
@@ -149,7 +151,11 @@ mod tests {
         let sig = key.sign(b"hash");
         assert!(verify(&key.public_key(), b"hash", &sig));
         assert!(!verify(&key.public_key(), b"hasH", &sig));
-        assert!(!verify(&AuditKey::from_seed([8; 32]).public_key(), b"hash", &sig));
+        assert!(!verify(
+            &AuditKey::from_seed([8; 32]).public_key(),
+            b"hash",
+            &sig
+        ));
         assert_eq!(key.key_id().len(), 16);
     }
 
@@ -168,7 +174,10 @@ mod tests {
         let first = AuditKey::load_or_create(&path).unwrap();
         let again = AuditKey::load_or_create(&path).unwrap();
         assert_eq!(first.public_key(), again.public_key());
-        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let published = fs::read_to_string(public_path(&path)).unwrap();
         assert_eq!(parse_public_key(&published).unwrap(), first.public_key());
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();

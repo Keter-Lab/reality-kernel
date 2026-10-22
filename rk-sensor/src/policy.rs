@@ -787,7 +787,8 @@ impl PolicyEngine {
             return ctx;
         };
         for o in &policy.origins {
-            ctx.rules.insert(o.id, (o.profile.clone(), o.origin.clone()));
+            ctx.rules
+                .insert(o.id, (o.profile.clone(), o.origin.clone()));
         }
         for (&cgroup, (_, profile)) in &self.bindings {
             if let Some(p) = policy.profile(*profile) {

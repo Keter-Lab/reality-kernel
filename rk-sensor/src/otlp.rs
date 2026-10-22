@@ -74,8 +74,13 @@ pub fn span_from_record(session: &str, record: &Value) -> Span {
         trace_id,
         parent_id,
         span_id,
-        name: format!("rk.decision {}", record["activity_name"].as_str().unwrap_or("")),
-        time_ns: u64::try_from(time_ms).unwrap_or(0).saturating_mul(1_000_000),
+        name: format!(
+            "rk.decision {}",
+            record["activity_name"].as_str().unwrap_or("")
+        ),
+        time_ns: u64::try_from(time_ms)
+            .unwrap_or(0)
+            .saturating_mul(1_000_000),
         denied: rk["verdict"] == "deny",
         attributes,
     }
@@ -161,7 +166,9 @@ pub fn validate_endpoint(endpoint: &str) -> Result<(), String> {
              which handles TLS to the backend"
                 .into(),
         ),
-        _ => Err(format!("--otlp-endpoint `{endpoint}` is not an http:// URL")),
+        _ => Err(format!(
+            "--otlp-endpoint `{endpoint}` is not an http:// URL"
+        )),
     }
 }
 
@@ -181,8 +188,17 @@ fn detached(capacity: usize, metrics: Arc<Metrics>) -> (Exporter, mpsc::Receiver
     (Exporter { tx, metrics }, rx)
 }
 
-async fn run(url: String, hostname: String, version: String, metrics: Arc<Metrics>, mut rx: mpsc::Receiver<Span>) {
-    let client = match reqwest::Client::builder().timeout(Duration::from_secs(5)).build() {
+async fn run(
+    url: String,
+    hostname: String,
+    version: String,
+    metrics: Arc<Metrics>,
+    mut rx: mpsc::Receiver<Span>,
+) {
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    {
         Ok(c) => c,
         Err(e) => {
             tracing::error!(error = %e, "OTLP export disabled: cannot build an HTTP client");
@@ -259,7 +275,9 @@ mod tests {
         assert_eq!(s["status"]["code"], 2);
         let attrs = s["attributes"].as_array().unwrap();
         assert!(attrs.contains(&json!({ "key": "rk.rule_id", "value": { "intValue": "7" } })));
-        assert!(attrs.contains(&json!({ "key": "network.peer.address", "value": { "stringValue": "10.0.0.5" } })));
+        assert!(attrs.contains(
+            &json!({ "key": "network.peer.address", "value": { "stringValue": "10.0.0.5" } })
+        ));
     }
 
     #[test]
@@ -304,16 +322,31 @@ mod tests {
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
             let mut stream = stream;
-            stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}").unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}")
+                .unwrap();
             (request_line, body)
         });
         let metrics = Arc::new(Metrics::default());
-        let exporter = start(&format!("http://{addr}"), "node-a".into(), "0.1.0".into(), metrics.clone());
+        let exporter = start(
+            &format!("http://{addr}"),
+            "node-a".into(),
+            "0.1.0".into(),
+            metrics.clone(),
+        );
         exporter.offer(span_from_record("sess-1", &record()));
-        let (line, body) = tokio::task::spawn_blocking(move || collector.join().unwrap()).await.unwrap();
+        let (line, body) = tokio::task::spawn_blocking(move || collector.join().unwrap())
+            .await
+            .unwrap();
         assert!(line.starts_with("POST /v1/traces "), "{line}");
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["resourceSpans"][0]["scopeSpans"][0]["spans"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            body["resourceSpans"][0]["scopeSpans"][0]["spans"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
         for _ in 0..50 {
             if metrics.otlp_exported.load(Ordering::Relaxed) == 1 {
                 return;

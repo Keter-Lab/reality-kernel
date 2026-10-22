@@ -148,7 +148,9 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
             "--metrics-addr" => {
                 let addr = it.next().ok_or_else(unrecognised)?;
                 if addr != "off" && addr.parse::<std::net::SocketAddr>().is_err() {
-                    return Err(format!("--metrics-addr `{addr}` is not HOST:PORT or off\n{USAGE}"));
+                    return Err(format!(
+                        "--metrics-addr `{addr}` is not HOST:PORT or off\n{USAGE}"
+                    ));
                 }
                 opts.metrics_addr = Some(addr.clone());
             }
@@ -401,7 +403,9 @@ impl PolicyHandler for SensorPolicyHandler {
     }
 
     fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64> {
-        let id = self.engine.bind_container(&mut self.ebpf, cgroup, profile)?;
+        let id = self
+            .engine
+            .bind_container(&mut self.ebpf, cgroup, profile)?;
         self.publish();
         Ok(id)
     }
@@ -437,11 +441,14 @@ fn kernel_lost(ebpf: &aya::Ebpf) -> u64 {
     let Ok(per_cpu) = aya::maps::PerCpuArray::<_, u64>::try_from(map) else {
         return 0;
     };
-    [rk_counter::RK_CNT_RINGBUF_DROP, rk_counter::RK_CNT_SCRATCH_MISS]
-        .iter()
-        .filter_map(|i| per_cpu.get(i, 0).ok())
-        .map(|values| values.iter().sum::<u64>())
-        .sum()
+    [
+        rk_counter::RK_CNT_RINGBUF_DROP,
+        rk_counter::RK_CNT_SCRATCH_MISS,
+    ]
+    .iter()
+    .filter_map(|i| per_cpu.get(i, 0).ok())
+    .map(|values| values.iter().sum::<u64>())
+    .sum()
 }
 
 /// `--audit-dir`/`--metrics-addr` style option: `off`, a value, or the default.

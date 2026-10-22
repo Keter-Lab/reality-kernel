@@ -56,7 +56,11 @@ fn blocked() -> String {
 
 fn policy_text(lsm: bool) -> String {
     // Without BPF LSM only network rules are accepted (docs/policy.md).
-    let raw = if lsm { "" } else { "network.deny_raw_sockets = false\n" };
+    let raw = if lsm {
+        ""
+    } else {
+        "network.deny_raw_sockets = false\n"
+    };
     let mut p = format!(
         r#"
 [profiles.obs-enforce]
@@ -209,7 +213,10 @@ fn scrape() -> Result<String> {
     let mut out = String::new();
     s.read_to_string(&mut out)?;
     let (head, body) = out.split_once("\r\n\r\n").context("no HTTP body")?;
-    ensure!(head.starts_with("HTTP/1.1 200"), "metrics endpoint answered: {head}");
+    ensure!(
+        head.starts_with("HTTP/1.1 200"),
+        "metrics endpoint answered: {head}"
+    );
     Ok(body.to_string())
 }
 
@@ -227,7 +234,11 @@ fn sum(body: &str, name: &str, labels: &[&str]) -> u64 {
 fn kernel_decisions(body: &str) -> (u64, u64) {
     (
         sum(body, "rk_decisions_total", &["verdict=\"deny\""]),
-        sum(body, "rk_decisions_total", &["verdict=\"audit_would_deny\""]),
+        sum(
+            body,
+            "rk_decisions_total",
+            &["verdict=\"audit_would_deny\""],
+        ),
     )
 }
 
@@ -246,7 +257,8 @@ fn records(dir: &str) -> Result<Vec<Value>> {
     let mut out = Vec::new();
     for seg in rk_audit::chain::segments(Path::new(dir))? {
         for line in fs::read_to_string(&seg)?.lines() {
-            let v: Value = serde_json::from_str(line).with_context(|| format!("{}: {line}", seg.display()))?;
+            let v: Value =
+                serde_json::from_str(line).with_context(|| format!("{}: {line}", seg.display()))?;
             if rk_audit::tail::is_record(&v) {
                 out.push(v);
             }
@@ -276,7 +288,11 @@ fn rk_cli(rk: &Path, args: &[&str]) -> Result<(i32, String)> {
     let out = Command::new(rk).args(args).output().context("run rk")?;
     Ok((
         out.status.code().unwrap_or(-1),
-        format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
     ))
 }
 
@@ -323,16 +339,41 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             let b1 = scrape()?;
-            let deny0 = sum(&b0, "rk_decisions_total", &["hook=\"connect4\"", "verdict=\"deny\""]);
-            let deny1 = sum(&b1, "rk_decisions_total", &["hook=\"connect4\"", "verdict=\"deny\""]);
-            let hits0 = sum(&b0, "rk_rule_hits_total", &["verdict=\"deny\"", "profile=\"obs-enforce\""]);
-            let hits1 = sum(&b1, "rk_rule_hits_total", &["verdict=\"deny\"", "profile=\"obs-enforce\""]);
+            let deny0 = sum(
+                &b0,
+                "rk_decisions_total",
+                &["hook=\"connect4\"", "verdict=\"deny\""],
+            );
+            let deny1 = sum(
+                &b1,
+                "rk_decisions_total",
+                &["hook=\"connect4\"", "verdict=\"deny\""],
+            );
+            let hits0 = sum(
+                &b0,
+                "rk_rule_hits_total",
+                &["verdict=\"deny\"", "profile=\"obs-enforce\""],
+            );
+            let hits1 = sum(
+                &b1,
+                "rk_rule_hits_total",
+                &["verdict=\"deny\"", "profile=\"obs-enforce\""],
+            );
             if deny1 > deny0 && hits1 > hits0 {
                 let network = sum(&b1, "rk_enforcement_available", &["capability=\"network\""]);
                 let lsm_metric = sum(&b1, "rk_enforcement_available", &["capability=\"lsm\""]);
-                ensure!(network == 1, "rk_enforcement_available{{network}} = {network}");
-                ensure!(lsm_metric == u64::from(lsm), "rk_enforcement_available{{lsm}} = {lsm_metric}, kernel says {lsm}");
-                ensure!(b1.contains("rk_audit_info{key_id=\""), "no rk_audit_info: audit log not open");
+                ensure!(
+                    network == 1,
+                    "rk_enforcement_available{{network}} = {network}"
+                );
+                ensure!(
+                    lsm_metric == u64::from(lsm),
+                    "rk_enforcement_available{{lsm}} = {lsm_metric}, kernel says {lsm}"
+                );
+                ensure!(
+                    b1.contains("rk_audit_info{key_id=\""),
+                    "no rk_audit_info: audit log not open"
+                );
                 ensure!(b1.contains("rk_heartbeat_age_seconds "), "no heartbeat age");
                 return Ok(format!(
                     "connect4 denies {deny0} -> {deny1}, obs-enforce rule hits {hits0} -> {hits1}, enforcement network=1 lsm={lsm_metric}"
@@ -371,34 +412,74 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         let lost: u64 = all
             .iter()
             .filter(|r| r["class_uid"] == 6008)
-            .map(|r| rk_field(r, "lost")["kernel"].as_u64().unwrap_or(0) + rk_field(r, "lost")["channel"].as_u64().unwrap_or(0))
+            .map(|r| {
+                rk_field(r, "lost")["kernel"].as_u64().unwrap_or(0)
+                    + rk_field(r, "lost")["channel"].as_u64().unwrap_or(0)
+            })
             .sum();
 
         // The metrics check above added one enforce network deny.
         let net_denies = select(&decisions, enforce_id, 4001, "deny");
-        ensure!(net_denies.len() == NET_DENIES + 1, "{} network denies logged, {} made", net_denies.len(), NET_DENIES + 1);
+        ensure!(
+            net_denies.len() == NET_DENIES + 1,
+            "{} network denies logged, {} made",
+            net_denies.len(),
+            NET_DENIES + 1
+        );
         let rule = net_denies[0]["policy"]["uid"].clone();
-        ensure!(rule != "0" && !rule.is_null(), "network deny logged without its rule id: {rule}");
+        ensure!(
+            rule != "0" && !rule.is_null(),
+            "network deny logged without its rule id: {rule}"
+        );
         for r in &net_denies {
-            ensure!(r["policy"]["uid"] == rule, "rule ids differ: {} vs {rule}", r["policy"]["uid"]);
-            ensure!(r["policy"]["name"] == "obs-enforce", "profile {}", r["policy"]["name"]);
-            ensure!(r["dst_endpoint"]["ip"] == "10.99.0.1", "target {}", r["dst_endpoint"]);
+            ensure!(
+                r["policy"]["uid"] == rule,
+                "rule ids differ: {} vs {rule}",
+                r["policy"]["uid"]
+            );
+            ensure!(
+                r["policy"]["name"] == "obs-enforce",
+                "profile {}",
+                r["policy"]["name"]
+            );
+            ensure!(
+                r["dst_endpoint"]["ip"] == "10.99.0.1",
+                "target {}",
+                r["dst_endpoint"]
+            );
             ensure!(r["disposition_id"] == 2, "deny without disposition Blocked");
         }
         let audits = select(&decisions, audit_id, 4001, "audit_would_deny");
-        ensure!(audits.len() == NET_AUDITS, "{} audit-would-deny logged, {NET_AUDITS} made", audits.len());
-        ensure!(audits.iter().all(|r| r["policy"]["name"] == "obs-audit" && r["policy"]["uid"] != "0"));
+        ensure!(
+            audits.len() == NET_AUDITS,
+            "{} audit-would-deny logged, {NET_AUDITS} made",
+            audits.len()
+        );
+        ensure!(audits
+            .iter()
+            .all(|r| r["policy"]["name"] == "obs-audit" && r["policy"]["uid"] != "0"));
         let (mut files, mut execs) = (0, 0);
         if lsm {
             files = select(&decisions, enforce_id, 1001, "deny").len();
             execs = select(&decisions, enforce_id, 1007, "deny").len();
-            ensure!(files == FILE_DENIES, "{files} file denies logged, {FILE_DENIES} made");
-            ensure!(execs == EXEC_DENIES, "{execs} exec denies logged, {EXEC_DENIES} made");
+            ensure!(
+                files == FILE_DENIES,
+                "{files} file denies logged, {FILE_DENIES} made"
+            );
+            ensure!(
+                execs == EXEC_DENIES,
+                "{execs} exec denies logged, {EXEC_DENIES} made"
+            );
         }
 
         // Complete by count: the kernel's own decision counters agree with
         // the log (plus any recorded loss).
-        let verdicts = |v: &str| decisions.iter().filter(|r| rk_field(r, "verdict").as_str() == Some(v)).count() as u64;
+        let verdicts = |v: &str| {
+            decisions
+                .iter()
+                .filter(|r| rk_field(r, "verdict").as_str() == Some(v))
+                .count() as u64
+        };
         let (logged_denies, logged_audits) = (verdicts("deny"), verdicts("audit_would_deny"));
         ensure!(
             logged_denies + logged_audits + lost == (deny1 - deny0) + (audit1 - audit0),
@@ -415,8 +496,21 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
 
     run_test(checks, "audit_tamper_detected", || {
         let pubkey = format!("{KEY}.pub");
-        let (code, out) = rk_cli(&rk, &["audit", "verify", "--dir", AUDIT_DIR, "--pubkey", pubkey.as_str()])?;
-        ensure!(code == 0 && out.contains("VERIFIED"), "untouched log did not verify ({code}): {out}");
+        let (code, out) = rk_cli(
+            &rk,
+            &[
+                "audit",
+                "verify",
+                "--dir",
+                AUDIT_DIR,
+                "--pubkey",
+                pubkey.as_str(),
+            ],
+        )?;
+        ensure!(
+            code == 0 && out.contains("VERIFIED"),
+            "untouched log did not verify ({code}): {out}"
+        );
 
         let tampered = format!("{DIR}/tampered");
         copy_dir(AUDIT_DIR, &tampered)?;
@@ -438,9 +532,18 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         fs::write(&first, lines.join("\n") + "\n")?;
 
         let (code, out) = rk_cli(&rk, &["audit", "verify", "--dir", tampered.as_str()])?;
-        ensure!(code == 2, "tampered log: exit code {code}, expected 2: {out}");
-        ensure!(out.contains("FAILED") && out.contains("batch"), "tampered log not reported: {out}");
-        Ok(format!("untouched log verified with the pinned key; flipped byte on line {} reported", at + 1))
+        ensure!(
+            code == 2,
+            "tampered log: exit code {code}, expected 2: {out}"
+        );
+        ensure!(
+            out.contains("FAILED") && out.contains("batch"),
+            "tampered log not reported: {out}"
+        );
+        Ok(format!(
+            "untouched log verified with the pinned key; flipped byte on line {} reported",
+            at + 1
+        ))
     });
 
     drop(daemon);
@@ -459,7 +562,11 @@ fn audit_records_loss(lsm: bool) -> Result<String> {
     let bytes = crate::bpf::rk_emitfail_bytes().context("rk_emitfail.bpf.o not embedded")?;
     let mut ebpf = rk_sensor::loader::open_bytes(bytes, "rk_emitfail.bpf.o")?;
     let btf = Btf::from_sys_fs().ok();
-    for r in rk_sensor::loader::load_programs(rk_sensor::loader::Object::Production, &mut ebpf, btf.as_ref()) {
+    for r in rk_sensor::loader::load_programs(
+        rk_sensor::loader::Object::Production,
+        &mut ebpf,
+        btf.as_ref(),
+    ) {
         ensure!(r.loaded, "{} failed to load: {:?}", r.name, r.error);
     }
     let _heartbeat = rk_sensor::resilience::Heartbeat::start(&mut ebpf, Duration::from_secs(30))?;
@@ -469,9 +576,12 @@ fn audit_records_loss(lsm: bool) -> Result<String> {
     engine.apply_text(&mut ebpf, &policy_text(lsm))?;
 
     let lost_now = |ebpf: &aya::Ebpf| -> Result<u64> {
-        Ok(get_counter(ebpf, rk_counter::RK_CNT_RINGBUF_DROP)? + get_counter(ebpf, rk_counter::RK_CNT_SCRATCH_MISS)?)
+        Ok(get_counter(ebpf, rk_counter::RK_CNT_RINGBUF_DROP)?
+            + get_counter(ebpf, rk_counter::RK_CNT_SCRATCH_MISS)?)
     };
-    let deny_index = rk_counter::RK_CNT_DECISION_BASE + rk_ebpf_common::rk_hook::RK_HOOK_CONNECT4 * rk_ebpf_common::RK_VERDICTS + 1;
+    let deny_index = rk_counter::RK_CNT_DECISION_BASE
+        + rk_ebpf_common::rk_hook::RK_HOOK_CONNECT4 * rk_ebpf_common::RK_VERDICTS
+        + 1;
     let lost0 = lost_now(&ebpf)?;
     let denies0 = get_counter(&ebpf, deny_index)?;
 
@@ -493,7 +603,12 @@ fn audit_records_loss(lsm: bool) -> Result<String> {
         stats.clone(),
         None,
     );
-    let consumer = Consumer::start_with(take_ring(&mut ebpf)?, Box::new(observer), stats, Config::default())?;
+    let consumer = Consumer::start_with(
+        take_ring(&mut ebpf)?,
+        Box::new(observer),
+        stats,
+        Config::default(),
+    )?;
 
     for _ in 0..3 {
         workload(ENFORCE, "udp_connect", &[DENY_TARGET, "eperm"])?;
@@ -511,15 +626,26 @@ fn audit_records_loss(lsm: bool) -> Result<String> {
         .filter(|r| r["class_uid"] == 6008)
         .map(|r| rk_field(r, "lost")["kernel"].as_u64().unwrap_or(0))
         .sum();
-    ensure!(denies1 - denies0 >= 3, "kernel counted {} connect4 denies, expected 3", denies1 - denies0);
-    ensure!(decisions == 0, "{decisions} decision records reached the log with emission failing");
+    ensure!(
+        denies1 - denies0 >= 3,
+        "kernel counted {} connect4 denies, expected 3",
+        denies1 - denies0
+    );
+    ensure!(
+        decisions == 0,
+        "{decisions} decision records reached the log with emission failing"
+    );
     ensure!(
         recorded == lost1 - lost0 && recorded >= 3,
         "loss records say {recorded} lost; kernel counted {} lost events",
         lost1 - lost0
     );
     let report = rk_audit::chain::verify_dir(Path::new(LOSS_DIR), None)?;
-    ensure!(report.ok(), "loss log does not verify: {:?}", report.problems);
+    ensure!(
+        report.ok(),
+        "loss log does not verify: {:?}",
+        report.problems
+    );
     Ok(format!(
         "{} denies decided, 0 events emitted, loss records account for all {recorded} lost events",
         denies1 - denies0

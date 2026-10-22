@@ -31,13 +31,23 @@ const OBJECTS: &[(&str, &str)] = &[
 ];
 
 fn names(v: &Value) -> Vec<&str> {
-    v.as_array().unwrap().iter().map(|s| s.as_str().unwrap()).collect()
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap())
+        .collect()
 }
 
 fn check_enums(errors: &mut Vec<String>, at: &str, value: &Value, enums: &Value) {
     for (field, allowed) in enums.as_object().unwrap() {
         if let Some(got) = value.get(field) {
-            let ok = got.as_u64().is_some_and(|g| allowed.as_array().unwrap().iter().any(|a| a.as_u64() == Some(g)));
+            let ok = got.as_u64().is_some_and(|g| {
+                allowed
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|a| a.as_u64() == Some(g))
+            });
             if !ok {
                 errors.push(format!("{at}{field} = {got} is not a defined value"));
             }
@@ -52,11 +62,17 @@ fn validate(record: &Value, schema: &Value) -> Vec<String> {
         return vec![format!("class {class_uid} not in the schema subset")];
     };
     if record["category_uid"] != class["category_uid"] {
-        errors.push(format!("category_uid {} for class {class_uid}", record["category_uid"]));
+        errors.push(format!(
+            "category_uid {} for class {class_uid}",
+            record["category_uid"]
+        ));
     }
     let activity = record["activity_id"].as_u64().unwrap();
     if record["type_uid"].as_u64() != Some(class_uid * 100 + activity) {
-        errors.push(format!("type_uid {} is not class_uid * 100 + activity_id", record["type_uid"]));
+        errors.push(format!(
+            "type_uid {} is not class_uid * 100 + activity_id",
+            record["type_uid"]
+        ));
     }
     for req in names(&class["required"]) {
         if record.get(req).is_none() {
@@ -102,23 +118,92 @@ fn validate(record: &Value, schema: &Value) -> Vec<String> {
 
 fn every_kind_of_record() -> Vec<Value> {
     let activities = [
-        Activity::Connect { addr: "10.0.0.5".parse().unwrap(), port: 443, protocol: 6, sendmsg: false },
-        Activity::Connect { addr: "2001:db8::1".parse().unwrap(), port: 53, protocol: 17, sendmsg: true },
-        Activity::SocketCreate { family: 17, sock_type: 3, protocol: 0 },
-        Activity::Exec { path: Some("/usr/bin/curl"), argv: Some("curl example.com"), dev: 1, ino: 2, committed: false },
-        Activity::Exec { path: None, argv: None, dev: 1, ino: 2, committed: true },
-        Activity::File { path: Some("/etc/shadow"), hook: 1, access: 1, dev: 1, ino: 3 },
-        Activity::File { path: Some("secret"), hook: 2, access: 16, dev: 1, ino: 3 },
-        Activity::File { path: None, hook: 3, access: 32, dev: 1, ino: 3 },
-        Activity::File { path: Some("/a/b"), hook: 4, access: 128, dev: 1, ino: 3 },
-        Activity::File { path: Some("/a/c"), hook: 5, access: 8, dev: 1, ino: 3 },
-        Activity::File { path: Some("/a/d"), hook: 6, access: 256, dev: 1, ino: 3 },
-        Activity::Tamper { hook: 1, target_tgid: 77, detail: 0 },
+        Activity::Connect {
+            addr: "10.0.0.5".parse().unwrap(),
+            port: 443,
+            protocol: 6,
+            sendmsg: false,
+        },
+        Activity::Connect {
+            addr: "2001:db8::1".parse().unwrap(),
+            port: 53,
+            protocol: 17,
+            sendmsg: true,
+        },
+        Activity::SocketCreate {
+            family: 17,
+            sock_type: 3,
+            protocol: 0,
+        },
+        Activity::Exec {
+            path: Some("/usr/bin/curl"),
+            argv: Some("curl example.com"),
+            dev: 1,
+            ino: 2,
+            committed: false,
+        },
+        Activity::Exec {
+            path: None,
+            argv: None,
+            dev: 1,
+            ino: 2,
+            committed: true,
+        },
+        Activity::File {
+            path: Some("/etc/shadow"),
+            hook: 1,
+            access: 1,
+            dev: 1,
+            ino: 3,
+        },
+        Activity::File {
+            path: Some("secret"),
+            hook: 2,
+            access: 16,
+            dev: 1,
+            ino: 3,
+        },
+        Activity::File {
+            path: None,
+            hook: 3,
+            access: 32,
+            dev: 1,
+            ino: 3,
+        },
+        Activity::File {
+            path: Some("/a/b"),
+            hook: 4,
+            access: 128,
+            dev: 1,
+            ino: 3,
+        },
+        Activity::File {
+            path: Some("/a/c"),
+            hook: 5,
+            access: 8,
+            dev: 1,
+            ino: 3,
+        },
+        Activity::File {
+            path: Some("/a/d"),
+            hook: 6,
+            access: 256,
+            dev: 1,
+            ino: 3,
+        },
+        Activity::Tamper {
+            hook: 1,
+            target_tgid: 77,
+            detail: 0,
+        },
     ];
     let mut out = Vec::new();
     for activity in activities {
         for verdict in [Verdict::Allow, Verdict::Deny, Verdict::AuditWouldDeny] {
-            for (session, exe, ppid) in [(Some("s1"), Some("/usr/bin/python3"), Some(1)), (None, None, None)] {
+            for (session, exe, ppid) in [
+                (Some("s1"), Some("/usr/bin/python3"), Some(1)),
+                (None, None, None),
+            ] {
                 out.push(decision(&Decision {
                     time_ms: 1_760_000_000_000,
                     activity: activity.clone(),
@@ -136,7 +221,11 @@ fn every_kind_of_record() -> Vec<Value> {
                         gid: 1000,
                         exe,
                         ppid,
-                        enrichment: if exe.is_some() { "exec_record" } else { "unavailable" },
+                        enrichment: if exe.is_some() {
+                            "exec_record"
+                        } else {
+                            "unavailable"
+                        },
                     },
                     hostname: "node-a",
                     version: "0.1.0",
@@ -155,7 +244,10 @@ fn ocsf_records_validate() {
     let mut failures = Vec::new();
     for record in every_kind_of_record() {
         for e in validate(&record, &schema) {
-            failures.push(format!("class {} activity {}: {e}", record["class_uid"], record["activity_id"]));
+            failures.push(format!(
+                "class {} activity {}: {e}",
+                record["class_uid"], record["activity_id"]
+            ));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
@@ -170,7 +262,12 @@ fn validator_rejects_broken_records() {
     r["made_up"] = 1.into();
     r["device"].as_object_mut().unwrap().remove("type_id");
     let errors = validate(&r, &schema).join("\n");
-    for expected in ["missing required attribute severity_id", "disposition_id = 1234", "unknown attribute made_up", "/device: missing required type_id"] {
+    for expected in [
+        "missing required attribute severity_id",
+        "disposition_id = 1234",
+        "unknown attribute made_up",
+        "/device: missing required type_id",
+    ] {
         assert!(errors.contains(expected), "{expected} not in:\n{errors}");
     }
 }

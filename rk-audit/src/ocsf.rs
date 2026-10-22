@@ -62,7 +62,11 @@ pub enum Activity<'a> {
         sendmsg: bool,
     },
     /// A raw or packet `socket()`.
-    SocketCreate { family: u16, sock_type: u32, protocol: u32 },
+    SocketCreate {
+        family: u16,
+        sock_type: u32,
+        protocol: u32,
+    },
     /// An exec decision, or (`committed`) the record of an allowed exec.
     Exec {
         path: Option<&'a str>,
@@ -81,7 +85,11 @@ pub enum Activity<'a> {
         ino: u64,
     },
     /// A self-protection decision. `hook` is `enum rk_tamper_hook`.
-    Tamper { hook: u16, target_tgid: u32, detail: u64 },
+    Tamper {
+        hook: u16,
+        target_tgid: u32,
+        detail: u64,
+    },
 }
 
 /// The acting process. `exe` and `ppid` come from enrichment, which says how
@@ -175,7 +183,11 @@ fn classify(a: &Activity<'_>) -> Class {
 
 fn file_object(path: Option<&str>, executable: bool) -> Value {
     let path = path.unwrap_or("");
-    let name = path.rsplit('/').next().filter(|n| !n.is_empty()).unwrap_or(path);
+    let name = path
+        .rsplit('/')
+        .next()
+        .filter(|n| !n.is_empty())
+        .unwrap_or(path);
     let mut f = json!({
         "name": if name.is_empty() { "unknown" } else { name },
         "type_id": if executable { 8 } else { 1 },
@@ -227,7 +239,11 @@ fn file_access_names(access: u32) -> Vec<&'static str> {
         (128, "link"),
         (256, "setattr"),
     ];
-    NAMES.iter().filter(|(bit, _)| access & bit != 0).map(|(_, n)| *n).collect()
+    NAMES
+        .iter()
+        .filter(|(bit, _)| access & bit != 0)
+        .map(|(_, n)| *n)
+        .collect()
 }
 
 /// The OCSF record for one decision.
@@ -283,7 +299,12 @@ pub fn decision(d: &Decision<'_>) -> Value {
     });
 
     match &d.activity {
-        Activity::Connect { addr, port, protocol, .. } => {
+        Activity::Connect {
+            addr,
+            port,
+            protocol,
+            ..
+        } => {
             let ip = match addr {
                 IpAddr::V6(v6) => v6.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(*addr),
                 v4 => *v4,
@@ -297,10 +318,23 @@ pub fn decision(d: &Decision<'_>) -> Value {
                 "protocol_ver_id": if ip.is_ipv4() { 4 } else { 6 },
             });
         }
-        Activity::SocketCreate { family, sock_type, protocol } => {
-            rk.insert("socket".into(), json!({ "family": family, "type": sock_type, "protocol": protocol }));
+        Activity::SocketCreate {
+            family,
+            sock_type,
+            protocol,
+        } => {
+            rk.insert(
+                "socket".into(),
+                json!({ "family": family, "type": sock_type, "protocol": protocol }),
+            );
         }
-        Activity::Exec { path, argv, dev, ino, committed } => {
+        Activity::Exec {
+            path,
+            argv,
+            dev,
+            ino,
+            committed,
+        } => {
             // The exec'ing task keeps its pid across execve.
             let mut target = json!({ "pid": d.process.pid, "file": file_object(*path, true) });
             if let Some(name) = path.and_then(|p| p.rsplit('/').next()) {
@@ -314,13 +348,23 @@ pub fn decision(d: &Decision<'_>) -> Value {
             rk.insert("file_ino".into(), json!(ino));
             rk.insert("committed".into(), json!(committed));
         }
-        Activity::File { path, access, dev, ino, .. } => {
+        Activity::File {
+            path,
+            access,
+            dev,
+            ino,
+            ..
+        } => {
             r["file"] = file_object(*path, false);
             rk.insert("access".into(), json!(file_access_names(*access)));
             rk.insert("file_dev".into(), json!(dev));
             rk.insert("file_ino".into(), json!(ino));
         }
-        Activity::Tamper { hook, target_tgid, detail } => {
+        Activity::Tamper {
+            hook,
+            target_tgid,
+            detail,
+        } => {
             r["process"] = json!({ "pid": target_tgid });
             rk.insert("tamper_hook".into(), json!(hook));
             rk.insert("tamper_detail".into(), json!(detail));
@@ -396,17 +440,29 @@ mod tests {
             sendmsg: false,
         };
         let deny = decision(&sample(connect.clone(), Verdict::Deny));
-        assert_eq!((deny["action_id"].as_u64(), deny["disposition_id"].as_u64()), (Some(2), Some(2)));
+        assert_eq!(
+            (deny["action_id"].as_u64(), deny["disposition_id"].as_u64()),
+            (Some(2), Some(2))
+        );
         assert_eq!(deny["dst_endpoint"]["ip"], "10.0.0.5");
         assert_eq!(deny["policy"]["uid"], "7");
         assert_eq!(deny["type_uid"], 400101);
         let audit = decision(&sample(connect, Verdict::AuditWouldDeny));
-        assert_eq!((audit["action_id"].as_u64(), audit["disposition_id"].as_u64()), (Some(1), Some(15)));
+        assert_eq!(
+            (
+                audit["action_id"].as_u64(),
+                audit["disposition_id"].as_u64()
+            ),
+            (Some(1), Some(15))
+        );
         assert_eq!(rk_fields(&audit).unwrap()["verdict"], "audit_would_deny");
     }
 
     #[test]
     fn file_access_bits_are_named() {
-        assert_eq!(file_access_names(1 | 16 | 256), ["read", "delete", "setattr"]);
+        assert_eq!(
+            file_access_names(1 | 16 | 256),
+            ["read", "delete", "setattr"]
+        );
     }
 }

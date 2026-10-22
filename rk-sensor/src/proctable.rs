@@ -156,7 +156,11 @@ mod tests {
         let dir = root.join(pid.to_string());
         fs::create_dir_all(&dir).unwrap();
         std::os::unix::fs::symlink(exe, dir.join("exe")).unwrap();
-        fs::write(dir.join("stat"), format!("{pid} (my (odd) comm) S {ppid} 1 1 0 -1")).unwrap();
+        fs::write(
+            dir.join("stat"),
+            format!("{pid} (my (odd) comm) S {ppid} 1 1 0 -1"),
+        )
+        .unwrap();
         root
     }
 

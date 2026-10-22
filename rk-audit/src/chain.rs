@@ -246,7 +246,13 @@ impl Writer {
         if self.pending_records == 0 {
             return Ok(());
         }
-        let trailer = sign_batch(&self.key, self.head, &self.pending, self.pending_records, false);
+        let trailer = sign_batch(
+            &self.key,
+            self.head,
+            &self.pending,
+            self.pending_records,
+            false,
+        );
         let line = control_line(&Control::Batch(trailer.clone()))?;
         self.out.write_all(&line)?;
         self.out.flush()?;
@@ -359,7 +365,10 @@ fn recover(path: &Path, key: &AuditKey) -> Result<Option<Head>> {
         }
     }
     let Some(mut head) = head else {
-        bail!("{}: no segment header; refusing to guess the chain position", path.display());
+        bail!(
+            "{}: no segment header; refusing to guess the chain position",
+            path.display()
+        );
     };
     if unsealed_records > 0 {
         let trailer = sign_batch(key, head, &unsealed, unsealed_records, true);
@@ -419,7 +428,10 @@ pub fn verify_dir(dir: &Path, pinned: Option<[u8; 32]>) -> Result<Report> {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        loaded.push((name, fs::read(&path).with_context(|| format!("read {}", path.display()))?));
+        loaded.push((
+            name,
+            fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+        ));
     }
     Ok(verify_segments(&loaded, pinned))
 }
@@ -458,7 +470,12 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
                     torn.len()
                 ));
             } else {
-                problem(&mut r, lines.len() + 1, None, "torn line inside the chain".into());
+                problem(
+                    &mut r,
+                    lines.len() + 1,
+                    None,
+                    "torn line inside the chain".into(),
+                );
             }
         }
 
@@ -468,11 +485,23 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
             match classify(body) {
                 Line::Segment(h) => {
                     if i != 0 {
-                        problem(&mut r, lineno, Some(h.seq), "segment header inside a segment".into());
+                        problem(
+                            &mut r,
+                            lineno,
+                            Some(h.seq),
+                            "segment header inside a segment".into(),
+                        );
                         continue;
                     }
-                    let (Some(prev), Ok(pk)) = (hex32(&h.prev), key::parse_public_key(&h.public_key)) else {
-                        problem(&mut r, lineno, Some(h.seq), "malformed segment header".into());
+                    let (Some(prev), Ok(pk)) =
+                        (hex32(&h.prev), key::parse_public_key(&h.public_key))
+                    else {
+                        problem(
+                            &mut r,
+                            lineno,
+                            Some(h.seq),
+                            "malformed segment header".into(),
+                        );
                         continue;
                     };
                     if let Some(pin) = pinned {
@@ -485,7 +514,10 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
                             );
                         }
                     } else if last_key.is_some_and(|k| k != pk) {
-                        r.warnings.push(format!("{name}: signing key changed to {}", key::key_id(&pk)));
+                        r.warnings.push(format!(
+                            "{name}: signing key changed to {}",
+                            key::key_id(&pk)
+                        ));
                     }
                     let id = key::key_id(&pk);
                     if !r.key_ids.contains(&id) {
@@ -522,12 +554,20 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
                 }
                 Line::Batch(t) => {
                     let Some(hd) = head else {
-                        problem(&mut r, lineno, Some(t.seq), "batch before any segment header".into());
+                        problem(
+                            &mut r,
+                            lineno,
+                            Some(t.seq),
+                            "batch before any segment header".into(),
+                        );
                         continue;
                     };
                     let mut bad = Vec::new();
                     if t.seq != hd.next_seq {
-                        bad.push(format!("sequence {} where {} was expected", t.seq, hd.next_seq));
+                        bad.push(format!(
+                            "sequence {} where {} was expected",
+                            t.seq, hd.next_seq
+                        ));
                     }
                     if hex32(&t.prev) != Some(hd.hash) {
                         bad.push("does not chain to the previous batch".to_string());
@@ -557,7 +597,12 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
                             r.recovered_batches += 1;
                         }
                     } else {
-                        problem(&mut r, lineno, Some(t.seq), format!("batch {}: {}", t.seq, bad.join("; ")));
+                        problem(
+                            &mut r,
+                            lineno,
+                            Some(t.seq),
+                            format!("batch {}: {}", t.seq, bad.join("; ")),
+                        );
                     }
                     // Resynchronise on the stated position so one bad batch
                     // is reported once, not as a cascade.
@@ -638,7 +683,12 @@ mod tests {
         segments(dir)
             .unwrap()
             .iter()
-            .map(|p| (p.file_name().unwrap().to_string_lossy().into_owned(), fs::read(p).unwrap()))
+            .map(|p| {
+                (
+                    p.file_name().unwrap().to_string_lossy().into_owned(),
+                    fs::read(p).unwrap(),
+                )
+            })
             .collect()
     }
 
@@ -656,7 +706,10 @@ mod tests {
         drop(w);
         let r = verify_dir(&dir, Some(pk)).unwrap();
         assert!(r.ok(), "{:?}", r.problems);
-        assert_eq!((r.batches, r.records, r.first_seq, r.head_seq), (3, 7, Some(0), Some(3)));
+        assert_eq!(
+            (r.batches, r.records, r.first_seq, r.head_seq),
+            (3, 7, Some(0), Some(3))
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -690,7 +743,10 @@ mod tests {
         segs[0].1 = kept.into_bytes();
         let r = verify_segments(&segs, None);
         assert!(!r.ok());
-        assert!(r.problems.iter().any(|p| p.seq == Some(2) && p.what.contains("sequence 2 where 1")));
+        assert!(r
+            .problems
+            .iter()
+            .any(|p| p.seq == Some(2) && p.what.contains("sequence 2 where 1")));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -745,9 +801,15 @@ mod tests {
         let mut segs = load(&dir);
         let text = String::from_utf8(segs[0].1.clone()).unwrap();
         let sig_at = text.find("\"sig\":\"").unwrap() + 7;
-        let flipped = if &text[sig_at..sig_at + 1] == "0" { "1" } else { "0" };
+        let flipped = if &text[sig_at..sig_at + 1] == "0" {
+            "1"
+        } else {
+            "0"
+        };
         segs[0].1 = format!("{}{}{}", &text[..sig_at], flipped, &text[sig_at + 1..]).into_bytes();
-        assert!(verify_segments(&segs, None).problems[0].what.contains("signature"));
+        assert!(verify_segments(&segs, None).problems[0]
+            .what
+            .contains("signature"));
 
         let other = AuditKey::from_seed([1; 32]).public_key();
         assert!(!verify_dir(&dir, Some(other)).unwrap().ok());
@@ -785,7 +847,10 @@ mod tests {
         let segs = load(&dir);
         assert_eq!(segs.len(), 3);
         let r = verify_segments(&[segs[0].clone(), segs[2].clone()], None);
-        assert!(r.problems.iter().any(|p| p.what.contains("does not continue the chain")));
+        assert!(r
+            .problems
+            .iter()
+            .any(|p| p.what.contains("does not continue the chain")));
         // Retention removing the oldest is reported, not a failure.
         let r = verify_segments(&segs[1..], None);
         assert!(r.ok(), "{:?}", r.problems);
