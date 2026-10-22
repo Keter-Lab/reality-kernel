@@ -6,8 +6,8 @@ compile_error!(
     "release builds of rk-sensor must embed the BPF objects: build with `--features embedded-bpf`"
 );
 
-use std::os::unix::io::AsRawFd;
 use std::collections::BTreeMap;
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -16,9 +16,9 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use rk_agentd::protocol::{ApplyReportData, CapabilityStatus, DryRunData};
-use rk_ebpf_common::rk_counter;
 use rk_agentd::registry::AgentRegistry;
 use rk_agentd::server::{self, PolicyHandler, ServerConfig};
+use rk_ebpf_common::rk_counter;
 use rk_sensor::loader::{self, Object};
 use rk_sensor::policy::{self, PolicyEngine};
 use rk_sensor::resilience::{self, Heartbeat};

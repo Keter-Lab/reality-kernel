@@ -136,7 +136,10 @@ impl Consumer {
             unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) },
             "eventfd",
         )?;
-        let epoll = owned(unsafe { libc::epoll_create1(libc::EPOLL_CLOEXEC) }, "epoll_create1")?;
+        let epoll = owned(
+            unsafe { libc::epoll_create1(libc::EPOLL_CLOEXEC) },
+            "epoll_create1",
+        )?;
         epoll_add(&epoll, ring.as_raw_fd(), 0)?;
         epoll_add(&epoll, wake.as_raw_fd(), 1)?;
 
