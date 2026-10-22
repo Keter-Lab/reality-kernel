@@ -558,7 +558,7 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         .build()
         .context("failed to start the tokio runtime")?;
 
-    runtime.block_on(async {
+    let result = runtime.block_on(async {
         // Pinned maps first (docs/design/phase-6.md §3). An adopted pin set
         // has run on a stale heartbeat for as long as the sensor was down, so
         // beat before anything slow.
@@ -849,7 +849,13 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         consumer.stop();
         info!("rk-sensor stopped");
         Ok(())
-    })
+    });
+    // The agentd accept loop blocks in poll(2) on a blocking thread, which a
+    // plain runtime drop waits for forever: SIGTERM must end the process.
+    // Everything that needs a clean stop (consumer drain, final audit seal,
+    // heartbeat thread) has finished inside the block above.
+    runtime.shutdown_timeout(Duration::from_secs(2));
+    result
 }
 
 #[cfg(test)]
