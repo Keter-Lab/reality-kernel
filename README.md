@@ -11,7 +11,7 @@
 **Never trust an LLM to police itself. Intercept rogue syscalls at the Linux kernel boundary in < 1ms.**
 
 [![PyPI](https://img.shields.io/pypi/v/realitykernel?style=flat-square&color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/realitykernel/)
-[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.87%2B-orange?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![eBPF / LSM](https://img.shields.io/badge/linux-5.15%2B%20(eBPF%2FLSM)-green?style=flat-square&logo=linux&logoColor=white)](https://kernel.org)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/Keter-Lab/reality-kernel/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Keter-Lab/reality-kernel/actions)
@@ -169,7 +169,7 @@ reality-kernel/
 ```
 
 ### Prerequisites
-* Rust 1.85+ (stable), clang/LLVM, libbpf headers, libclang (for bindgen)
+* Rust 1.87+ (stable), clang/LLVM, libbpf headers, libclang (for bindgen)
 * Linux kernel 5.15+ with `CONFIG_BPF_LSM=y` and `CONFIG_DEBUG_INFO_BTF=y`
 * Kernel support matrix verified in CI: [docs/kernel-matrix.md](docs/kernel-matrix.md)
 

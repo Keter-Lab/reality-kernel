@@ -25,13 +25,12 @@ exclude = [
 edition = "2021"
 license = "MIT OR Apache-2.0"
 version = "0.1.0"
-rust-version = "1.85"
+rust-version = "1.87"
 
 [workspace.dependencies]
 anyhow = "1"
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"] }
-aya = "0.13"
-aya-log = "0.2"
+aya = "0.14"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4", features = ["derive", "env"] }
