@@ -3,9 +3,9 @@
 //! Validates daemon resilience, adoption of pinned links/maps across restarts,
 //! fail-closed heartbeat enforcement, and kernel self-protection guard hooks.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -100,6 +100,31 @@ fn log_tail() -> String {
     lines[lines.len().saturating_sub(20)..].join("\n")
 }
 
+fn is_socket_ready(socket_path: &str) -> bool {
+    unsafe {
+        let fd = libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0);
+        if fd < 0 {
+            return false;
+        }
+        let mut addr: libc::sockaddr_un = std::mem::zeroed();
+        addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
+        let bytes = socket_path.as_bytes();
+        if bytes.len() >= addr.sun_path.len() {
+            libc::close(fd);
+            return false;
+        }
+        std::ptr::copy_nonoverlapping(
+            bytes.as_ptr() as *const libc::c_char,
+            addr.sun_path.as_mut_ptr(),
+            bytes.len(),
+        );
+        let len = (std::mem::size_of::<libc::sa_family_t>() + bytes.len() + 1) as libc::socklen_t;
+        let res = libc::connect(fd, &addr as *const _ as *const libc::sockaddr, len);
+        libc::close(fd);
+        res == 0
+    }
+}
+
 struct ResilienceDaemon {
     child: Child,
 }
@@ -107,11 +132,7 @@ struct ResilienceDaemon {
 impl ResilienceDaemon {
     fn start(sensor: &Path, heartbeat_secs: u64) -> Result<Self> {
         let _ = fs::remove_file(SOCKET);
-        let log = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(DAEMON_LOG)
-            .context("open daemon log")?;
+        let log = File::create(DAEMON_LOG).context("create daemon log")?;
         let child = Command::new(sensor)
             .args([
                 "--policy",
@@ -132,7 +153,7 @@ impl ResilienceDaemon {
             }
             if Path::new(SOCKET).exists()
                 && Path::new(META_PIN).exists()
-                && std::os::unix::net::UnixStream::connect(SOCKET).is_ok()
+                && is_socket_ready(SOCKET)
             {
                 return Ok(daemon);
             }
