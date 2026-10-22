@@ -138,7 +138,7 @@ fn rate_run(
         "paced_workload",
         &[
             "udp",
-            "127.0.0.1:9",
+            "10.99.0.2:9",
             &count.to_string(),
             &pace_us.to_string(),
         ],
@@ -162,6 +162,11 @@ pub fn run(bpftool: Option<&Path>) -> Result<Value> {
         fs::create_dir_all(dir).with_context(|| format!("create {dir}"))?;
     }
     fs::write(format!("{FILE_DIR}/file"), b"rk").context("create bench file")?;
+    // The VM's loopback may not be up or carry 127.0.0.1 here; use our own
+    // address, as the other suites do (errors mean it already exists).
+    for args in [&["link", "set", "lo", "up"][..], &["addr", "add", "10.99.0.2/24", "dev", "lo"][..]] {
+        let _ = Command::new("ip").args(args).stderr(Stdio::null()).status();
+    }
 
     // Load as the daemon does (pins aside): ring sized from the CPU count and
     // the adaptive wakeup threshold set, so the pipeline numbers are real.

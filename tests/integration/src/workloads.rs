@@ -1560,14 +1560,15 @@ fn handle_bench(args: &[String]) -> i32 {
     }
     pin_to_cpu0();
     let path = c"/run/rk-bench/file";
-    let udp = match UdpSocket::bind("127.0.0.1:0") {
+    let udp = match UdpSocket::bind("0.0.0.0:0") {
         Ok(s) => s,
         Err(e) => {
             eprintln!("[child] bind: {e}");
             return 291;
         }
     };
-    let target: SocketAddr = "127.0.0.1:9".parse().expect("static address");
+    // Added to lo by the bench setup; allowed by the bench profile.
+    let target: SocketAddr = "10.99.0.2:9".parse().expect("static address");
     let one = || -> Result<(), String> {
         match op.as_str() {
             "open" => {
