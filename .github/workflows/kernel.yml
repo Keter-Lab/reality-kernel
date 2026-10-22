@@ -7,6 +7,19 @@ name: Kernel
 on:
   push:
     branches: [main, "phase-*"]
+    # Changes that cannot affect what runs in the VMs or kind skip the matrix
+    # on push (docs/design/phase-8.md §3.7). Pull requests always run it, so
+    # nothing reaches main without the full matrix. Files this workflow reads
+    # (bench gate and budget, traceability script and index, conformance
+    # cases) are deliberately not listed.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "assets/**"
+      - "tests/test_*.py"
+      - "tests/coverage_summary.py"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/autofix.yml"
   pull_request:
     branches: [main]
 

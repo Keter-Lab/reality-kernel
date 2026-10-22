@@ -31,6 +31,17 @@ deleted, skipped or failing test.
 | Performance | Hook cost and event loss against a budget | Phase 7 bench and `tests/bench/gate.py` |
 | Coverage | Untested userspace code (report-only for now) | `cargo llvm-cov`, job summary |
 
+## What runs when
+
+| Event | ci.yml (lint, tests, coverage) | kernel.yml (VMs, kind, fuzz, traceability) |
+|---|---|---|
+| Push to `phase-*` | always; rustfmt reports but does not fail (autofix commits the formatting) | skipped when only docs, Markdown, assets, Python unit tests or other workflows changed |
+| Pull request to `main` | always, rustfmt strict | always, full matrix |
+| Push to `main` | always, rustfmt strict | same path filter as phase pushes |
+
+Autofix commits (rustfmt, gofmt, lock files) do not trigger CI. The pull
+request's own run covers the merged result.
+
 ## The kernel matrix
 
 The VM suites run on Linux 5.15, 6.1, 6.6, 6.12 and 6.18: the oldest

@@ -107,6 +107,23 @@ summary. It reports only, no threshold yet (decision 3).
 - `docs/testing.md`: the strategy behind it (the levels, the matrix, the
   invariants, what can't be tested and why).
 
+### 3.7 CI economy (added during review)
+
+The kernel workflow is the expensive part of every run (about 30 minutes,
+five VMs and a kind cluster), and before this phase every push ran it in
+full. Two changes, requested by the reviewer:
+
+- **Path filters on push.** `kernel.yml` skips on pushes that only touch
+  documentation, Markdown, assets, the Python unit tests, the coverage
+  script or the other workflows. Files the kernel workflow itself reads
+  (`tests/bench/`, `tests/traceability.*`, `tests/conformance/*.toml`) are
+  not filtered. Pull requests are never filtered, so nothing reaches `main`
+  without the full matrix.
+- **rustfmt does not fail phase-branch pushes.** The autofix workflow
+  commits formatting on `phase-*` pushes anyway, and a failed rustfmt step
+  used to skip clippy, cargo-deny and cargo-audit. The step now continues on
+  error for those pushes only; pull requests and `main` stay strict.
+
 ## 4. Tests
 
 | Criterion | Evidence |

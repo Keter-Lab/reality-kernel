@@ -37,7 +37,11 @@ jobs:
         with:
           tool: cargo-deny,cargo-audit
 
+      # On phase-* pushes autofix commits the formatting, so a rustfmt miss
+      # must not hide the clippy, deny and audit results (docs/design/phase-8.md
+      # §3.7). Pull requests and main stay strict.
       - name: rustfmt
+        continue-on-error: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/phase-') }}
         run: .github/scripts/run-logged.sh rustfmt cargo fmt --all -- --check
 
       - name: clippy (warnings are errors)
