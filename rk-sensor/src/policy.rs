@@ -555,6 +555,27 @@ struct EngineState {
     previous_text: Option<String>,
 }
 
+/// Snapshot of the active policy for naming decisions in the audit log.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct AuditContext {
+    pub generation: u64,
+    /// rule id -> (profile name, where the rule is in the policy text)
+    pub rules: BTreeMap<u32, (String, String)>,
+    /// cgroup id -> bound profile name
+    pub cgroups: BTreeMap<u64, String>,
+}
+
+impl AuditContext {
+    /// Profile and rule origin for a decision. The rule names its profile;
+    /// a default decision (rule 0) is named by the cgroup's binding.
+    pub fn describe(&self, rule_id: u32, cgroup_id: u64) -> (Option<&str>, Option<&str>) {
+        match self.rules.get(&rule_id) {
+            Some((profile, origin)) => (Some(profile.as_str()), Some(origin.as_str())),
+            None => (self.cgroups.get(&cgroup_id).map(String::as_str), None),
+        }
+    }
+}
+
 /// Reads a state file, accepting it only when it belongs to the pin set with
 /// `epoch` (hex). A missing, unreadable or foreign file yields `None`: the
 /// engine then rebuilds what it can from the maps alone.
@@ -753,6 +774,31 @@ impl PolicyEngine {
 
     pub fn policy(&self) -> Option<&Policy> {
         self.policy.as_ref()
+    }
+
+    /// What the audit log needs to name a decision's rule and profile
+    /// (docs/design/phase-9.md §3.2): rule origins and cgroup bindings.
+    pub fn audit_context(&self) -> AuditContext {
+        let mut ctx = AuditContext {
+            generation: self.generation,
+            ..AuditContext::default()
+        };
+        let Some(policy) = &self.policy else {
+            return ctx;
+        };
+        for o in &policy.origins {
+            ctx.rules
+                .insert(o.id, (o.profile.clone(), o.origin.clone()));
+        }
+        for (&cgroup, (_, profile)) in &self.bindings {
+            if let Some(p) = policy.profile(*profile) {
+                ctx.cgroups.insert(cgroup, p.name.clone());
+            }
+        }
+        for (&cgroup, (_, profile)) in &self.dynamic {
+            ctx.cgroups.insert(cgroup, profile.clone());
+        }
+        ctx
     }
 
     /// cgroup id of a bound cgroup path, if bound.

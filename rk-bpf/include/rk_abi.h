@@ -21,11 +21,31 @@
 #define RK_ABI_VERSION 1
 #define RK_SCRATCH_PAYLOAD_MAX 2048
 
-/* Indexes into the per-CPU rk_counters map. Summed in userspace. */
+/* Hook classes for the decision counters (docs/design/phase-9.md §3.4). */
+enum rk_hook {
+    RK_HOOK_CONNECT4    = 0,
+    RK_HOOK_CONNECT6    = 1,
+    RK_HOOK_SENDMSG4    = 2,
+    RK_HOOK_SENDMSG6    = 3,
+    RK_HOOK_SOCK_CREATE = 4,
+    RK_HOOK_EXEC        = 5,
+    RK_HOOK_FILE        = 6,
+    RK_HOOK_GUARD       = 7,
+    RK_HOOK_MAX         = 8,
+};
+
+/*
+ * Indexes into the per-CPU rk_counters map. Summed in userspace.
+ * Every governed decision is counted at
+ * RK_CNT_DECISION_BASE + hook * RK_VERDICTS + verdict (enum rk_verdict),
+ * whether or not its event reaches the ring buffer.
+ */
+#define RK_VERDICTS 3
 enum rk_counter {
-    RK_CNT_RINGBUF_DROP = 0, /* bpf_ringbuf_output failed; event lost, verdict unaffected */
-    RK_CNT_SCRATCH_MISS = 1, /* per-CPU scratch lookup failed */
-    RK_CNT_MAX          = 2,
+    RK_CNT_RINGBUF_DROP  = 0, /* bpf_ringbuf_output failed; event lost, verdict unaffected */
+    RK_CNT_SCRATCH_MISS  = 1, /* per-CPU scratch lookup failed */
+    RK_CNT_DECISION_BASE = 2,
+    RK_CNT_MAX           = 26, /* RK_CNT_DECISION_BASE + RK_HOOK_MAX * RK_VERDICTS */
 };
 
 enum rk_event_type {

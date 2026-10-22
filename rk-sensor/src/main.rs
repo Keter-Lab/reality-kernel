@@ -11,6 +11,9 @@ use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,16 +23,24 @@ use rk_agentd::registry::AgentRegistry;
 use rk_agentd::server::{self, PolicyHandler, ServerConfig};
 use rk_ebpf_common::rk_counter;
 use rk_sensor::loader::{self, Object};
+use rk_sensor::metrics::{self, Metrics, Snapshot, SnapshotFn};
+use rk_sensor::observe::{KernelLosses, Observer, SharedContext};
 use rk_sensor::policy::{self, PolicyEngine};
 use rk_sensor::resilience::{self, Heartbeat};
-use rk_sensor::{consumer, pins, selftest};
+use rk_sensor::{consumer, otlp, pins, selftest};
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 const USAGE: &str = "usage: rk-sensor [--policy FILE] [--watch-policy] \
                      [--k8s-cgroup-root auto|DIR] [--heartbeat-timeout SECS] \
-                     [--state-file FILE] [--ring-size-mb N] | --uninstall | --selftest | --version | --help";
+                     [--state-file FILE] [--ring-size-mb N] \
+                     [--audit-dir DIR|off] [--audit-key FILE] [--audit-allow] \
+                     [--metrics-addr ADDR|off] [--otlp-endpoint http://HOST:PORT] \
+                     | --uninstall | --selftest | --version | --help";
+
+/// Where the metrics endpoint listens by default (docs/design/phase-9.md §3.5).
+const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9464";
 
 /// Policy file read at start and on SIGHUP when `--policy` is not given.
 const DEFAULT_POLICY: &str = "/etc/rk/policy.toml";
@@ -69,6 +80,15 @@ struct RunOpts {
     state_file: Option<String>,
     /// Ring buffer size in MiB; default scales with CPUs (Phase 7 §4).
     ring_mb: Option<u32>,
+    /// Audit log directory, or `off` (Phase 9 §3.3).
+    audit_dir: Option<String>,
+    audit_key: Option<String>,
+    /// Also record allowed decisions in the audit log.
+    audit_allow: bool,
+    /// Metrics listen address, or `off` (Phase 9 §3.5).
+    metrics_addr: Option<String>,
+    /// OTLP/HTTP collector, e.g. `http://127.0.0.1:4318` (Phase 9 §3.6).
+    otlp_endpoint: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -121,6 +141,23 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
                         .and_then(|s| s.parse().ok())
                         .ok_or_else(unrecognised)?,
                 )
+            }
+            "--audit-dir" => opts.audit_dir = Some(it.next().ok_or_else(unrecognised)?.clone()),
+            "--audit-key" => opts.audit_key = Some(it.next().ok_or_else(unrecognised)?.clone()),
+            "--audit-allow" => opts.audit_allow = true,
+            "--metrics-addr" => {
+                let addr = it.next().ok_or_else(unrecognised)?;
+                if addr != "off" && addr.parse::<std::net::SocketAddr>().is_err() {
+                    return Err(format!(
+                        "--metrics-addr `{addr}` is not HOST:PORT or off\n{USAGE}"
+                    ));
+                }
+                opts.metrics_addr = Some(addr.clone());
+            }
+            "--otlp-endpoint" => {
+                let endpoint = it.next().ok_or_else(unrecognised)?;
+                otlp::validate_endpoint(endpoint).map_err(|e| format!("{e}\n{USAGE}"))?;
+                opts.otlp_endpoint = Some(endpoint.clone());
             }
             _ => return Err(unrecognised()),
         }
@@ -200,11 +237,43 @@ struct SensorPolicyHandler {
     lsm_active: bool,
     k8s_root: Option<String>,
     pipeline: Arc<consumer::PipelineStats>,
+    /// Rule and binding names for the audit log, republished on every change.
+    audit_ctx: SharedContext,
+    metrics: Arc<Metrics>,
+    audit_dir: Option<String>,
+    metrics_addr: Option<String>,
+}
+
+impl SensorPolicyHandler {
+    fn publish(&self) {
+        *self.audit_ctx.write().unwrap() = Arc::new(self.engine.audit_context());
+    }
+
+    /// Kernel decision counters by hook and verdict (Phase 9 §3.4).
+    fn decision_counters(&self, out: &mut BTreeMap<String, u64>) {
+        let Some(map) = self.ebpf.map("rk_counters") else {
+            return;
+        };
+        let Ok(per_cpu) = aya::maps::PerCpuArray::<_, u64>::try_from(map) else {
+            return;
+        };
+        for (h, hook) in metrics::HOOKS.iter().enumerate() {
+            for (v, verdict) in metrics::VERDICTS.iter().enumerate() {
+                let index = rk_counter::RK_CNT_DECISION_BASE
+                    + h as u32 * rk_ebpf_common::RK_VERDICTS
+                    + v as u32;
+                if let Ok(values) = per_cpu.get(&index, 0) {
+                    out.insert(metrics::decision_key(hook, verdict), values.iter().sum());
+                }
+            }
+        }
+    }
 }
 
 impl PolicyHandler for SensorPolicyHandler {
     fn apply(&mut self, text: &str) -> Result<ApplyReportData> {
         let rep = self.engine.apply_text(&mut self.ebpf, text)?;
+        self.publish();
         Ok(to_report_data(&rep))
     }
 
@@ -229,15 +298,20 @@ impl PolicyHandler for SensorPolicyHandler {
 
     fn rollback(&mut self) -> Result<ApplyReportData> {
         let rep = self.engine.rollback(&mut self.ebpf)?;
+        self.publish();
         Ok(to_report_data(&rep))
     }
 
     fn bind_dynamic(&mut self, cgroup: &str, profile: &str) -> Result<u64> {
-        self.engine.bind_dynamic(&mut self.ebpf, cgroup, profile)
+        let id = self.engine.bind_dynamic(&mut self.ebpf, cgroup, profile)?;
+        self.publish();
+        Ok(id)
     }
 
     fn unbind_dynamic(&mut self, cgroup_id: u64) -> Result<()> {
-        self.engine.unbind_dynamic(&mut self.ebpf, cgroup_id)
+        self.engine.unbind_dynamic(&mut self.ebpf, cgroup_id)?;
+        self.publish();
+        Ok(())
     }
 
     fn get_profile(&self, name: &str) -> Result<rk_policy::net::Profile> {
@@ -290,6 +364,29 @@ impl PolicyHandler for SensorPolicyHandler {
                     None => "not enabled (--k8s-cgroup-root)".into(),
                 },
             },
+            CapabilityStatus {
+                name: "audit_log".into(),
+                ok: self.metrics.audit_info().is_some(),
+                detail: match (&self.audit_dir, self.metrics.audit_info()) {
+                    (Some(dir), Some(info)) => format!(
+                        "{dir}: key {}, next batch {}",
+                        info.key_id,
+                        self.metrics
+                            .audit_head_seq
+                            .load(std::sync::atomic::Ordering::Relaxed)
+                    ),
+                    (Some(dir), None) => format!("{dir}: not writable (see the sensor log)"),
+                    (None, _) => "disabled (--audit-dir off)".into(),
+                },
+            },
+            CapabilityStatus {
+                name: "metrics".into(),
+                ok: self.metrics_addr.is_some(),
+                detail: match &self.metrics_addr {
+                    Some(addr) => format!("http://{addr}/metrics"),
+                    None => "disabled (--metrics-addr off)".into(),
+                },
+            },
         ]
     }
 
@@ -306,7 +403,11 @@ impl PolicyHandler for SensorPolicyHandler {
     }
 
     fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64> {
-        self.engine.bind_container(&mut self.ebpf, cgroup, profile)
+        let id = self
+            .engine
+            .bind_container(&mut self.ebpf, cgroup, profile)?;
+        self.publish();
+        Ok(id)
     }
 
     fn counters(&self) -> BTreeMap<String, u64> {
@@ -323,11 +424,38 @@ impl PolicyHandler for SensorPolicyHandler {
                 }
             }
         }
+        self.decision_counters(&mut out);
         out.insert("records_drained".into(), self.pipeline.drained());
         out.insert("userspace_drops".into(), self.pipeline.userspace_drops());
         out.insert("decoded".into(), self.pipeline.decode.decoded());
         out.insert("decode_rejected".into(), self.pipeline.decode.rejected());
         out
+    }
+}
+
+/// Events the kernel could not emit: ring buffer drops plus scratch misses.
+fn kernel_lost(ebpf: &aya::Ebpf) -> u64 {
+    let Some(map) = ebpf.map("rk_counters") else {
+        return 0;
+    };
+    let Ok(per_cpu) = aya::maps::PerCpuArray::<_, u64>::try_from(map) else {
+        return 0;
+    };
+    [
+        rk_counter::RK_CNT_RINGBUF_DROP,
+        rk_counter::RK_CNT_SCRATCH_MISS,
+    ]
+    .iter()
+    .filter_map(|i| per_cpu.get(i, 0).ok())
+    .map(|values| values.iter().sum::<u64>())
+    .sum()
+}
+
+/// `--audit-dir`/`--metrics-addr` style option: `off`, a value, or the default.
+fn on_or_off(value: Option<&str>, default: &str) -> Option<String> {
+    match value {
+        Some("off") => None,
+        other => Some(other.unwrap_or(default).to_string()),
     }
 }
 
@@ -430,7 +558,7 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         .build()
         .context("failed to start the tokio runtime")?;
 
-    runtime.block_on(async {
+    let result = runtime.block_on(async {
         // Pinned maps first (docs/design/phase-6.md §3). An adopted pin set
         // has run on a stale heartbeat for as long as the sensor was down, so
         // beat before anything slow.
@@ -449,7 +577,7 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             ),
         )?;
         let timeout = Duration::from_secs(opts.heartbeat_secs.unwrap_or(DEFAULT_HEARTBEAT_SECS));
-        let _heartbeat = Heartbeat::start(&mut ebpf, timeout)?;
+        let heartbeat = Heartbeat::start(&mut ebpf, timeout)?;
         resilience::protect_self(&mut ebpf)?;
         info!(
             ?adoption,
@@ -512,8 +640,61 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         }
         let ring = consumer::take_ring(&mut ebpf)?;
         let registry = AgentRegistry::new();
-        let consumer =
-            consumer::Consumer::start(ring, Some(registry.clone()), consumer::Config::default())?;
+
+        // Phase 9: audit log, metrics and OTLP behind the worker. Telemetry
+        // never gates enforcement: a log that cannot be opened is reported
+        // (rk status, metrics) and the sensor carries on.
+        let metrics = Arc::new(Metrics::default());
+        let audit_ctx: SharedContext =
+            Arc::new(std::sync::RwLock::new(Arc::new(engine.audit_context())));
+        let audit_dir = on_or_off(opts.audit_dir.as_deref(), rk_audit::DEFAULT_DIR);
+        let writer = audit_dir.as_deref().and_then(|dir| {
+            let key_path = opts.audit_key.as_deref().unwrap_or(rk_audit::DEFAULT_KEY);
+            let opened = rk_audit::key::AuditKey::load_or_create(Path::new(key_path)).and_then(
+                |key| rk_audit::chain::Writer::open(Path::new(dir), key, Default::default()),
+            );
+            match opened {
+                Ok(w) => {
+                    info!(dir, key_id = %w.key_id(), next_batch = w.head().next_seq, "audit log open");
+                    Some(w)
+                }
+                Err(e) => {
+                    error!(dir, error = %format!("{e:#}"), "audit log disabled: cannot open it");
+                    None
+                }
+            }
+        });
+        let metrics_addr = on_or_off(opts.metrics_addr.as_deref(), DEFAULT_METRICS_ADDR);
+        let exporter = opts.otlp_endpoint.as_deref().map(|endpoint| {
+            otlp::start(
+                endpoint,
+                rk_sensor::observe::hostname(),
+                env!("CARGO_PKG_VERSION").to_string(),
+                metrics.clone(),
+            )
+        });
+        // Losses before this start (pins adopted from an earlier sensor) are
+        // the baseline: only new losses become loss records.
+        let kernel_losses = Arc::new(KernelLosses(std::sync::atomic::AtomicU64::new(
+            kernel_lost(&ebpf),
+        )));
+        let pipeline_stats = Arc::new(consumer::PipelineStats::default());
+        let observer = Observer::new(
+            Some(registry.clone()),
+            audit_ctx.clone(),
+            writer,
+            opts.audit_allow,
+            metrics.clone(),
+            kernel_losses.clone(),
+            pipeline_stats.clone(),
+            exporter,
+        );
+        let consumer = consumer::Consumer::start_with(
+            ring,
+            Box::new(observer),
+            pipeline_stats,
+            consumer::Config::default(),
+        )?;
 
         let mut handler_inner = SensorPolicyHandler {
             ebpf,
@@ -521,6 +702,10 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             lsm_active,
             k8s_root: k8s_root.clone(),
             pipeline: consumer.stats(),
+            audit_ctx,
+            metrics: metrics.clone(),
+            audit_dir,
+            metrics_addr: metrics_addr.clone(),
         };
         // Last policy text seen on disk, applied or not, so the watcher acts
         // (and logs a rejection) once per change.
@@ -561,10 +746,50 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             }
         });
 
+        if let Some(addr) = &metrics_addr {
+            let addr: std::net::SocketAddr = addr
+                .parse()
+                .with_context(|| format!("--metrics-addr `{addr}`"))?;
+            let snapshot_handler = handler.clone();
+            let stats = consumer.stats();
+            let last_beat = heartbeat.last_beat();
+            let snapshot: SnapshotFn =
+                Arc::new(move || -> Pin<Box<dyn Future<Output = Snapshot> + Send>> {
+                    let handler = snapshot_handler.clone();
+                    let stats = stats.clone();
+                    let last_beat = last_beat.clone();
+                    Box::pin(async move {
+                        let h = handler.lock().await;
+                        Snapshot {
+                            counters: h.counters(),
+                            decoder_errors: stats.decode.rejected_by_kind().collect(),
+                            policy_generation: h.generation(),
+                            heartbeat_age_seconds: Some(
+                                resilience::heartbeat_age(&last_beat).as_secs_f64(),
+                            ),
+                            capabilities: h
+                                .capabilities()
+                                .into_iter()
+                                .map(|c| (c.name, c.ok))
+                                .collect(),
+                        }
+                    })
+                });
+            let served = metrics.clone();
+            tokio::spawn(async move {
+                if let Err(e) = metrics::serve(addr, served, snapshot).await {
+                    error!(error = %format!("{e:#}"), "metrics endpoint stopped");
+                }
+            });
+            info!(%addr, "metrics endpoint listening");
+        }
+
         let mut hangup = signal(SignalKind::hangup()).context("install SIGHUP handler")?;
         let mut terminate = signal(SignalKind::terminate()).context("install SIGTERM handler")?;
         let mut watch = tokio::time::interval(WATCH_INTERVAL);
         let mut stats_tick = tokio::time::interval(STATS_INTERVAL);
+        // Kernel losses feed the audit log's loss records (Phase 9 §3.4).
+        let mut loss_tick = tokio::time::interval(Duration::from_secs(1));
         loop {
             tokio::select! {
                 _ = hangup.recv() => {
@@ -608,6 +833,14 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
                     let counters = handler.lock().await.counters();
                     info!(?counters, "pipeline stats");
                 }
+                _ = loss_tick.tick() => {
+                    let counters = handler.lock().await.counters();
+                    let lost = ["ringbuf_drops", "scratch_misses"]
+                        .iter()
+                        .map(|k| counters.get(*k).copied().unwrap_or(0))
+                        .sum::<u64>();
+                    kernel_losses.0.store(lost, Ordering::Relaxed);
+                }
                 _ = terminate.recv() => break,
                 _ = tokio::signal::ctrl_c() => break,
             }
@@ -616,7 +849,13 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         consumer.stop();
         info!("rk-sensor stopped");
         Ok(())
-    })
+    });
+    // The agentd accept loop blocks in poll(2) on a blocking thread, which a
+    // plain runtime drop waits for forever: SIGTERM must end the process.
+    // Everything that needs a clean stop (consumer drain, final audit seal,
+    // heartbeat thread) has finished inside the block above.
+    runtime.shutdown_timeout(Duration::from_secs(2));
+    result
 }
 
 #[cfg(test)]
@@ -685,6 +924,37 @@ mod tests {
             parse_args(&args(&[selftest::CHILD_FLAG, "a", "b"])),
             Ok(Mode::SelftestChild(args(&["a", "b"])))
         );
+    }
+
+    #[test]
+    fn parses_observability_flags() {
+        assert_eq!(
+            parse_args(&args(&[
+                "--audit-dir",
+                "/a",
+                "--audit-key",
+                "/k",
+                "--audit-allow",
+                "--metrics-addr",
+                "0.0.0.0:9464",
+                "--otlp-endpoint",
+                "http://127.0.0.1:4318",
+            ])),
+            Ok(Mode::Run(RunOpts {
+                audit_dir: Some("/a".into()),
+                audit_key: Some("/k".into()),
+                audit_allow: true,
+                metrics_addr: Some("0.0.0.0:9464".into()),
+                otlp_endpoint: Some("http://127.0.0.1:4318".into()),
+                ..RunOpts::default()
+            }))
+        );
+        assert!(parse_args(&args(&["--metrics-addr", "off"])).is_ok());
+        assert!(parse_args(&args(&["--metrics-addr", "nonsense"])).is_err());
+        assert!(parse_args(&args(&["--otlp-endpoint", "https://collector:4318"])).is_err());
+        assert_eq!(on_or_off(Some("off"), "d"), None);
+        assert_eq!(on_or_off(None, "d").as_deref(), Some("d"));
+        assert_eq!(on_or_off(Some("/x"), "d").as_deref(), Some("/x"));
     }
 
     #[test]

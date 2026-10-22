@@ -8,7 +8,7 @@
 
 use std::os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd, RawFd};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::sync_channel;
+use std::sync::mpsc::{sync_channel, RecvTimeoutError};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -74,6 +74,25 @@ impl PipelineStats {
     }
 }
 
+/// What the worker does with each record (Phase 9: the audit observer).
+pub trait RecordHandler: Send + 'static {
+    fn record(&mut self, bytes: &[u8], stats: &DecodeStats);
+    /// Called after every batch and at least every `Config::poll_timeout`
+    /// while idle, so time-based work (sealing audit batches) happens.
+    fn tick(&mut self) {}
+}
+
+/// The pre-Phase 9 handler: decode and log.
+struct LogHandler {
+    registry: Option<Arc<AgentRegistry>>,
+}
+
+impl RecordHandler for LogHandler {
+    fn record(&mut self, bytes: &[u8], stats: &DecodeStats) {
+        pipeline::process_record_with_registry(bytes, stats, self.registry.as_ref());
+    }
+}
+
 /// Pipeline tuning.
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
@@ -123,13 +142,28 @@ fn epoll_add(epoll: &OwnedFd, fd: RawFd, token: u64) -> Result<()> {
 }
 
 impl Consumer {
-    /// Starts the drain thread and the worker on `ring`.
+    /// Starts the drain thread and a worker that decodes and logs.
     pub fn start(
-        mut ring: RingBuf<MapData>,
+        ring: RingBuf<MapData>,
         registry: Option<Arc<AgentRegistry>>,
         config: Config,
     ) -> Result<Self> {
-        let stats = Arc::new(PipelineStats::default());
+        Self::start_with(
+            ring,
+            Box::new(LogHandler { registry }),
+            Arc::new(PipelineStats::default()),
+            config,
+        )
+    }
+
+    /// Starts the drain thread and a worker that hands records to `handler`.
+    /// `stats` is shared so the handler can see the pipeline's own losses.
+    pub fn start_with(
+        mut ring: RingBuf<MapData>,
+        mut handler: Box<dyn RecordHandler>,
+        stats: Arc<PipelineStats>,
+        config: Config,
+    ) -> Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         // SAFETY: plain syscalls; results are checked by `owned`.
         let wake = owned(
@@ -193,16 +227,21 @@ impl Consumer {
             .context("spawn drain thread")?;
 
         let worker_stats = stats.clone();
+        let tick_every = config.poll_timeout;
         let worker = thread::Builder::new()
             .name("rk-worker".into())
-            .spawn(move || {
-                for batch in rx {
-                    for record in &batch {
-                        pipeline::process_record_with_registry(
-                            record,
-                            &worker_stats.decode,
-                            registry.as_ref(),
-                        );
+            .spawn(move || loop {
+                match rx.recv_timeout(tick_every) {
+                    Ok(batch) => {
+                        for record in &batch {
+                            handler.record(record, &worker_stats.decode);
+                        }
+                        handler.tick();
+                    }
+                    Err(RecvTimeoutError::Timeout) => handler.tick(),
+                    Err(RecvTimeoutError::Disconnected) => {
+                        handler.tick();
+                        break;
                     }
                 }
             })

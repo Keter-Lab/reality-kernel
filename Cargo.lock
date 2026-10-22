@@ -1509,6 +1509,7 @@ dependencies = [
  "rk-policy",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tracing",
  "uuid",
@@ -1544,12 +1545,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rk-audit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ed25519-dalek",
+ "hex",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "rk-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "rk-agentd",
+ "rk-audit",
  "serde",
  "serde_json",
 ]
@@ -1587,6 +1602,7 @@ dependencies = [
  "bytemuck",
  "io-uring",
  "libc",
+ "rk-audit",
  "rk-ebpf-common",
  "rk-policy",
  "rk-sensor",
@@ -1621,12 +1637,16 @@ name = "rk-sensor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "aya",
  "bytemuck",
  "hex",
  "libc",
+ "lru",
  "proptest",
+ "reqwest",
  "rk-agentd",
+ "rk-audit",
  "rk-ebpf-common",
  "rk-policy",
  "serde",

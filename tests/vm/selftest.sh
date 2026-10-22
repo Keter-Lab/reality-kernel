@@ -99,6 +99,17 @@ if [ -x "$integration" ]; then
     echo "resilience suite exit code: $resilience_rc"
     [ "$resilience_rc" -eq 0 ] || rc=1
 
+    # Phase 9: observability suite (audit log, metrics, verify, loss).
+    if [ -x "$rk_cli" ]; then
+        "$integration" --observability-suite "$sensor" "$rk_cli" 2>&1
+        obs_rc=$?
+        echo "observability suite exit code: $obs_rc"
+        [ "$obs_rc" -eq 0 ] || rc=1
+    else
+        echo "FAIL observability suite needs executable rk: $rk_cli"
+        rc=1
+    fi
+
     # Phase 7: benchmarks, last, once nothing else is attached. The report
     # is checked against tests/bench/budget.json by the bench-report job.
     "$integration" --bench "$bpftool" 2>&1

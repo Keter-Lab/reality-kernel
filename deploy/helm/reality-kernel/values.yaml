@@ -51,6 +51,24 @@ nri:
 
 logLevel: info
 
+# Phase 9 (docs/audit.md). The audit log is hash-chained and signed with a
+# per-node key generated on first start; both stay on the host.
+audit:
+  hostPath: /var/log/reality-kernel
+  keyHostPath: /var/lib/reality-kernel
+  # Also record allowed decisions (network allows, committed execs).
+  includeAllow: false
+
+# Prometheus endpoint on the pod IP, with scrape annotations.
+metrics:
+  enabled: true
+  port: 9464
+
+# OTLP/HTTP collector on the node, e.g. http://$(HOST_IP):4318. Plain HTTP:
+# the collector handles TLS to its backend. Empty disables export.
+otlp:
+  endpoint: ""
+
 nodeSelector:
   kubernetes.io/os: linux
 tolerations:

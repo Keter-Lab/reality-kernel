@@ -480,7 +480,7 @@ struct RunContext {
 }
 
 async fn handle_run(
-    ctx: RunContext,
+    mut ctx: RunContext,
     handler: Arc<Mutex<dyn PolicyHandler>>,
     registry: Arc<AgentRegistry>,
     config: Arc<ServerConfig>,
@@ -573,6 +573,16 @@ async fn handle_run(
     } else {
         (ctx.cred.uid, ctx.cred.gid)
     };
+
+    // The session's trace context (docs/design/phase-9.md §3.6), so an
+    // instrumented agent's spans join the trace of its kernel decisions.
+    // A TRACEPARENT the caller set is kept.
+    if let Some(session) = &ctx.session {
+        if !ctx.env.iter().any(|(k, _)| k == "TRACEPARENT") {
+            ctx.env
+                .push(("TRACEPARENT".into(), crate::trace::traceparent(session)));
+        }
+    }
 
     // 6. Spawn unprivileged process directly into cgroup
     let spawn_res = spawn_in_cgroup(crate::launcher::SpawnContext {

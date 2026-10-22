@@ -247,11 +247,13 @@ jobs:
             | sed '1d;$d' > "resilience-${{ matrix.kernel }}.json"
           sed -n '/===RK_CONFORMANCE_BEGIN===/,/===RK_CONFORMANCE_END===/p' vm.log \
             | sed '1d;$d' > "conformance-${{ matrix.kernel }}.json"
+          sed -n '/===RK_OBSERVABILITY_BEGIN===/,/===RK_OBSERVABILITY_END===/p' vm.log \
+            | sed '1d;$d' > "observability-${{ matrix.kernel }}.json"
           sed -n '/===RK_BENCH_BEGIN===/,/===RK_BENCH_END===/p' vm.log \
             | sed '1d;$d' > "bench-${{ matrix.kernel }}.json"
           if [ "$rc" -ne 0 ]; then
             .github/scripts/annotate.sh vm.log "Linux ${{ matrix.kernel }}"
-            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" "conformance-${{ matrix.kernel }}.json" <<'PY'
+            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" "conformance-${{ matrix.kernel }}.json" "observability-${{ matrix.kernel }}.json" <<'PY'
           import json, os, sys
           for fname in sys.argv[1:]:
             if os.path.exists(fname) and os.path.getsize(fname) > 0:
@@ -283,6 +285,7 @@ jobs:
             agent-${{ matrix.kernel }}.json
             resilience-${{ matrix.kernel }}.json
             conformance-${{ matrix.kernel }}.json
+            observability-${{ matrix.kernel }}.json
             vm.log
           if-no-files-found: warn
 

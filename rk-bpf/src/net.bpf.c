@@ -142,6 +142,9 @@ static __always_inline int rk_net_sock_addr(struct bpf_sock_addr *ctx, int v6, _
     }
 
     action = rk_net_verdict(&g, addr, port, rk_proto_bit(protocol), &rule_id);
+    rk_count_decision(type == RK_EV_NET_CONNECT ? (v6 ? RK_HOOK_CONNECT6 : RK_HOOK_CONNECT4)
+                                                : (v6 ? RK_HOOK_SENDMSG6 : RK_HOOK_SENDMSG4),
+                      &g, action);
     rk_net_emit(&g, type, action, rule_id, addr, port, v6 ? RK_AF_INET6 : RK_AF_INET, protocol);
     return rk_enforced_deny(&g, action) ? 0 : 1;
 }
@@ -193,6 +196,7 @@ int BPF_PROG(rk_net_socket_create, int family, int type, int protocol, int kern,
         return 0;
 
     action = (g.flags & RK_PROFILE_DENY_RAW_SOCKETS) ? RK_ACTION_DENY : RK_ACTION_ALLOW;
+    rk_count_decision(RK_HOOK_SOCK_CREATE, &g, action);
 
     msg = rk_scratch();
     if (msg) {

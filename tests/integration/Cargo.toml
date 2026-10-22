@@ -21,6 +21,7 @@ bytemuck = { version = "1", features = ["derive"] }
 io-uring = "0.7"
 libc = "0.2"
 rk-ebpf-common = { path = "../../rk-ebpf-common" }
+rk-audit = { path = "../../rk-audit" }
 rk-policy = { path = "../../rk-policy" }
 rk-sensor = { path = "../../rk-sensor" }
 serde.workspace = true

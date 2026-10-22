@@ -5,6 +5,7 @@ members = [
   "rk-sensor",
   "rk-supabase",
   "rk-signing",
+  "rk-audit",
   "rk-policy",
   "rk-api",
   "rk-engine-core",

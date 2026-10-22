@@ -38,6 +38,7 @@ static __always_inline int rk_guard_decide(const struct rk_gov *g, __u16 hook, _
     struct rk_scratch_msg *msg = rk_scratch();
     struct rk_payload_tamper *body;
 
+    rk_count_decision(RK_HOOK_GUARD, g, RK_ACTION_DENY);
     if (msg) {
         rk_fill_hdr(&msg->hdr, g->cgroup_id, g->policy_gen, RK_EV_TAMPER,
                     rk_reported_verdict(g, RK_ACTION_DENY), 0);

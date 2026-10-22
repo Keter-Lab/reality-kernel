@@ -5,7 +5,7 @@
 //! programs (the daemon, or a test harness) must keep a [`Heartbeat`] alive.
 
 use std::os::fd::AsFd as _;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -65,6 +65,8 @@ fn owned_array<V: aya::Pod>(ebpf: &Ebpf, name: &str) -> Result<Array<MapData, V>
 pub struct Heartbeat {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
+    /// CLOCK_BOOTTIME of the last successful beat, in ns.
+    last: Arc<AtomicU64>,
 }
 
 impl Heartbeat {
@@ -81,10 +83,12 @@ impl Heartbeat {
         config.set(0, Config(cfg), 0).context("write rk_config")?;
 
         let mut beat: Array<MapData, u64> = owned_array(ebpf, MAP_HEARTBEAT)?;
-        beat.set(0, boottime_ns(), 0)
-            .context("write rk_heartbeat")?;
+        let first = boottime_ns();
+        beat.set(0, first, 0).context("write rk_heartbeat")?;
 
         let stop = Arc::new(AtomicBool::new(false));
+        let last = Arc::new(AtomicU64::new(first));
+        let thread_last = last.clone();
         let thread_stop = stop.clone();
         let interval = timeout / 4;
         let thread = thread::Builder::new()
@@ -93,8 +97,12 @@ impl Heartbeat {
                 let mut failing = false;
                 while !thread_stop.load(Ordering::Relaxed) {
                     thread::sleep(interval);
-                    match beat.set(0, boottime_ns(), 0) {
-                        Ok(()) => failing = false,
+                    let now = boottime_ns();
+                    match beat.set(0, now, 0) {
+                        Ok(()) => {
+                            thread_last.store(now, Ordering::Relaxed);
+                            failing = false;
+                        }
                         Err(e) if !failing => {
                             failing = true;
                             tracing::error!(error = %e, "heartbeat write failed");
@@ -107,8 +115,19 @@ impl Heartbeat {
         Ok(Self {
             stop,
             thread: Some(thread),
+            last,
         })
     }
+
+    /// Shared time of the last successful beat, for [`heartbeat_age`].
+    pub fn last_beat(&self) -> Arc<AtomicU64> {
+        self.last.clone()
+    }
+}
+
+/// Time since the beat recorded in `last` (Phase 9 metrics).
+pub fn heartbeat_age(last: &AtomicU64) -> Duration {
+    Duration::from_nanos(boottime_ns().saturating_sub(last.load(Ordering::Relaxed)))
 }
 
 impl Drop for Heartbeat {

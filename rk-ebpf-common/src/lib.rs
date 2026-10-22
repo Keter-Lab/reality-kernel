@@ -119,7 +119,13 @@ mod tests {
         assert_eq!(RK_SCRATCH_PAYLOAD_MAX, 2048);
         assert_eq!(rk_event_type::RK_EV_SENDMSG, 9);
         assert_eq!(rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY, 2);
-        assert_eq!(rk_counter::RK_CNT_MAX, 2);
+        assert_eq!(rk_counter::RK_CNT_MAX, 26);
+        assert_eq!(rk_counter::RK_CNT_DECISION_BASE, 2);
+        assert_eq!(
+            rk_counter::RK_CNT_MAX,
+            rk_counter::RK_CNT_DECISION_BASE + rk_hook::RK_HOOK_MAX * RK_VERDICTS
+        );
+        assert_eq!(rk_hook::RK_HOOK_GUARD, 7);
         assert_eq!(rk_event_type::RK_EV_SOCK_CREATE, 10);
         assert_eq!(RK_MAX_PROFILES, 1024);
         assert_eq!(RK_RULE_HEARTBEAT, u32::MAX);

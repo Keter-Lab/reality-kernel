@@ -15,6 +15,12 @@ spec:
     metadata:
       labels:
         {{- include "rk.selector" . | nindent 8 }}
+      {{- if .Values.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.metrics.port | quote }}
+        prometheus.io/path: /metrics
+      {{- end }}
     spec:
       # /proc/<pid>/cgroup of containers must resolve: rk-sensor reads it from
       # PID 1's cgroup namespace (docs/design/phase-5b.md §5).
@@ -45,6 +51,31 @@ spec:
             - {{ .Values.heartbeatTimeoutSeconds | quote }}
             - --state-file
             - /var/run/reality-kernel/engine-state.json
+            # Phase 9: the signed audit log and its key live on the host, so
+            # the hash chain continues across pod replacements.
+            - --audit-dir
+            - /var/log/reality-kernel/audit
+            - --audit-key
+            - /var/lib/reality-kernel/audit.key
+            {{- if .Values.audit.includeAllow }}
+            - --audit-allow
+            {{- end }}
+            - --metrics-addr
+            {{- if .Values.metrics.enabled }}
+            - {{ printf "0.0.0.0:%v" .Values.metrics.port | quote }}
+            {{- else }}
+            - "off"
+            {{- end }}
+            {{- with .Values.otlp.endpoint }}
+            - --otlp-endpoint
+            - {{ . | quote }}
+            {{- end }}
+          {{- if .Values.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          {{- end }}
           env:
             - name: RUST_LOG
               value: {{ .Values.logLevel | quote }}
@@ -73,6 +104,10 @@ spec:
               mountPropagation: HostToContainer
             - name: state
               mountPath: /var/run/reality-kernel
+            - name: audit
+              mountPath: /var/log/reality-kernel
+            - name: audit-key
+              mountPath: /var/lib/reality-kernel
         - name: rk-nri
           image: {{ include "rk.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -129,6 +164,14 @@ spec:
         - name: state
           hostPath:
             path: /var/run/reality-kernel
+            type: DirectoryOrCreate
+        - name: audit
+          hostPath:
+            path: {{ .Values.audit.hostPath }}
+            type: DirectoryOrCreate
+        - name: audit-key
+          hostPath:
+            path: {{ .Values.audit.keyHostPath }}
             type: DirectoryOrCreate
         - name: nri
           hostPath:

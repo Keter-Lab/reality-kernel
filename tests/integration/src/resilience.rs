@@ -100,7 +100,7 @@ fn log_tail() -> String {
     lines[lines.len().saturating_sub(20)..].join("\n")
 }
 
-fn is_socket_ready(socket_path: &str) -> bool {
+pub(crate) fn is_socket_ready(socket_path: &str) -> bool {
     unsafe {
         let fd = libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0);
         if fd < 0 {
@@ -197,7 +197,7 @@ impl Drop for ResilienceDaemon {
     }
 }
 
-fn run_workload(cgroup_procs: &str, workload: &str, args: &[&str]) -> Result<Output> {
+pub(crate) fn run_workload(cgroup_procs: &str, workload: &str, args: &[&str]) -> Result<Output> {
     let mut cmd = Command::new(std::env::current_exe()?);
     cmd.arg(crate::workloads::CHILD_FLAG)
         .arg(cgroup_procs)
