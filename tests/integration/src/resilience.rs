@@ -333,7 +333,7 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         // Inside the 3-second heartbeat timeout, enforcement persists
         run_workload_ok(ENFORCE_CGROUP, "udp_connect", &[DENY_ADDR, "eperm"])?;
         run_workload_ok(ENFORCE_CGROUP, "udp_connect", &[ALLOW_ADDR, "ok"])?;
-        Ok(())
+        Ok("enforcement persisted after SIGKILL inside timeout".to_string())
     });
 
     // 2. sensor_restart_adopts_pins
@@ -392,7 +392,10 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
                 "generation did not increase across restart: before {gen_before}, after {gen_after}"
             );
         }
-        Ok(())
+        Ok(format!(
+            "links preserved ({links_after:?}), gen increased ({gen_before} -> {gen_after}), \
+             paced workload: eperm={eperm}, ok={ok}"
+        ))
     });
 
     // 3. heartbeat_stale_denies_enforce
@@ -410,21 +413,21 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         // Restart daemon to drain ringbuffer and log events
         daemon = ResilienceDaemon::start(sensor, 3)?;
         wait_for_heartbeat_deny()?;
-        Ok(())
+        Ok("stale heartbeat denied enforce with RK_RULE_HEARTBEAT; audit unaffected".to_string())
     });
 
     // 4. heartbeat_recovers_on_restart
     run_test(checks, "heartbeat_recovers_on_restart", || {
         // Once daemon is running with fresh heartbeat, allowed connect works again
         run_workload_ok(ENFORCE_CGROUP, "udp_connect", &[ALLOW_ADDR, "ok"])?;
-        Ok(())
+        Ok("allowed connect succeeded after sensor restart".to_string())
     });
 
     // 5. guard_bpf_syscall_denied
     run_test(checks, "guard_bpf_syscall_denied", || {
         run_workload_ok(ENFORCE_CGROUP, "guard_bpf", &["eperm"])?;
         run_workload_ok(UNGOVERNED_CGROUP, "guard_bpf", &["ok"])?;
-        Ok(())
+        Ok("bpf() returned EPERM for governed task, succeeded for ungoverned".to_string())
     });
 
     // 6. guard_signal_sensor_denied
@@ -432,7 +435,7 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         let pid_str = daemon.pid().to_string();
         run_workload_ok(ENFORCE_CGROUP, "guard_signal", &[&pid_str, "eperm"])?;
         run_workload_ok(UNGOVERNED_CGROUP, "guard_signal", &[&pid_str, "ok"])?;
-        Ok(())
+        Ok("SIGCONT to sensor returned EPERM for governed task, succeeded for control".to_string())
     });
 
     // 7. guard_ptrace_sensor_denied
@@ -440,13 +443,14 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         let pid_str = daemon.pid().to_string();
         run_workload_ok(ENFORCE_CGROUP, "guard_ptrace", &[&pid_str, "eperm"])?;
         run_workload_ok(UNGOVERNED_CGROUP, "guard_ptrace", &[&pid_str, "ok"])?;
-        Ok(())
+        Ok("ptrace and /proc/<pid>/mem returned EPERM for governed task, succeeded for control"
+            .to_string())
     });
 
     // 8. guard_pins_cannot_be_removed
     run_test(checks, "guard_pins_cannot_be_removed", || {
         run_workload_ok(ENFORCE_CGROUP, "guard_pins", &[])?;
-        Ok(())
+        Ok("unlink, rename, and umount in bpffs returned EPERM for governed task".to_string())
     });
 
     // 9. pin_dir_restricted
@@ -463,7 +467,7 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
                 meta.gid()
             );
         }
-        Ok(())
+        Ok("pin root /sys/fs/bpf/rk is mode 0700 owned by root".to_string())
     });
 
     // 10. incompatible_pins_replaced
@@ -482,7 +486,7 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         if !Path::new(META_PIN).exists() {
             bail!("rk_meta pin does not exist after replacement");
         }
-        Ok(())
+        Ok("incompatible pins were replaced with logged warning".to_string())
     });
 
     // 11. uninstall_removes_protection
@@ -500,7 +504,7 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         }
         // Previously denied connect should now succeed
         run_workload_ok(ENFORCE_CGROUP, "udp_connect", &[DENY_ADDR, "ok"])?;
-        Ok(())
+        Ok("uninstall removed pins and unblocked previously denied connects".to_string())
     });
 
     // Final cleanup
