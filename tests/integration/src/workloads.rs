@@ -33,6 +33,7 @@ pub fn run_child(args: &[String]) -> i32 {
         "blast_connect" => handle_blast_connect(rest),
         "flood_ringbuf" => handle_flood_ringbuf(rest),
         "paced_workload" => handle_paced_workload(rest),
+        "bench" => handle_bench(rest),
         "exec_cmd" => handle_exec_cmd(rest),
         "exec_large_argv" => handle_exec_large_argv(rest),
         "exec_reload_workload" => handle_exec_reload_workload(rest),
@@ -1529,5 +1530,95 @@ fn handle_file_reload_workload(args: &[String]) -> i32 {
     }
 
     println!("{{\"eperm\":{eperm_count},\"ok\":{ok_count}}}");
+    0
+}
+
+/// Pins the calling thread to CPU 0, so a benchmark isn't migrated mid-run.
+fn pin_to_cpu0() {
+    // SAFETY: zeroed cpu_set_t is a valid empty set; sched_setaffinity reads it.
+    unsafe {
+        let mut set: libc::cpu_set_t = std::mem::zeroed();
+        libc::CPU_SET(0, &mut set);
+        libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set);
+    }
+}
+
+/// Phase 7 microbenchmark (docs/design/phase-7.md §6): `bench <op> <iters>`
+/// times one syscall loop per iteration after a warm-up, and prints
+/// `{"p50":ns,"p99":ns,"mean":ns,"n":iters}`.
+fn handle_bench(args: &[String]) -> i32 {
+    let (Some(op), Some(iters)) = (args.first(), args.get(1).and_then(|s| s.parse::<usize>().ok()))
+    else {
+        eprintln!("[child] bench expects <op> <iterations>");
+        return 290;
+    };
+    if iters == 0 {
+        eprintln!("[child] bench needs at least one iteration");
+        return 290;
+    }
+    pin_to_cpu0();
+    let path = c"/run/rk-bench/file";
+    let udp = match UdpSocket::bind("127.0.0.1:0") {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[child] bind: {e}");
+            return 291;
+        }
+    };
+    let target: SocketAddr = "127.0.0.1:9".parse().expect("static address");
+    let one = || -> Result<(), String> {
+        match op.as_str() {
+            "open" => {
+                // SAFETY: valid NUL-terminated path; the fd is closed at once.
+                let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+                if fd < 0 {
+                    return Err(format!("open: {}", std::io::Error::last_os_error()));
+                }
+                unsafe { libc::close(fd) };
+            }
+            "connect" => udp.connect(target).map_err(|e| format!("connect: {e}"))?,
+            "socket" => {
+                // SAFETY: plain syscalls; the fd is closed at once.
+                let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) };
+                if fd < 0 {
+                    return Err(format!("socket: {}", std::io::Error::last_os_error()));
+                }
+                unsafe { libc::close(fd) };
+            }
+            "exec" => {
+                let st = std::process::Command::new("/bin/true")
+                    .status()
+                    .map_err(|e| format!("exec: {e}"))?;
+                if !st.success() {
+                    return Err(format!("exec: /bin/true exited {st}"));
+                }
+            }
+            other => return Err(format!("unknown bench op {other}")),
+        }
+        Ok(())
+    };
+    for _ in 0..(iters / 10).max(10) {
+        if let Err(e) = one() {
+            eprintln!("[child] {e}");
+            return 292;
+        }
+    }
+    let mut samples = Vec::with_capacity(iters);
+    for _ in 0..iters {
+        let start = std::time::Instant::now();
+        if let Err(e) = one() {
+            eprintln!("[child] {e}");
+            return 292;
+        }
+        samples.push(start.elapsed().as_nanos() as u64);
+    }
+    samples.sort_unstable();
+    let n = samples.len().max(1);
+    let mean = samples.iter().sum::<u64>() / n as u64;
+    println!(
+        "{{\"p50\":{},\"p99\":{},\"mean\":{mean},\"n\":{n}}}",
+        samples[n / 2],
+        samples[(n * 99 / 100).min(n - 1)]
+    );
     0
 }

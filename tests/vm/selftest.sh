@@ -91,6 +91,13 @@ if [ -x "$integration" ]; then
     resilience_rc=$?
     echo "resilience suite exit code: $resilience_rc"
     [ "$resilience_rc" -eq 0 ] || rc=1
+
+    # Phase 7: benchmarks, last, once nothing else is attached. The report
+    # is checked against tests/bench/budget.json by the bench-report job.
+    "$integration" --bench "$bpftool" 2>&1
+    bench_rc=$?
+    echo "bench exit code: $bench_rc"
+    [ "$bench_rc" -eq 0 ] || rc=1
 fi
 
 exit "$rc"

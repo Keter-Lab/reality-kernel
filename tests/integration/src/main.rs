@@ -7,6 +7,8 @@
 
 #[cfg(target_os = "linux")]
 mod agent;
+#[cfg(target_os = "linux")]
+mod bench;
 mod bpf;
 #[cfg(target_os = "linux")]
 mod resilience;
@@ -406,6 +408,22 @@ fn main() {
     if args.len() > 1 && args[1] == workloads::CHILD_FLAG {
         let code = workloads::run_child(&args[2..]);
         std::process::exit(code);
+    }
+    #[cfg(target_os = "linux")]
+    if args.len() > 1 && args[1] == bench::BENCH_FLAG {
+        let bpftool = args.get(2).map(std::path::PathBuf::from);
+        match bench::run(bpftool.as_deref()) {
+            Ok(report) => {
+                println!("===RK_BENCH_BEGIN===");
+                println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+                println!("===RK_BENCH_END===");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[rk-integration] bench failed: {e:#}");
+                std::process::exit(1);
+            }
+        }
     }
     #[cfg(target_os = "linux")]
     if args.len() > 1 && args[1] == agent::PROBE_FLAG {
