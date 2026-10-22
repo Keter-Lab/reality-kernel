@@ -115,19 +115,37 @@ job summary.
 
 ## 7. Regression gate
 
-`tests/bench/budget.json` holds the per-hook budgets: p50 and p99 overhead in
-ns, ungoverned and governed, plus the zero-loss rate. A small script
-(`tests/bench/gate.py`) fails the job when a measurement exceeds its budget.
+`tests/bench/budget.json` holds the budgets, and `tests/bench/gate.py` fails
+the job when a gated measurement exceeds one. Budgets are the worst value
+across the five kernels × 2, with a 1 µs floor, from the first measured run
+(the plan's rule).
 
-Nested-VM CI runners are noisy, so the gate is built not to flake:
-- Budgets are set from the first measured baseline (the plan's rule): the
-  worst value across the five kernels × 2 for p50, × 3 for p99, with a
-  1 µs floor.
-- The gate compares the median of 3 repetitions.
-- It keys on ungoverned p50 first: that is the cost the whole host pays.
+**Revised after the first measurement** (CI run on `dbabc65`). Nested-VM
+runners are noisy, and the first run showed where:
+- **Stable enough to gate:**
+  - each BPF program's average run time from `bpf_stats`, which the kernel
+    measures itself and is consistent across kernels: exec check 0.6–1.7 µs,
+    file open 0.2–1.1 µs, connect 0.18–0.61 µs, socket create 22–77 ns;
+  - the p50 syscall overhead of open, connect and socket;
+  - zero loss at the sustained rate.
+- **Reported only:**
+  - the exec syscall timings: launching `/bin/true` takes about 7 ms there
+    and varies by hundreds of µs, so the measured "overhead" ranged from 0 to
+    400 µs between kernels;
+  - every p99: tail latencies in these VMs varied by 10× between kernels;
+  - programs with fewer than 1 000 runs (`setattr`, `guard_bpf`).
 
-The first implementation commit measures; a second commits `budget.json`
-from those numbers. After that every PR is gated.
+Gating on noise would fail at random and teach people to ignore the gate. The
+per-program averages cover exec through the kernel's own measurement instead.
+The plan's first criterion is still met: p50 and p99 for every hook are
+reported on all five kernels.
+
+**First results** (all five kernels):
+- unprotected processes pay 0.07–0.22 µs per connect, open or socket call;
+- governed processes pay 0.24–1.08 µs;
+- zero events lost at the sustained run (about 7–9 k events/s achieved: sleep
+  pacing overshoots in the VM) and in an unpaced 500 000-event flood (about
+  188 k events/s on 6.18).
 
 ## 8. Decisions requested from the reviewer
 
@@ -137,10 +155,11 @@ from those numbers. After that every PR is gated.
 2. **Adaptive wakeups with a 100 ms latency bound.** Recommended: removes
    per-record wakeups under load; 100 ms is far below anything a human or an
    alert pipeline notices.
-3. **Gate on overhead relative to an in-run baseline, with budgets from the
-   first measurement (×2 p50, ×3 p99, 1 µs floor).** Recommended: absolute
-   timings on shared runners vary run to run, deltas within one run are far
-   more stable.
+3. **Gate the stable signals, report the noisy ones (§7):** per-program
+   averages from `bpf_stats`, p50 for open/connect/socket and zero loss are
+   gated at the worst first-run value × 2 (1 µs floor); exec syscall timings
+   and all p99s are reported only. Recommended: a gate that fails at random
+   gets ignored, and the kernel-measured averages cover every hook.
 4. **Defer the process table to Phase 9 (audit schema).** Recommended: there
    are no per-event `/proc` reads to replace today; the table's purpose is
    enrichment (executable, parent), whose fields the Phase 9 schema defines.

@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "connect": {
+      "governed_p50_ns": 1722,
+      "ungoverned_p50_ns": 1000
+    },
+    "open": {
+      "governed_p50_ns": 2164,
+      "ungoverned_p50_ns": 1000
+    },
+    "socket": {
+      "governed_p50_ns": 1000,
+      "ungoverned_p50_ns": 1000
+    }
+  },
+  "programs": {
+    "rk_exec_check": {
+      "avg_ns": 3328
+    },
+    "rk_exec_record": {
+      "avg_ns": 5232
+    },
+    "rk_file_open": {
+      "avg_ns": 2162
+    },
+    "rk_net_connect4": {
+      "avg_ns": 1220
+    },
+    "rk_net_socket_create": {
+      "avg_ns": 1000
+    }
+  },
+  "version": 1,
+  "zero_loss_at_sustained_rate": true
+}
