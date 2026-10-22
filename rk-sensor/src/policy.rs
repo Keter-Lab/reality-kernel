@@ -16,7 +16,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::{Array, HashMap as BpfHashMap};
-use aya::programs::{BtfTracePoint, CgroupAttachMode, CgroupSockAddr, FdLink, Lsm};
+use aya::programs::links::FdLink;
+use aya::programs::{BtfTracePoint, CgroupAttachMode, CgroupSockAddr, Lsm};
 use aya::Ebpf;
 use bytemuck::Zeroable;
 use rk_ebpf_common::{
