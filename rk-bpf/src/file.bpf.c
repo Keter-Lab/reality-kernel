@@ -97,6 +97,7 @@ static __always_inline int rk_file_check(
     }
 
 decided:
+    rk_count_decision(RK_HOOK_FILE, g, action);
     if (rk_effective_deny(g, action)) {
         msg = rk_scratch();
         if (msg) {

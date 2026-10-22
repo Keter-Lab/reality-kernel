@@ -241,6 +241,20 @@ static __always_inline int rk_enforced_deny(const struct rk_gov *g, __u8 action)
     return rk_effective_deny(g, action) && g->mode == RK_MODE_ENFORCE;
 }
 
+/*
+ * Counts one governed decision by hook class and reported verdict
+ * (docs/design/phase-9.md §3.4). Independent of emission, so userspace can
+ * tell a lost event from a decision that never happened.
+ */
+static __always_inline void rk_count_decision(__u32 hook, const struct rk_gov *g, __u8 action)
+{
+    __u32 verdict = rk_reported_verdict(g, action);
+
+    if (hook >= RK_HOOK_MAX || verdict >= RK_VERDICTS)
+        return;
+    rk_count(RK_CNT_DECISION_BASE + hook * RK_VERDICTS + verdict);
+}
+
 /* rule_id for events: RK_RULE_HEARTBEAT when only the stale heartbeat denied. */
 static __always_inline __u32 rk_rule(const struct rk_gov *g, __u8 action, __u32 rule_id)
 {

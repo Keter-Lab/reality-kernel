@@ -57,6 +57,19 @@ Two kinds of record share the type; `flags` tells them apart (`enum rk_exec_flag
 - `file_dev`/`file_ino` identify the executed file; `rule_id` is the matching
   allowlist rule, or 0.
 
+## Counters (`rk_counters`, per-CPU array)
+
+| Index | Counter |
+|---|---|
+| 0 `RK_CNT_RINGBUF_DROP` | an event could not be written to the ring buffer (it was full); the verdict is unaffected |
+| 1 `RK_CNT_SCRATCH_MISS` | the per-CPU scratch buffer was unavailable, so no event was built |
+| 2 + hook × 3 + verdict | one governed decision (Phase 9): `enum rk_hook` (connect4, connect6, sendmsg4, sendmsg6, sock_create, exec, file, guard) × `enum rk_verdict` |
+
+Decision counters are incremented whether or not the decision's event is
+emitted, so userspace can tell a lost event from a decision that never
+happened. `RK_CNT_MAX` is 26. Values are summed over CPUs in userspace and
+exported as `rk_decisions_total{hook,verdict}` and `rk_events_lost_total`.
+
 ## Decoder guarantees
 
 `rk_sensor::decoder::decode` rejects, with a typed error and a counter per

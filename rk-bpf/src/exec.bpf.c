@@ -98,6 +98,7 @@ int BPF_PROG(rk_exec_check, struct linux_binprm *bprm, int ret)
     __u32 tid = (__u32)bpf_get_current_pid_tgid();
 
     bpf_map_update_elem(&rk_exec_decided, &tid, &decided, BPF_ANY);
+    rk_count_decision(RK_HOOK_EXEC, &g, action);
 
     /* Denied (or audit-would-deny) execs never reach sched_process_exec, so the
      * decision is recorded here. Allowed execs are recorded by rk_exec_record. */
