@@ -164,7 +164,10 @@ pub fn run(bpftool: Option<&Path>) -> Result<Value> {
     fs::write(format!("{FILE_DIR}/file"), b"rk").context("create bench file")?;
     // The VM's loopback may not be up or carry 127.0.0.1 here; use our own
     // address, as the other suites do (errors mean it already exists).
-    for args in [&["link", "set", "lo", "up"][..], &["addr", "add", "10.99.0.2/24", "dev", "lo"][..]] {
+    for args in [
+        &["link", "set", "lo", "up"][..],
+        &["addr", "add", "10.99.0.2/24", "dev", "lo"][..],
+    ] {
         let _ = Command::new("ip").args(args).stderr(Stdio::null()).status();
     }
 
