@@ -16,3 +16,4 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 rk-agentd = { path = "../rk-agentd" }
+rk-audit = { path = "../rk-audit" }

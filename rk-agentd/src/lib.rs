@@ -11,6 +11,7 @@ pub mod launcher;
 pub mod protocol;
 pub mod registry;
 pub mod server;
+pub mod trace;
 
 pub use auth::{check_launchable_by, check_policy_admin, get_peer_cred, PeerCred};
 pub use client::{ApplyOutcome, Client};

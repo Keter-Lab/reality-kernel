@@ -3,9 +3,12 @@ use clap::{Parser, Subcommand};
 use rk_agentd::client::{ApplyOutcome, Client};
 use rk_agentd::protocol::{AgentStatusInfo, DaemonStatus};
 use serde::Serialize;
+use std::collections::VecDeque;
 use std::fs;
+use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Duration;
 
 const MIN_KERNEL_MAJOR: u64 = 5;
 const MIN_KERNEL_MINOR: u64 = 8;
@@ -49,6 +52,49 @@ enum Commands {
     /// Run deployment preflight checks (formerly rkctl preflight)
     #[command(alias = "preflight")]
     Doctor {
+        /// Emit machine-readable JSON output
+        #[arg(long)]
+        json: bool,
+    },
+    /// Read and verify the tamper-evident audit log (docs/audit.md)
+    Audit {
+        #[command(subcommand)]
+        command: AuditCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AuditCommands {
+    /// Print audit records, oldest first
+    Tail {
+        /// Audit log directory
+        #[arg(long, default_value = rk_audit::DEFAULT_DIR)]
+        dir: PathBuf,
+        /// Keep printing records as they are written
+        #[arg(short, long)]
+        follow: bool,
+        /// Print the OCSF JSON lines instead of one summary line per record
+        #[arg(long)]
+        json: bool,
+        /// Only this verdict (`audit` means audit-would-deny)
+        #[arg(long, value_parser = ["deny", "audit", "allow"])]
+        verdict: Option<String>,
+        /// Only decisions of this agent session
+        #[arg(long)]
+        session: Option<String>,
+        /// Records to print before following; 0 prints all
+        #[arg(short = 'n', long, default_value_t = 20)]
+        lines: usize,
+    },
+    /// Verify the hash chain and the batch signatures
+    Verify {
+        /// Audit log directory
+        #[arg(long, default_value = rk_audit::DEFAULT_DIR)]
+        dir: PathBuf,
+        /// Require this signing key: hex public key, or a file holding it
+        /// (e.g. /var/lib/rk/audit.key.pub)
+        #[arg(long)]
+        pubkey: Option<String>,
         /// Emit machine-readable JSON output
         #[arg(long)]
         json: bool,
@@ -122,7 +168,172 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        Commands::Audit {
+            command:
+                AuditCommands::Tail {
+                    dir,
+                    follow,
+                    json,
+                    verdict,
+                    session,
+                    lines,
+                },
+        } => match run_audit_tail(&dir, follow, json, verdict.as_deref(), session.as_deref(), lines) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("rk audit tail: {e:#}");
+                ExitCode::FAILURE
+            }
+        },
+        Commands::Audit {
+            command: AuditCommands::Verify { dir, pubkey, json },
+        } => match run_audit_verify(&dir, pubkey.as_deref(), json) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::from(2),
+            Err(e) => {
+                eprintln!("rk audit verify: {e:#}");
+                ExitCode::FAILURE
+            }
+        },
     }
+}
+
+/// The output line for one audit log line, if it is a record that passes
+/// the filters.
+fn audit_line(line: &str, json: bool, verdict: Option<&str>, session: Option<&str>) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    if !rk_audit::tail::is_record(&v) || !rk_audit::tail::matches(&v, verdict, session) {
+        return None;
+    }
+    Some(if json { line.to_string() } else { rk_audit::tail::render(&v) })
+}
+
+/// Complete lines appended to `path` since `offset`; a partial last line is
+/// kept in `partial` until its newline arrives.
+fn read_new_lines(path: &Path, offset: &mut u64, partial: &mut String) -> Result<Vec<String>> {
+    let mut f = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    f.seek(SeekFrom::Start(*offset))?;
+    let mut chunk = String::new();
+    *offset += f.read_to_string(&mut chunk)? as u64;
+    partial.push_str(&chunk);
+    let Some(end) = partial.rfind('\n') else {
+        return Ok(Vec::new());
+    };
+    let complete: Vec<String> = partial[..end].lines().map(str::to_string).collect();
+    partial.drain(..=end);
+    Ok(complete)
+}
+
+fn run_audit_tail(
+    dir: &Path,
+    follow: bool,
+    json: bool,
+    verdict: Option<&str>,
+    session: Option<&str>,
+    lines: usize,
+) -> Result<()> {
+    let segments = rk_audit::chain::segments(dir)?;
+    // Newest segments first, until enough records are collected.
+    let mut shown: VecDeque<String> = VecDeque::new();
+    for seg in segments.iter().rev() {
+        let text = fs::read_to_string(seg).with_context(|| format!("read {}", seg.display()))?;
+        let found: Vec<String> = text.lines().filter_map(|l| audit_line(l, json, verdict, session)).collect();
+        for line in found.into_iter().rev() {
+            shown.push_front(line);
+        }
+        if lines > 0 && shown.len() >= lines {
+            break;
+        }
+    }
+    while lines > 0 && shown.len() > lines {
+        shown.pop_front();
+    }
+    for line in &shown {
+        println!("{line}");
+    }
+    if !follow {
+        return Ok(());
+    }
+    let mut current = segments.last().cloned();
+    let mut offset = current
+        .as_deref()
+        .and_then(|p| fs::metadata(p).ok())
+        .map_or(0, |m| m.len());
+    let mut partial = String::new();
+    loop {
+        std::thread::sleep(Duration::from_millis(500));
+        let newest = rk_audit::chain::segments(dir)?.last().cloned();
+        let emit = |path: &Path, offset: &mut u64, partial: &mut String| -> Result<()> {
+            for l in read_new_lines(path, offset, partial)? {
+                if let Some(out) = audit_line(&l, json, verdict, session) {
+                    println!("{out}");
+                }
+            }
+            Ok(())
+        };
+        if newest != current {
+            // Finish the old segment, then start the new one from its top.
+            if let Some(p) = &current {
+                emit(p.as_path(), &mut offset, &mut partial)?;
+            }
+            current = newest;
+            offset = 0;
+            partial.clear();
+        }
+        if let Some(p) = &current {
+            emit(p.as_path(), &mut offset, &mut partial)?;
+        }
+    }
+}
+
+fn run_audit_verify(dir: &Path, pubkey: Option<&str>, json: bool) -> Result<bool> {
+    let pinned = match pubkey {
+        Some(p) => {
+            let text = if Path::new(p).is_file() {
+                fs::read_to_string(p).with_context(|| format!("read {p}"))?
+            } else {
+                p.to_string()
+            };
+            Some(rk_audit::key::parse_public_key(&text)?)
+        }
+        None => None,
+    };
+    let r = rk_audit::chain::verify_dir(dir, pinned)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&r)?);
+        return Ok(r.ok());
+    }
+    println!(
+        "audit log {}: {} segments, {} batches, {} records ({} recovered batches)",
+        dir.display(),
+        r.segments,
+        r.batches,
+        r.records,
+        r.recovered_batches
+    );
+    if let (Some(first), Some(head), Some(hash)) = (r.first_seq, r.head_seq, &r.head_hash) {
+        println!(
+            "chain: batches {first}..{}, head {}, signed by {}",
+            head.saturating_sub(1),
+            &hash[..16.min(hash.len())],
+            r.key_ids.join(", ")
+        );
+    }
+    if r.unsealed_tail > 0 {
+        println!("open batch: {} records not sealed yet", r.unsealed_tail);
+    }
+    for w in &r.warnings {
+        println!("warning: {w}");
+    }
+    if r.ok() {
+        println!("VERIFIED");
+    } else {
+        println!("FAILED: {} problem(s)", r.problems.len());
+        for p in &r.problems {
+            println!("  {} line {}: {}", p.segment, p.line, p.what);
+        }
+    }
+    Ok(r.ok())
 }
 
 fn run_agent(profile: &str, session: Option<&str>, cmd: &[String]) -> ExitCode {
@@ -233,13 +444,21 @@ fn print_human_status(status: &DaemonStatus) {
     );
     println!("  generation : {}", status.generation);
     println!("  containers : {} (Kubernetes)", status.containers);
-    if !status.counters.is_empty() {
-        let line: Vec<String> = status
-            .counters
-            .iter()
-            .map(|(k, v)| format!("{k}={v}"))
-            .collect();
+    let (decisions, pipeline): (Vec<_>, Vec<_>) = status
+        .counters
+        .iter()
+        .partition(|(k, _)| k.starts_with("decisions."));
+    if !pipeline.is_empty() {
+        let line: Vec<String> = pipeline.iter().map(|(k, v)| format!("{k}={v}")).collect();
         println!("  pipeline   : {}", line.join(" "));
+    }
+    let decided: Vec<String> = decisions
+        .iter()
+        .filter(|(_, v)| **v > 0)
+        .map(|(k, v)| format!("{}={v}", k.trim_start_matches("decisions.")))
+        .collect();
+    if !decided.is_empty() {
+        println!("  decisions  : {}", decided.join(" "));
     }
     println!(
         "  profiles   : {}",
@@ -259,7 +478,7 @@ fn print_human_status(status: &DaemonStatus) {
         }
     }
     println!();
-    println!("Kernel capabilities:");
+    println!("Capabilities:");
     for cap in &status.capabilities {
         println!(
             "  - {:22} {:3}  {}",
