@@ -383,6 +383,33 @@ jobs:
             k8s-logs/
           if-no-files-found: warn
 
+  traceability:
+    name: Traceability (every criterion's tests passed)
+    needs: [vm-matrix, k8s]
+    if: always() && needs.vm-matrix.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: selftest-*
+          merge-multiple: true
+          path: reports/
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: k8s-results
+          path: reports/
+
+      # docs/design/phase-8.md §3.1: a deleted, renamed, skipped or failing test
+      # fails against the criterion it proves, on every kernel.
+      - name: Check the reports
+        run: |
+          set -o pipefail
+          python3 tests/traceability.py reports --kernels 5.15,6.1,6.6,6.12,6.18 reports/ \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
   fuzz:
     name: Decoder fuzzing (10 min)
     runs-on: ubuntu-24.04

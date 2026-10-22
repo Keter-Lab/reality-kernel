@@ -94,6 +94,11 @@ jobs:
       - name: pytest
         run: .github/scripts/run-logged.sh pytest pytest tests/ -v
 
+      # docs/design/phase-8.md §3.1: every acceptance criterion maps to tests
+      # that exist in the source.
+      - name: traceability (source)
+        run: python3 tests/traceability.py static | tee -a "$GITHUB_STEP_SUMMARY"; test "${PIPESTATUS[0]}" -eq 0
+
   go:
     name: Go (rk-nri vet, test, build)
     runs-on: ubuntu-24.04

@@ -1,6 +1,6 @@
 # Design note: Phase 8 — test strategy
 
-Status: **PROPOSED** (2026-10-22), awaiting review of the decisions in §6.
+Status: **ACCEPTED** (2026-10-22). All four decisions in §6 approved as recommended.
 Branch: `phase-8-tests` (from `phase-7-performance` at 0e47019; rebased onto
 `main` once Phase 7 merges)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 8 ("Confidence
