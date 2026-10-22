@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use rk_agentd::protocol::{ApplyReportData, CapabilityStatus, DryRunData};
@@ -18,16 +19,24 @@ use rk_agentd::registry::AgentRegistry;
 use rk_agentd::server::{self, PolicyHandler, ServerConfig};
 use rk_sensor::loader::{self, Object};
 use rk_sensor::policy::{self, PolicyEngine};
-use rk_sensor::{consumer, selftest};
+use rk_sensor::resilience::{self, Heartbeat};
+use rk_sensor::{consumer, pins, selftest};
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 const USAGE: &str = "usage: rk-sensor [--policy FILE] [--watch-policy] \
-                     [--k8s-cgroup-root auto|DIR] | --selftest | --version | --help";
+                     [--k8s-cgroup-root auto|DIR] [--heartbeat-timeout SECS] \
+                     [--state-file FILE] | --uninstall | --selftest | --version | --help";
 
 /// Policy file read at start and on SIGHUP when `--policy` is not given.
 const DEFAULT_POLICY: &str = "/etc/rk/policy.toml";
+
+/// Engine state kept across restarts (docs/design/phase-6.md §3.3).
+const DEFAULT_STATE_FILE: &str = "/run/rk/engine-state.json";
+
+/// Default heartbeat timeout (docs/design/phase-6.md §4).
+const DEFAULT_HEARTBEAT_SECS: u64 = 10;
 
 /// Kubernetes cgroup roots probed by `--k8s-cgroup-root auto`, relative to
 /// the cgroupfs root: systemd driver, cgroupfs driver, and kubelet's
@@ -49,11 +58,18 @@ struct RunOpts {
     watch: bool,
     /// `auto` or a directory relative to the cgroupfs root (Phase 5b §5).
     k8s_root: Option<String>,
+    /// Seconds without a heartbeat before governed ENFORCE workloads are
+    /// denied (Phase 6 §4); `None` means the default.
+    heartbeat_secs: Option<u64>,
+    state_file: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum Mode {
     Run(RunOpts),
+    /// Remove the pin set: the only way to end protection without waiting
+    /// for the heartbeat to fail closed (Phase 6 §3.5).
+    Uninstall,
     Selftest,
     SelftestChild(Vec<String>),
     Version,
@@ -63,6 +79,7 @@ enum Mode {
 fn parse_args(args: &[String]) -> Result<Mode, String> {
     match args {
         [flag] if flag == "--selftest" => return Ok(Mode::Selftest),
+        [flag] if flag == "--uninstall" => return Ok(Mode::Uninstall),
         [flag] if flag == "--version" || flag == "-V" => return Ok(Mode::Version),
         [flag] if flag == "--help" || flag == "-h" => return Ok(Mode::Help),
         [flag, rest @ ..] if flag == selftest::CHILD_FLAG => {
@@ -80,6 +97,17 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
                 opts.k8s_root = Some(it.next().ok_or_else(unrecognised)?.clone())
             }
             "--watch-policy" => opts.watch = true,
+            "--heartbeat-timeout" => {
+                let secs: u64 = it
+                    .next()
+                    .and_then(|s| s.parse().ok())
+                    .ok_or_else(unrecognised)?;
+                if secs == 0 {
+                    return Err(format!("--heartbeat-timeout must be at least 1\n{USAGE}"));
+                }
+                opts.heartbeat_secs = Some(secs);
+            }
+            "--state-file" => opts.state_file = Some(it.next().ok_or_else(unrecognised)?.clone()),
             _ => return Err(unrecognised()),
         }
     }
@@ -101,6 +129,23 @@ fn main() -> ExitCode {
     };
 
     match mode {
+        Mode::Uninstall => {
+            let root = Path::new(pins::PIN_ROOT);
+            match pins::uninstall(root) {
+                Ok(true) => {
+                    println!("removed {}: protection ended", root.display());
+                    ExitCode::SUCCESS
+                }
+                Ok(false) => {
+                    println!("nothing pinned at {}", root.display());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("rk-sensor: {e:#}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Mode::Help => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -140,6 +185,10 @@ struct SensorPolicyHandler {
     engine: PolicyEngine,
     lsm_active: bool,
     k8s_root: Option<String>,
+    /// Seconds without a heartbeat before governed ENFORCE workloads are
+    /// denied (Phase 6 §4); `None` means the default.
+    heartbeat_secs: Option<u64>,
+    state_file: Option<String>,
 }
 
 impl PolicyHandler for SensorPolicyHandler {
@@ -350,7 +399,22 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         .context("failed to start the tokio runtime")?;
 
     runtime.block_on(async {
-        let mut ebpf = loader::open(Object::Production)?;
+        // Pinned maps first (docs/design/phase-6.md §3). An adopted pin set
+        // has run on a stale heartbeat for as long as the sensor was down, so
+        // beat before anything slow.
+        let bytes = loader::object_bytes(Object::Production)?;
+        let pins::Pinned {
+            mut ebpf,
+            adoption,
+            epoch,
+            links,
+        } = pins::open(bytes, Path::new(pins::PIN_ROOT))?;
+        let timeout =
+            Duration::from_secs(opts.heartbeat_secs.unwrap_or(DEFAULT_HEARTBEAT_SECS));
+        let _heartbeat = Heartbeat::start(&mut ebpf, timeout)?;
+        resilience::protect_self(&mut ebpf)?;
+        info!(?adoption, heartbeat_timeout_s = timeout.as_secs(), "pin set ready");
+
         let btf = aya::Btf::from_sys_fs().ok();
         let programs = loader::load_programs(Object::Production, &mut ebpf, btf.as_ref());
         if let Some(failed) = programs.iter().find(|p| !p.probe && !p.loaded) {
@@ -363,14 +427,17 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
 
         // LSM programs attach even where BPF LSM is inactive, but are never
         // called there. Attach them only where they work, and let the engine
-        // refuse rules that need them (docs/design/phase-5b.md §6).
+        // refuse rules that need them (docs/design/phase-5b.md §6). Links
+        // already pinned by an earlier sensor are adopted, not re-attached.
         let lsm_active = policy::bpf_lsm_active();
+        let links = Some(links.as_path());
         let cgroup_root = Path::new(policy::CGROUP_FS).join(rk_policy::net::CGROUP_ROOT);
-        let mut attached = policy::attach_sock_addr(&mut ebpf, &cgroup_root)?;
+        let mut attached = policy::attach_sock_addr(&mut ebpf, &cgroup_root, links)?;
         if lsm_active {
-            attached.extend(policy::attach_network_lsm(&mut ebpf)?);
-            attached.extend(policy::attach_exec(&mut ebpf)?);
-            attached.extend(policy::attach_file(&mut ebpf)?);
+            attached.extend(policy::attach_network_lsm(&mut ebpf, links)?);
+            attached.extend(policy::attach_exec(&mut ebpf, links)?);
+            attached.extend(policy::attach_file(&mut ebpf, links)?);
+            attached.extend(policy::attach_guard(&mut ebpf, links)?);
         } else {
             warn!("BPF LSM is not active: exec, file and raw-socket rules will be refused");
         }
@@ -378,6 +445,7 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             attached.extend(policy::attach_sock_addr(
                 &mut ebpf,
                 &Path::new(policy::CGROUP_FS).join(root),
+                links,
             )?);
             info!(
                 root = root.as_str(),
@@ -388,6 +456,18 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
 
         let mut engine = PolicyEngine::default();
         engine.set_lsm_active(lsm_active);
+        engine.set_state_file(
+            PathBuf::from(opts.state_file.as_deref().unwrap_or(DEFAULT_STATE_FILE)),
+            &epoch,
+        );
+        if adoption == pins::Adoption::Adopted {
+            let restored = engine.adopt(&mut ebpf)?;
+            info!(
+                restored,
+                generation = engine.generation(),
+                "adopted the running policy"
+            );
+        }
         let stop = Arc::new(AtomicBool::new(false));
         let ring = consumer::take_ring(&mut ebpf)?;
 
@@ -527,10 +607,23 @@ mod tests {
                 policy: Some("/p".into()),
                 watch: true,
                 k8s_root: Some("auto".into()),
+                ..RunOpts::default()
             }))
         );
         assert!(parse_args(&args(&["--policy"])).is_err());
         assert!(parse_args(&args(&["--k8s-cgroup-root"])).is_err());
+        assert_eq!(
+            parse_args(&args(&["--heartbeat-timeout", "3", "--state-file", "/s.json"])),
+            Ok(Mode::Run(RunOpts {
+                heartbeat_secs: Some(3),
+                state_file: Some("/s.json".into()),
+                ..RunOpts::default()
+            }))
+        );
+        for bad in [["--heartbeat-timeout", "0"], ["--heartbeat-timeout", "x"]] {
+            assert!(parse_args(&args(&bad)).is_err(), "{bad:?}");
+        }
+        assert_eq!(parse_args(&args(&["--uninstall"])), Ok(Mode::Uninstall));
         assert_eq!(parse_args(&args(&["--selftest"])), Ok(Mode::Selftest));
         assert_eq!(parse_args(&args(&["-V"])), Ok(Mode::Version));
         assert_eq!(

@@ -24,15 +24,18 @@ embedded-bpf = []
 anyhow.workspace = true
 aya.workspace = true
 bytemuck.workspace = true
+hex.workspace = true
 libc.workspace = true
 rk-ebpf-common = { path = "../rk-ebpf-common" }
 rk-policy = { path = "../rk-policy" }
 rk-agentd = { path = "../rk-agentd" }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

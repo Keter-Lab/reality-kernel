@@ -101,11 +101,11 @@ int BPF_PROG(rk_exec_check, struct linux_binprm *bprm, int ret)
 
     /* Denied (or audit-would-deny) execs never reach sched_process_exec, so the
      * decision is recorded here. Allowed execs are recorded by rk_exec_record. */
-    if (action == RK_ACTION_DENY) {
+    if (rk_effective_deny(&g, action)) {
         msg = rk_scratch();
         if (msg) {
             rk_fill_hdr(&msg->hdr, g.cgroup_id, g.policy_gen, RK_EV_EXEC, rk_reported_verdict(&g, action),
-                        rule_id);
+                        rk_rule(&g, action, rule_id));
             rk_fill_task(&msg->hdr);
             body = (struct rk_payload_exec *)msg->payload;
             body->file_dev = key.dev;

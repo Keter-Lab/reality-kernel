@@ -13,7 +13,7 @@ use std::fmt;
 use std::net::{IpAddr, Ipv6Addr};
 
 use ipnet::{IpNet, Ipv6Net};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Maximum number of profiles (`RK_MAX_PROFILES` in rk_abi.h).
 pub const MAX_PROFILES: u32 = 1024;
@@ -524,7 +524,7 @@ impl Policy {
 /// Profile name → id allocation that stays stable across reloads, so cgroup
 /// bindings never have to change when a policy is re-applied. Ids are never
 /// reused within the lifetime of one allocator.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProfileIds {
     ids: BTreeMap<String, u32>,
     next: u32,

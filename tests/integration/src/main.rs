@@ -30,6 +30,9 @@ use serde::{Deserialize, Serialize};
 const CHILD_DEADLINE: Duration = Duration::from_secs(60);
 /// Upper bound for reading the ring buffer until it is empty.
 const DRAIN_DEADLINE: Duration = Duration::from_secs(5);
+/// Heartbeat timeout of the in-process suites. The heartbeat thread beats
+/// every quarter of it, so it never goes stale during a run.
+const HARNESS_HEARTBEAT: Duration = Duration::from_secs(30);
 
 /// Progress goes to stderr so the CI log shows where a run stopped; stdout
 /// carries only the JSON report.
@@ -492,6 +495,15 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         }
     }
 
+    // Kept alive for the whole run: a stale heartbeat denies every governed
+    // ENFORCE action (docs/design/phase-6.md §4).
+    let _heartbeat = match rk_sensor::resilience::Heartbeat::start(&mut ebpf, HARNESS_HEARTBEAT) {
+        Ok(h) => h,
+        Err(e) => {
+            checks.push(TestCheck::fail("heartbeat_start", format!("{e:#}")));
+            return;
+        }
+    };
     if let Err(e) = rk_sensor::policy::attach_all(&mut ebpf, cgroup_slice) {
         checks.push(TestCheck::fail("attach_all", format!("{e:#}")));
         return;
@@ -2176,6 +2188,9 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             }
         }
 
+        // Kept alive for the whole run: a stale heartbeat denies every
+        // governed ENFORCE action (docs/design/phase-6.md §4).
+        let _heartbeat = rk_sensor::resilience::Heartbeat::start(&mut ebpf_fail, HARNESS_HEARTBEAT)?;
         rk_sensor::policy::attach_all(&mut ebpf_fail, cgroup_slice)?;
         let mut engine_fail = rk_sensor::policy::PolicyEngine::default();
         engine_fail.apply_text(&mut ebpf_fail, POLICY_TEXT)?;

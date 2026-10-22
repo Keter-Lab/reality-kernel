@@ -12,7 +12,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use rk_ebpf_common::{
     rk_event_type, rk_hdr, rk_payload_exec, rk_payload_file, rk_payload_file_deny, rk_payload_net,
-    rk_payload_sock, rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN, RK_SCRATCH_PAYLOAD_MAX,
+    rk_payload_sock, rk_payload_tamper, rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN,
+    RK_SCRATCH_PAYLOAD_MAX,
 };
 
 const HDR_LEN: usize = core::mem::size_of::<rk_hdr>();
@@ -129,8 +130,13 @@ pub enum Payload<'a> {
         body: rk_payload_file_deny,
         strings: Strings<'a>,
     },
-    /// Event types whose body is not defined yet (unlink, rename, fork, exit,
-    /// tamper). Bytes are passed through for logging only.
+    /// A self-protection decision (guard.bpf.c): a governed task used bpf(),
+    /// signalled or traced the sensor, or tried to remove pins.
+    Tamper {
+        body: rk_payload_tamper,
+    },
+    /// Event types whose body is not defined yet (unlink, rename, fork, exit).
+    /// Bytes are passed through for logging only.
     Raw {
         data: &'a [u8],
     },
@@ -285,6 +291,13 @@ pub fn decode(bytes: &[u8]) -> Result<Event<'_>, DecodeError> {
             }
             Payload::Sock { body }
         }
+        rk_event_type::RK_EV_TAMPER => {
+            let (body, tail) = read_body::<rk_payload_tamper>(payload)?;
+            if !tail.is_empty() {
+                return Err(DecodeError::TrailingBytes(tail.len()));
+            }
+            Payload::Tamper { body }
+        }
         rk_event_type::RK_EV_FILE_DENY => {
             let (body, tail) = read_body::<rk_payload_file_deny>(payload)?;
             let strings = Strings::validate(tail, body.str_count)?;
@@ -293,8 +306,7 @@ pub fn decode(bytes: &[u8]) -> Result<Event<'_>, DecodeError> {
         rk_event_type::RK_EV_UNLINK
         | rk_event_type::RK_EV_RENAME
         | rk_event_type::RK_EV_FORK
-        | rk_event_type::RK_EV_EXIT
-        | rk_event_type::RK_EV_TAMPER => Payload::Raw { data: payload },
+        | rk_event_type::RK_EV_EXIT => Payload::Raw { data: payload },
         _ => return Err(DecodeError::UnknownType(hdr.type_)),
     };
 
@@ -451,6 +463,23 @@ pub(crate) mod tests {
         long.push(0);
         let rec = record(&hdr(rk_event_type::RK_EV_SOCK_CREATE, 0), &long);
         assert_eq!(decode(&rec), Err(DecodeError::TrailingBytes(1)));
+    }
+
+    #[test]
+    fn decodes_tamper() {
+        let body = rk_payload_tamper {
+            hook: rk_ebpf_common::rk_tamper_hook::RK_TAMPER_SIGNAL as u16,
+            target_tgid: 4242,
+            detail: 15,
+            ..Zeroable::zeroed()
+        };
+        let rec = record(
+            &hdr(rk_event_type::RK_EV_TAMPER, rk_verdict::RK_VERDICT_DENY),
+            bytemuck::bytes_of(&body),
+        );
+        assert_eq!(decode(&rec).unwrap().payload, Payload::Tamper { body });
+        let rec = record(&hdr(rk_event_type::RK_EV_TAMPER, 0), &[0u8; 8]);
+        assert!(decode(&rec).is_err());
     }
 
     #[test]
