@@ -45,6 +45,10 @@ pub trait PolicyHandler: Send + Sync {
     ) -> Result<Option<String>>;
     /// Binds a Kubernetes container cgroup (relative to the cgroupfs root).
     fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64>;
+    /// Event pipeline counters for `rk status` (Phase 7 §5).
+    fn counters(&self) -> BTreeMap<String, u64> {
+        BTreeMap::new()
+    }
 }
 
 /// Server configuration.
@@ -364,12 +368,13 @@ async fn handle_connection(
         }
         Request::Status => {
             let handler_lock = handler.lock().await;
-            let status = registry.build_status(
+            let mut status = registry.build_status(
                 true,
                 handler_lock.generation(),
                 handler_lock.active_profiles(),
                 handler_lock.capabilities(),
             );
+            status.counters = handler_lock.counters();
             send_response(client.as_raw_fd(), &Response::StatusSuccess { status })
         }
         Request::Signal { agent_id, signal } => {

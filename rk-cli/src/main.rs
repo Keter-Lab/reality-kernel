@@ -233,6 +233,14 @@ fn print_human_status(status: &DaemonStatus) {
     );
     println!("  generation : {}", status.generation);
     println!("  containers : {} (Kubernetes)", status.containers);
+    if !status.counters.is_empty() {
+        let line: Vec<String> = status
+            .counters
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect();
+        println!("  pipeline   : {}", line.join(" "));
+    }
     println!(
         "  profiles   : {}",
         if status.active_profiles.is_empty() {

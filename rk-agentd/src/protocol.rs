@@ -116,6 +116,10 @@ pub struct DaemonStatus {
     pub active_profiles: Vec<String>,
     pub agents: Vec<AgentStatusInfo>,
     pub capabilities: Vec<CapabilityStatus>,
+    /// Event pipeline counters (Phase 7 §5): kernel drops summed over CPUs,
+    /// records drained, userspace drops, decoder outcomes.
+    #[serde(default)]
+    pub counters: BTreeMap<String, u64>,
     /// Bound Kubernetes containers (Phase 5b).
     #[serde(default)]
     pub containers: usize,

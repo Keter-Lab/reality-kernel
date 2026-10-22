@@ -232,6 +232,8 @@ jobs:
             | sed '1d;$d' > "agent-${{ matrix.kernel }}.json"
           sed -n '/===RK_RESILIENCE_BEGIN===/,/===RK_RESILIENCE_END===/p' vm.log \
             | sed '1d;$d' > "resilience-${{ matrix.kernel }}.json"
+          sed -n '/===RK_BENCH_BEGIN===/,/===RK_BENCH_END===/p' vm.log \
+            | sed '1d;$d' > "bench-${{ matrix.kernel }}.json"
           if [ "$rc" -ne 0 ]; then
             .github/scripts/annotate.sh vm.log "Linux ${{ matrix.kernel }}"
             python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" <<'PY'
@@ -266,6 +268,47 @@ jobs:
             agent-${{ matrix.kernel }}.json
             resilience-${{ matrix.kernel }}.json
             vm.log
+          if-no-files-found: warn
+
+      # Phase 7: each kernel's benchmark report, collected by bench-report.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: bench-${{ matrix.kernel }}
+          path: bench-${{ matrix.kernel }}.json
+          if-no-files-found: warn
+
+  bench-report:
+    name: Benchmark report and budget gate
+    needs: vm-matrix
+    if: always() && needs.vm-matrix.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: bench-*
+          merge-multiple: true
+          path: bench/
+
+      # docs/design/phase-7.md §7: report p50/p99 per hook per kernel, and fail
+      # when a measurement exceeds tests/bench/budget.json.
+      - name: Report and gate
+        run: |
+          set -o pipefail
+          python3 tests/bench/gate.py tests/bench/budget.json bench/*.json | tee bench-report.md
+          rc=${PIPESTATUS[0]}
+          cat bench-report.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: bench-report
+          path: |
+            bench-report.md
+            bench/
           if-no-files-found: warn
 
   k8s:
