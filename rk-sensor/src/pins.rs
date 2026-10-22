@@ -160,7 +160,7 @@ pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
     let wakeup_threshold = u64::from(ring_bytes / 8);
     let mut loader = EbpfLoader::new();
     loader
-        .set_max_entries("events_ringbuf", ring_bytes)
+        .map_max_entries("events_ringbuf", ring_bytes)
         .override_global("rk_wakeup_threshold", &wakeup_threshold, true);
     for &name in PINNED_MAPS {
         loader.map_pin_path(name, maps.join(name));

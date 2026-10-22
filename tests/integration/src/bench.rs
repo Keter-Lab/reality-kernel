@@ -180,7 +180,7 @@ pub fn run(bpftool: Option<&Path>) -> Result<Value> {
     );
     let wakeup_threshold = u64::from(ring_bytes / 8);
     let mut ebpf = aya::EbpfLoader::new()
-        .set_max_entries("events_ringbuf", ring_bytes)
+        .map_max_entries("events_ringbuf", ring_bytes)
         .override_global("rk_wakeup_threshold", &wakeup_threshold, true)
         .load(bytes)
         .context("load rk.bpf.o")?;
