@@ -1,6 +1,6 @@
 # Design note: Phase 6 — resilience and self-protection
 
-Status: **PROPOSED** (2026-10-22), awaiting review of the decisions in §9.
+Status: **ACCEPTED** (2026-10-22). All five decisions in §9 approved as recommended.
 Branch: `phase-6-resilience` (from `main` at f5eb4ec)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 6 ("Protection
 survives daemon restarts and governed workloads cannot weaken it").
