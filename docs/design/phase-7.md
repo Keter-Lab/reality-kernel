@@ -1,6 +1,6 @@
 # Design note: Phase 7 — sensor performance
 
-Status: **PROPOSED** (2026-10-22), awaiting review of the decisions in §8.
+Status: **ACCEPTED** (2026-10-22). All four decisions in §8 approved as recommended; §7 revised from the first measurement.
 Branch: `phase-7-performance` (from `main` at 75389d8)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 7 ("Low and
 predictable overhead with measured, published numbers").
