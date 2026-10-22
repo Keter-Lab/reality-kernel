@@ -1,0 +1,16 @@
+# Reality Kernel policy (docs/policy.md).
+#
+# Installed empty: nothing is governed until you define profiles and bind
+# cgroups (or launch agents with `rk run --profile NAME -- CMD`). Apply
+# changes with `systemctl reload rk-sensor` or `rk policy apply FILE`.
+#
+# Example:
+#
+# [profiles.agent]
+# mode = "enforce"
+# network.default = "deny"
+#
+# [[profiles.agent.network.allow]]
+# cidr = "10.0.0.0/8"
+# proto = ["tcp"]
+# ports = ["443"]
