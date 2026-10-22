@@ -24,6 +24,7 @@ use rk_agentd::server::{self, PolicyHandler, ServerConfig};
 use rk_ebpf_common::rk_counter;
 use rk_sensor::loader::{self, Object};
 use rk_sensor::metrics::{self, Metrics, Snapshot, SnapshotFn};
+use rk_sensor::consumer::RecordHandler as _;
 use rk_sensor::observe::{KernelLosses, Observer, SharedContext};
 use rk_sensor::policy::{self, PolicyEngine};
 use rk_sensor::resilience::{self, Heartbeat};
@@ -38,6 +39,10 @@ const USAGE: &str = "usage: rk-sensor [--policy FILE] [--watch-policy] \
                      [--audit-dir DIR|off] [--audit-key FILE] [--audit-allow] \
                      [--metrics-addr ADDR|off] [--otlp-endpoint http://HOST:PORT] \
                      | --uninstall | --selftest | --version | --help";
+
+/// Longest time a replacement spends draining the old ring buffer
+/// (docs/design/phase-10.md §3).
+const OLD_RING_DRAIN: Duration = Duration::from_secs(1);
 
 /// Where the metrics endpoint listens by default (docs/design/phase-9.md §3.5).
 const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9464";
@@ -563,14 +568,16 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         // has run on a stale heartbeat for as long as the sensor was down, so
         // beat before anything slow.
         let bytes = loader::object_bytes(Object::Production)?;
+        let pin_root = Path::new(pins::PIN_ROOT);
         let pins::Pinned {
             mut ebpf,
             adoption,
             epoch,
             links,
+            previous,
         } = pins::open(
             bytes,
-            Path::new(pins::PIN_ROOT),
+            pin_root,
             consumer::ring_size(
                 std::thread::available_parallelism().map_or(1, usize::from),
                 opts.ring_mb,
@@ -638,6 +645,35 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
                 "adopted the running policy"
             );
         }
+
+        // Replacing a different object (docs/design/phase-10.md §3): both
+        // generations are attached now. The new maps must hold the policy
+        // before the old pin set may go; otherwise the old one keeps
+        // enforcing and this sensor stops.
+        let mut old_ring = None;
+        if let Some(prev) = &previous {
+            let carried = (|| -> Result<&'static str> {
+                if engine.migrate(&mut ebpf, &prev.epoch)? {
+                    return Ok("the replaced pin set's state");
+                }
+                let text = std::fs::read_to_string(policy_path)
+                    .with_context(|| format!("no state to carry over and cannot read {policy_path}"))?;
+                engine.apply_text(&mut ebpf, &text)?;
+                Ok("the policy file")
+            })();
+            match carried {
+                Ok(from) => info!(from, generation = engine.generation(), "policy carried into the new object"),
+                Err(e) => {
+                    pins::abort_replacement(pin_root)?;
+                    return Err(e.context(
+                        "cannot replace the running object; it stays attached and keeps enforcing",
+                    ));
+                }
+            }
+            old_ring = aya::maps::MapData::from_pin(prev.root.join("maps").join("events_ringbuf"))
+                .ok()
+                .and_then(|data| aya::maps::RingBuf::try_from(aya::maps::Map::RingBuf(data)).ok());
+        }
         let ring = consumer::take_ring(&mut ebpf)?;
         let registry = AgentRegistry::new();
 
@@ -679,7 +715,7 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             kernel_lost(&ebpf),
         )));
         let pipeline_stats = Arc::new(consumer::PipelineStats::default());
-        let observer = Observer::new(
+        let mut observer = Observer::new(
             Some(registry.clone()),
             audit_ctx.clone(),
             writer,
@@ -689,6 +725,30 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             pipeline_stats.clone(),
             exporter,
         );
+        if let Some(mut old) = old_ring.take() {
+            // Decisions the old programs made since the old sensor stopped.
+            // They are still attached and still writing, so the drain is
+            // bounded in time; anything after the deadline is only in the
+            // old ring, which is about to go.
+            let deadline = std::time::Instant::now() + OLD_RING_DRAIN;
+            let mut drained = 0u64;
+            while std::time::Instant::now() < deadline {
+                let Some(item) = old.next() else {
+                    break;
+                };
+                observer.record(&item, &pipeline_stats.decode);
+                drained += 1;
+            }
+            drop(old);
+            pins::finish_replacement(pin_root)?;
+            info!(
+                drained,
+                "replaced the running object without a gap: old programs detached after the new ones took over"
+            );
+        } else if previous.is_some() {
+            pins::finish_replacement(pin_root)?;
+            info!("replaced the running object without a gap (old ring buffer not readable)");
+        }
         let consumer = consumer::Consumer::start_with(
             ring,
             Box::new(observer),

@@ -2,6 +2,7 @@
 #   make ARCH=x86      -> build/x86/*.bpf.o
 #   make ARCH=arm64    -> build/arm64/*.bpf.o
 #   make all-arches
+#   build/<arch>-next/ holds the upgrade-test variant (docs/design/phase-10.md §7)
 CLANG ?= clang
 LLVM_STRIP ?= llvm-strip
 
@@ -25,7 +26,10 @@ OBJECTS := $(OUT)/rk.bpf.o $(OUT)/rk_selftest.bpf.o $(OUT)/rk_probes.bpf.o \
 HEADERS := include/rk_abi.h include/vmlinux/$(ARCH)/vmlinux.h src/common.bpf.h src/net.bpf.c \
 	src/exec.bpf.c src/file.bpf.c src/guard.bpf.c
 
-all: $(OBJECTS)
+NEXT := $(OUT)-next
+NEXT_OBJECTS := $(NEXT)/rk.bpf.o $(NEXT)/rk_selftest.bpf.o $(NEXT)/rk_probes.bpf.o
+
+all: $(OBJECTS) $(NEXT_OBJECTS)
 
 all-arches:
 	$(MAKE) ARCH=x86
@@ -44,6 +48,18 @@ $(OUT)/rk_emitfail.bpf.o: src/rk.bpf.c $(HEADERS)
 	@mkdir -p $(OUT)
 	$(CLANG) $(CFLAGS) -DRK_TEST_FORCE_EMIT_FAIL -c $< -o $@
 	$(LLVM_STRIP) -g $@
+
+# Upgrade-test variant: rk.bpf.o with one extra constant, so its bytes (and
+# rk_meta's object hash) differ. The other objects are copied unchanged so
+# `RK_BPF_VARIANT=next` builds of rk-sensor find a complete directory.
+$(NEXT)/rk.bpf.o: src/rk.bpf.c $(HEADERS)
+	@mkdir -p $(NEXT)
+	$(CLANG) $(CFLAGS) -DRK_OBJECT_VARIANT=1 -c $< -o $@
+	$(LLVM_STRIP) -g $@
+
+$(NEXT)/%.bpf.o: $(OUT)/%.bpf.o
+	@mkdir -p $(NEXT)
+	cp $< $@
 
 $(OUT)/reject_infinite_loop.bpf.o: test/reject_infinite_loop.bpf.c $(HEADERS)
 	@mkdir -p $(OUT)
