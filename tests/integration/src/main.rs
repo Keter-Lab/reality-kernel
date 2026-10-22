@@ -415,7 +415,10 @@ fn main() {
         match bench::run(bpftool.as_deref()) {
             Ok(report) => {
                 println!("===RK_BENCH_BEGIN===");
-                println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).unwrap_or_default()
+                );
                 println!("===RK_BENCH_END===");
                 std::process::exit(0);
             }

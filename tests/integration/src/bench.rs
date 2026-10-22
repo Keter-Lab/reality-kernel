@@ -88,7 +88,8 @@ fn measure(cgroup: &str, op: &str, iters: usize) -> Result<(u64, u64)> {
     let (mut p50, mut p99) = (Vec::new(), Vec::new());
     for _ in 0..REPEATS {
         let out = child(cgroup, "bench", &[op, &iters.to_string()])?;
-        let v: Value = serde_json::from_str(out.trim()).with_context(|| format!("parse {out:?}"))?;
+        let v: Value =
+            serde_json::from_str(out.trim()).with_context(|| format!("parse {out:?}"))?;
         p50.push(v["p50"].as_u64().context("p50")?);
         p99.push(v["p99"].as_u64().context("p99")?);
     }
@@ -96,7 +97,9 @@ fn measure(cgroup: &str, op: &str, iters: usize) -> Result<(u64, u64)> {
 }
 
 fn measure_all(cgroup: &str) -> Result<Vec<(u64, u64)>> {
-    OPS.iter().map(|(op, _, n)| measure(cgroup, op, *n)).collect()
+    OPS.iter()
+        .map(|(op, _, n)| measure(cgroup, op, *n))
+        .collect()
 }
 
 /// Average ns per run of each attached rk_* program, from bpf_stats.
@@ -133,7 +136,12 @@ fn rate_run(
     let out = child(
         GOVERNED,
         "paced_workload",
-        &["udp", "127.0.0.1:9", &count.to_string(), &pace_us.to_string()],
+        &[
+            "udp",
+            "127.0.0.1:9",
+            &count.to_string(),
+            &pace_us.to_string(),
+        ],
     )?;
     let secs = start.elapsed().as_secs_f64();
     // Longer than the drain thread's epoll timeout, so nothing is in flight.
@@ -189,18 +197,17 @@ pub fn run(bpftool: Option<&Path>) -> Result<Value> {
     let mut engine = rk_sensor::policy::PolicyEngine::default();
     engine.apply_text(&mut ebpf, POLICY)?;
     let ring = rk_sensor::consumer::take_ring(&mut ebpf)?;
-    let consumer = rk_sensor::consumer::Consumer::start(
-        ring,
-        None,
-        rk_sensor::consumer::Config::default(),
-    )?;
+    let consumer =
+        rk_sensor::consumer::Consumer::start(ring, None, rk_sensor::consumer::Config::default())?;
     let pipeline = consumer.stats();
 
     let ungoverned = measure_all(UNGOVERNED)?;
     let stats_on = fs::write("/proc/sys/kernel/bpf_stats_enabled", b"1").is_ok();
     let governed = measure_all(GOVERNED)?;
     let per_program = match (stats_on, bpftool) {
-        (true, Some(tool)) => bpf_stats(tool).unwrap_or_else(|e| json!({ "error": format!("{e:#}") })),
+        (true, Some(tool)) => {
+            bpf_stats(tool).unwrap_or_else(|e| json!({ "error": format!("{e:#}") }))
+        }
         _ => json!({ "error": "bpf_stats or bpftool unavailable" }),
     };
     let _ = fs::write("/proc/sys/kernel/bpf_stats_enabled", b"0");

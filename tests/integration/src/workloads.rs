@@ -1547,8 +1547,10 @@ fn pin_to_cpu0() {
 /// times one syscall loop per iteration after a warm-up, and prints
 /// `{"p50":ns,"p99":ns,"mean":ns,"n":iters}`.
 fn handle_bench(args: &[String]) -> i32 {
-    let (Some(op), Some(iters)) = (args.first(), args.get(1).and_then(|s| s.parse::<usize>().ok()))
-    else {
+    let (Some(op), Some(iters)) = (
+        args.first(),
+        args.get(1).and_then(|s| s.parse::<usize>().ok()),
+    ) else {
         eprintln!("[child] bench expects <op> <iterations>");
         return 290;
     };
