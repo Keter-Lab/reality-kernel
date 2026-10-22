@@ -1592,6 +1592,7 @@ dependencies = [
  "rk-sensor",
  "serde",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

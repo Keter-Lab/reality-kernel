@@ -1,0 +1,22 @@
+name = "exec_allowlist_identity"
+description = "Exec allowlist: the listed file runs, another copy of the same program does not (identity is the file, not its content)"
+setup = ["exec:/run/rk-conf/allowed", "exec:/run/rk-conf/other"]
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+
+[profiles.case.exec]
+default = "deny"
+allow = ["/run/rk-conf/allowed"]
+"""
+
+[[op]]
+kind = "exec"
+target = "/run/rk-conf/allowed"
+expect = "allow"
+
+[[op]]
+kind = "exec"
+target = "/run/rk-conf/other"
+expect = "deny"

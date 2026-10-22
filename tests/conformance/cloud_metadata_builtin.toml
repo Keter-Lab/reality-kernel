@@ -1,0 +1,19 @@
+name = "cloud_metadata_builtin"
+description = "The built-in cloud-metadata list is included by default, even with default allow"
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+"""
+
+[[op]]
+kind = "connect"
+target = "169.254.169.254:80"
+proto = "udp"
+expect = "deny"
+
+[[op]]
+kind = "connect"
+target = "10.99.0.2:80"
+proto = "udp"
+expect = "allow"

@@ -1,0 +1,23 @@
+name = "v4_mapped_equivalence"
+description = "An IPv4 deny also covers its IPv4-mapped IPv6 form"
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+
+[[profiles.case.network.deny]]
+cidr = "10.99.0.5/32"
+proto = ["udp"]
+"""
+
+[[op]]
+kind = "connect"
+target = "[::ffff:10.99.0.5]:80"
+proto = "udp"
+expect = "deny"
+
+[[op]]
+kind = "connect"
+target = "10.99.0.5:80"
+proto = "udp"
+expect = "deny"

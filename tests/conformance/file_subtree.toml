@@ -1,0 +1,25 @@
+name = "file_subtree"
+description = "A subtree rule covers files below the directory, not siblings of it"
+setup = ["file:/run/rk-conf/tree/deep/a", "file:/run/rk-conf/beside"]
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+
+[[profiles.case.files.deny]]
+path = "/run/rk-conf/tree"
+subtree = true
+access = ["read"]
+"""
+
+[[op]]
+kind = "open"
+target = "/run/rk-conf/tree/deep/a"
+access = "r"
+expect = "deny"
+
+[[op]]
+kind = "open"
+target = "/run/rk-conf/beside"
+access = "r"
+expect = "allow"

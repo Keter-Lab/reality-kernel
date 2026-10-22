@@ -664,3 +664,34 @@ mod tests {
         assert!(describe_child(None).contains("signal"));
     }
 }
+
+#[cfg(test)]
+mod dev_encoding_props {
+    use super::kernel_dev;
+    use proptest::prelude::*;
+
+    /// glibc's `makedev`: the userspace `st_dev` layout.
+    fn makedev(major: u64, minor: u64) -> u64 {
+        ((major & 0xffff_f000) << 32)
+            | ((major & 0x0000_0fff) << 8)
+            | ((minor & 0xffff_ff00) << 12)
+            | (minor & 0x0000_00ff)
+    }
+
+    proptest! {
+        /// Phase 8 §3.3: exec and file rules are keyed by the kernel's dev_t
+        /// (MAJOR << 20 | MINOR). Every major/minor the kernel can encode
+        /// (12-bit major, 20-bit minor) converts exactly.
+        #[test]
+        fn kernel_dev_matches_kernel_encoding(major in 0u64..(1 << 12), minor in 0u64..(1 << 20)) {
+            prop_assert_eq!(kernel_dev(makedev(major, minor)), (major << 20) | minor);
+        }
+    }
+
+    #[test]
+    fn kernel_dev_examples() {
+        // /dev/sda1 (8:1) and an NVMe partition (259:5).
+        assert_eq!(kernel_dev(makedev(8, 1)), (8 << 20) | 1);
+        assert_eq!(kernel_dev(makedev(259, 5)), (259 << 20) | 5);
+    }
+}

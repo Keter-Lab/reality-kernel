@@ -1,0 +1,23 @@
+name = "protocol_mask"
+description = "A TCP-only deny leaves UDP to the same address alone"
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+
+[[profiles.case.network.deny]]
+cidr = "10.99.0.0/24"
+proto = ["tcp"]
+"""
+
+[[op]]
+kind = "connect"
+target = "10.99.0.3:80"
+proto = "tcp"
+expect = "deny"
+
+[[op]]
+kind = "connect"
+target = "10.99.0.3:80"
+proto = "udp"
+expect = "allow"

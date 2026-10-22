@@ -7,6 +7,19 @@ name: Kernel
 on:
   push:
     branches: [main, "phase-*"]
+    # Changes that cannot affect what runs in the VMs or kind skip the matrix
+    # on push (docs/design/phase-8.md §3.7). Pull requests always run it, so
+    # nothing reaches main without the full matrix. Files this workflow reads
+    # (bench gate and budget, traceability script and index, conformance
+    # cases) are deliberately not listed.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "assets/**"
+      - "tests/test_*.py"
+      - "tests/coverage_summary.py"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/autofix.yml"
   pull_request:
     branches: [main]
 
@@ -232,11 +245,13 @@ jobs:
             | sed '1d;$d' > "agent-${{ matrix.kernel }}.json"
           sed -n '/===RK_RESILIENCE_BEGIN===/,/===RK_RESILIENCE_END===/p' vm.log \
             | sed '1d;$d' > "resilience-${{ matrix.kernel }}.json"
+          sed -n '/===RK_CONFORMANCE_BEGIN===/,/===RK_CONFORMANCE_END===/p' vm.log \
+            | sed '1d;$d' > "conformance-${{ matrix.kernel }}.json"
           sed -n '/===RK_BENCH_BEGIN===/,/===RK_BENCH_END===/p' vm.log \
             | sed '1d;$d' > "bench-${{ matrix.kernel }}.json"
           if [ "$rc" -ne 0 ]; then
             .github/scripts/annotate.sh vm.log "Linux ${{ matrix.kernel }}"
-            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" <<'PY'
+            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" "conformance-${{ matrix.kernel }}.json" <<'PY'
           import json, os, sys
           for fname in sys.argv[1:]:
             if os.path.exists(fname) and os.path.getsize(fname) > 0:
@@ -267,6 +282,7 @@ jobs:
             integration-${{ matrix.kernel }}.json
             agent-${{ matrix.kernel }}.json
             resilience-${{ matrix.kernel }}.json
+            conformance-${{ matrix.kernel }}.json
             vm.log
           if-no-files-found: warn
 
@@ -383,8 +399,35 @@ jobs:
             k8s-logs/
           if-no-files-found: warn
 
+  traceability:
+    name: Traceability (every criterion's tests passed)
+    needs: [vm-matrix, k8s]
+    if: always() && needs.vm-matrix.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: selftest-*
+          merge-multiple: true
+          path: reports/
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: k8s-results
+          path: reports/
+
+      # docs/design/phase-8.md §3.1: a deleted, renamed, skipped or failing test
+      # fails against the criterion it proves, on every kernel.
+      - name: Check the reports
+        run: |
+          set -o pipefail
+          python3 tests/traceability.py reports --kernels 5.15,6.1,6.6,6.12,6.18 reports/ \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
   fuzz:
-    name: Decoder fuzzing (10 min)
+    name: Decoder and policy fuzzing (2 x 5 min)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -401,4 +444,6 @@ jobs:
           tool: cargo-fuzz
 
       - name: Fuzz the decoder
-        run: .github/scripts/run-logged.sh "decoder fuzz" cargo +nightly fuzz run --target x86_64-unknown-linux-gnu decoder_fuzz -- -max_total_time=600 -rss_limit_mb=2048
+        run: |
+          .github/scripts/run-logged.sh "decoder fuzz" cargo +nightly fuzz run --target x86_64-unknown-linux-gnu decoder_fuzz -- -max_total_time=300 -rss_limit_mb=2048
+          .github/scripts/run-logged.sh "policy fuzz" cargo +nightly fuzz run --target x86_64-unknown-linux-gnu policy_fuzz -- -max_total_time=300 -rss_limit_mb=2048

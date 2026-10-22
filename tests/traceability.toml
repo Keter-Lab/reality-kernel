@@ -1,0 +1,306 @@
+# Acceptance criterion → named tests (docs/design/phase-8.md §3.1).
+#
+# Checked by tests/traceability.py: statically (every test exists in the
+# source; every criterion has a test) and, in CI, against the run's reports
+# (every vm: and k8s: test passed, on every kernel for vm:).
+#
+# Test kinds:
+#   vm:NAME   run_test in tests/integration/src/{main,agent,resilience}.rs; runs on all five kernels
+#   k8s:NAME  run_test in tests/k8s/run.sh; runs in the kind job
+#   unit:NAME Rust #[test] fn anywhere in the workspace (CI test job)
+#   go:NAME   Go test function in rk-nri (CI go job)
+#   py:NAME   pytest function under tests/ (CI python job)
+#   ci:NAME   a job in .github/workflows/*.yml whose success is the evidence
+
+# ---- Phase 2: network policy ---------------------------------------------
+
+[[criterion]]
+phase = "2"
+id = "net-enforce-eperm"
+text = "ENFORCE: the deny set gives EPERM over TCP and UDP, IPv4 and IPv6"
+tests = ["vm:net_enforce_tcp_v4", "vm:net_enforce_tcp_v6", "vm:net_enforce_udp_connect_v4",
+         "vm:net_enforce_udp_connect_v6", "vm:net_enforce_udp_sendmsg_v4",
+         "vm:net_enforce_udp_sendmsg_v6", "vm:net_enforce_v4_mapped"]
+
+[[criterion]]
+phase = "2"
+id = "net-telemetry-independent"
+text = "Verdicts are the same with the consumer paused, and when every emit fails"
+tests = ["vm:net_verdicts_independent_of_telemetry", "vm:net_verdicts_with_emit_failing"]
+
+[[criterion]]
+phase = "2"
+id = "net-audit"
+text = "AUDIT: operations succeed and report audit-would-deny with the rule id"
+tests = ["vm:net_audit_reports_rule_id"]
+
+[[criterion]]
+phase = "2"
+id = "net-ungoverned"
+text = "Processes outside governed cgroups are unaffected"
+tests = ["vm:net_ungoverned_untouched", "vm:net_unbound_sibling_untouched"]
+
+[[criterion]]
+phase = "2"
+id = "net-atomic-reload"
+text = "Policy reload is atomic"
+tests = ["vm:net_reload_atomic"]
+
+[[criterion]]
+phase = "2"
+id = "net-bypasses"
+text = "Raw/packet sockets, io_uring, TCP Fast Open and NAT64 can't bypass the rules"
+tests = ["vm:net_raw_socket_denied", "vm:net_packet_vnet_hdr_denied", "vm:net_io_uring_connect_denied",
+         "vm:net_tcp_fastopen_denied", "vm:net_nat64_equivalence"]
+
+[[criterion]]
+phase = "2"
+id = "net-compiler"
+text = "The compiled kernel lookup always agrees with the reference evaluator"
+tests = ["unit:compiled_lookup_matches_reference"]
+
+# ---- Phase 3: exec policy ------------------------------------------------
+
+[[criterion]]
+phase = "3"
+id = "exec-allowlist"
+text = "ENFORCE: unlisted executables are denied, listed ones run"
+tests = ["vm:exec_enforce_unlisted_denied", "vm:exec_enforce_listed_runs"]
+
+[[criterion]]
+phase = "3"
+id = "exec-identity"
+text = "Exec decisions follow file identity: symlinks, replaced binaries, scripts, unlinked files"
+tests = ["vm:exec_symlink_resolves_to_target", "vm:exec_replaced_binary_denied_until_reload",
+         "vm:exec_script_requires_interpreter", "vm:exec_unlinked_denied", "vm:exec_unlinked_override_allows"]
+
+[[criterion]]
+phase = "3"
+id = "exec-events"
+text = "Exec events carry the full argv, with a truncation flag when cut"
+tests = ["vm:exec_records_full_argv", "vm:exec_records_truncation_flag"]
+
+[[criterion]]
+phase = "3"
+id = "exec-audit"
+text = "AUDIT reports would-deny for exec"
+tests = ["vm:exec_audit_reports_would_deny"]
+
+[[criterion]]
+phase = "3"
+id = "exec-reload-quarantine"
+text = "Exec policy reload is atomic; quarantine blocks exec and network"
+tests = ["vm:exec_reload_atomic", "vm:exec_quarantine_blocks_exec_and_network"]
+
+[[criterion]]
+phase = "3"
+id = "exec-ungoverned"
+text = "Ungoverned processes are untouched by exec policy"
+tests = ["vm:exec_ungoverned_untouched", "vm:exec_unbound_sibling_untouched"]
+
+# ---- Phase 4: file policy ------------------------------------------------
+
+[[criterion]]
+phase = "4"
+id = "file-access-types"
+text = "Each access type is denied separately: read, write, truncate, delete, rename, link, create, setattr"
+tests = ["vm:file_open_read_denied", "vm:file_open_write_denied", "vm:file_openat2_denied",
+         "vm:file_io_uring_openat_denied", "vm:file_o_trunc_denied", "vm:file_truncate_denied",
+         "vm:file_ftruncate_denied", "vm:file_unlink_denied", "vm:file_unlinkat_dir_denied",
+         "vm:file_rename_source_denied", "vm:file_rename_replace_target_denied",
+         "vm:file_rename_exchange_denied", "vm:file_link_denied", "vm:file_create_in_protected_dir_denied",
+         "vm:file_chmod_denied"]
+
+[[criterion]]
+phase = "4"
+id = "file-identity"
+text = "Every way of naming the same file gets the same verdict"
+tests = ["vm:file_hardlink_same_verdict", "vm:file_bind_mount_same_verdict", "vm:file_symlink_same_verdict",
+         "vm:file_proc_fd_reopen_same_verdict", "vm:file_relative_path_same_verdict"]
+
+[[criterion]]
+phase = "4"
+id = "file-subtree"
+text = "Subtree rules apply; excessive nesting fails closed"
+tests = ["vm:file_subtree_rule_applies", "vm:file_deep_nesting_fails_closed"]
+
+[[criterion]]
+phase = "4"
+id = "file-protect-allowlist"
+text = "Allow-listed executables can't be modified or replaced"
+tests = ["vm:file_exec_allowlist_write_denied", "vm:file_exec_allowlist_replace_denied"]
+
+[[criterion]]
+phase = "4"
+id = "file-audit-reload-ungoverned"
+text = "AUDIT reports would-deny; reload is atomic; ungoverned processes untouched"
+tests = ["vm:file_audit_reports_would_deny", "vm:file_reload_atomic", "vm:file_ungoverned_untouched",
+         "vm:file_unbound_sibling_untouched"]
+
+# ---- Phase 5: agent governance -------------------------------------------
+
+[[criterion]]
+phase = "5"
+id = "agent-first-instruction"
+text = "An agent started with rk run is governed from its first instruction"
+tests = ["vm:agent_governed_from_first_instruction"]
+
+[[criterion]]
+phase = "5"
+id = "agent-children"
+text = "Children of a governed agent are governed automatically"
+tests = ["vm:agent_children_governed"]
+
+[[criterion]]
+phase = "5"
+id = "policy-pipeline"
+text = "Policy apply is atomic and reversible with one command; dry-run and diff work"
+tests = ["vm:policy_apply_atomic", "vm:policy_rollback_one_command", "vm:policy_dry_run_changes_nothing",
+         "vm:policy_diff_reports_changes"]
+
+[[criterion]]
+phase = "5"
+id = "agent-unprivileged"
+text = "Agents run unprivileged and can't leave their cgroup"
+tests = ["vm:agent_runs_unprivileged", "vm:agent_cannot_leave_cgroup", "unit:clone_flags_match_uapi"]
+
+[[criterion]]
+phase = "5"
+id = "agent-authorisation"
+text = "Only authorised callers change policy or launch a profile"
+tests = ["vm:socket_rejects_unauthorised_apply", "vm:run_rejects_non_launchable_profile"]
+
+[[criterion]]
+phase = "5"
+id = "agent-lifecycle-session"
+text = "Agent exit removes binding and cgroup; events carry the session id"
+tests = ["vm:agent_exit_removes_binding_and_cgroup", "vm:agent_session_id_in_events"]
+
+# ---- Phase 5b: Kubernetes ------------------------------------------------
+
+[[criterion]]
+phase = "5b"
+id = "k8s-first-instruction"
+text = "An annotated pod is governed from its first instruction, exec sessions and sidecars included"
+tests = ["k8s:k8s_pod_governed_from_first_instruction", "k8s:k8s_exec_session_governed",
+         "k8s:k8s_init_and_sidecar_governed"]
+
+[[criterion]]
+phase = "5b"
+id = "k8s-selection"
+text = "Profile selection: unannotated untouched, namespace default, disallowed and unknown refused"
+tests = ["k8s:k8s_unannotated_pod_unaffected", "k8s:k8s_namespace_default_applied",
+         "k8s:k8s_disallowed_profile_refused", "k8s:k8s_unknown_profile_refused",
+         "unit:pod_profile_resolution_table"]
+
+[[criterion]]
+phase = "5b"
+id = "k8s-lifecycle"
+text = "Removal unbinds; ConfigMap updates apply live; the daemon resyncs and stays inside NRI's timeout"
+tests = ["k8s:k8s_container_removal_unbinds", "k8s:k8s_configmap_update_applies",
+         "k8s:k8s_daemon_restart_resyncs", "k8s:k8s_daemon_replies_fast", "go:TestSynchronizeDoesNotBlockOnDaemon"]
+
+[[criterion]]
+phase = "5b"
+id = "k8s-fail-closed"
+text = "Fail closed when the daemon is down, without blocking ungovernable pods"
+tests = ["k8s:k8s_daemon_down_fails_closed", "go:TestDaemonDownRefusesOnlyGovernablePods"]
+
+[[criterion]]
+phase = "5b"
+id = "capability-honesty"
+text = "Without BPF LSM, exec, file and raw-socket rules are refused, not silently unenforced"
+tests = ["k8s:apply_rejects_lsm_rules_without_bpf_lsm", "unit:lsm_rules_refused_without_bpf_lsm"]
+
+[[criterion]]
+phase = "5b"
+id = "nri-contract"
+text = "The NRI plugin and the daemon agree on the wire format; the chart renders and validates"
+tests = ["unit:nri_wire_contract", "go:TestWireContract", "k8s:helm_chart_renders"]
+
+# ---- Phase 6: resilience and self-protection -----------------------------
+
+[[criterion]]
+phase = "6"
+id = "survives-restart"
+text = "Restarting or killing the sensor does not remove protection; enforcing verdicts continue"
+tests = ["vm:sensor_kill_keeps_enforcement", "vm:sensor_restart_adopts_pins", "k8s:k8s_daemon_restart_resyncs"]
+
+[[criterion]]
+phase = "6"
+id = "heartbeat-fail-closed"
+text = "After the heartbeat timeout, governed ENFORCE workloads are denied until the sensor returns"
+tests = ["vm:heartbeat_stale_denies_enforce", "vm:heartbeat_recovers_on_restart"]
+
+[[criterion]]
+phase = "6"
+id = "self-protection"
+text = "Governed workloads get EPERM for the self-protection actions"
+tests = ["vm:guard_bpf_syscall_denied", "vm:guard_signal_sensor_denied", "vm:guard_ptrace_sensor_denied",
+         "vm:guard_pins_cannot_be_removed"]
+
+[[criterion]]
+phase = "6"
+id = "pins-lifecycle"
+text = "Pin directory restricted; incompatible pins replaced; uninstall removes protection"
+tests = ["vm:pin_dir_restricted", "vm:incompatible_pins_replaced", "vm:uninstall_removes_protection"]
+
+# ---- Phase 7: performance ------------------------------------------------
+
+[[criterion]]
+phase = "7"
+id = "perf-reported"
+text = "p50 and p99 per-hook overhead reported by CI on at least two kernels"
+tests = ["ci:bench-report", "py:test_main_without_budget_reports_only"]
+
+[[criterion]]
+phase = "7"
+id = "perf-gate"
+text = "An overhead budget set from the first baseline is enforced as a regression gate"
+tests = ["ci:bench-report", "py:test_check_passes_within_budget_and_flags_regressions", "py:test_main_fails_over_budget"]
+
+[[criterion]]
+phase = "7"
+id = "perf-zero-loss"
+text = "Zero event loss at a defined sustained rate; loss beyond it counted and reported"
+tests = ["ci:bench-report", "py:test_check_flags_loss_at_sustained_rate"]
+
+# ---- Phase 0/1 guard rails kept honest -----------------------------------
+
+[[criterion]]
+phase = "0"
+id = "no-object-override"
+text = "Release builds contain no runtime override for the BPF object path"
+tests = ["unit:no_object_path_flag"]
+
+# ---- Phase 8: test strategy ----------------------------------------------
+
+[[criterion]]
+phase = "8"
+id = "traceability"
+text = "Every acceptance criterion maps to named tests that exist and passed on every kernel"
+tests = ["py:test_repository_index_is_complete", "py:test_reports_flag_missing_kernel", "ci:traceability"]
+
+[[criterion]]
+phase = "8"
+id = "conformance"
+text = "The policy conformance corpus agrees with both the userspace evaluator and the kernel"
+tests = ["unit:conformance_corpus_is_well_formed", "unit:conformance_userspace", "vm:conformance_kernel"]
+
+[[criterion]]
+phase = "8"
+id = "fuzzing"
+text = "The event decoder and the policy compiler are fuzzed on every run"
+tests = ["ci:fuzz"]
+
+[[criterion]]
+phase = "8"
+id = "properties"
+text = "Property tests cover the identity encodings, CIDR normalisation and the engine state file"
+tests = ["unit:kernel_dev_matches_kernel_encoding", "unit:ipv4_cidr_normalises_to_v4_mapped", "unit:v4_and_v4_mapped_get_the_same_verdict", "unit:engine_state_round_trips", "unit:engine_state_rejects_foreign_epoch"]
+
+[[criterion]]
+phase = "8"
+id = "coverage"
+text = "Userspace line coverage is reported on every run"
+tests = ["ci:coverage", "py:test_groups_by_crate_and_skips_dependencies"]

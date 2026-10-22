@@ -1,0 +1,21 @@
+name = "deny_over_allow"
+description = "A deny rule wins over an allow rule for the same address, whatever their prefix lengths (deny trie first, then allow)"
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "deny"
+
+[[profiles.case.network.allow]]
+cidr = "10.99.0.0/24"
+proto = ["udp"]
+
+[[profiles.case.network.deny]]
+cidr = "10.99.0.0/16"
+proto = ["udp"]
+"""
+
+[[op]]
+kind = "connect"
+target = "10.99.0.7:80"
+proto = "udp"
+expect = "deny"

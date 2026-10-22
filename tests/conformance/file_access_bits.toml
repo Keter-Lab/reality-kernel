@@ -1,0 +1,24 @@
+name = "file_access_bits"
+description = "A read-only deny blocks reading, not writing"
+setup = ["file:/run/rk-conf/secret"]
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "allow"
+
+[[profiles.case.files.deny]]
+path = "/run/rk-conf/secret"
+access = ["read"]
+"""
+
+[[op]]
+kind = "open"
+target = "/run/rk-conf/secret"
+access = "r"
+expect = "deny"
+
+[[op]]
+kind = "open"
+target = "/run/rk-conf/secret"
+access = "w"
+expect = "allow"

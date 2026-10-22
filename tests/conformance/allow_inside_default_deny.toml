@@ -1,0 +1,23 @@
+name = "allow_inside_default_deny"
+description = "With default deny, only the allowed network passes"
+policy = """
+[profiles.case]
+mode = "enforce"
+network.default = "deny"
+
+[[profiles.case.network.allow]]
+cidr = "10.99.0.0/24"
+proto = ["udp"]
+"""
+
+[[op]]
+kind = "connect"
+target = "10.99.0.9:80"
+proto = "udp"
+expect = "allow"
+
+[[op]]
+kind = "connect"
+target = "10.98.0.1:80"
+proto = "udp"
+expect = "deny"

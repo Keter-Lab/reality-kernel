@@ -1,0 +1,17 @@
+name = "audit_mode"
+description = "AUDIT lets a denied connect through and reports it as would-deny"
+policy = """
+[profiles.case]
+mode = "audit"
+network.default = "allow"
+
+[[profiles.case.network.deny]]
+cidr = "10.99.0.5/32"
+proto = ["udp"]
+"""
+
+[[op]]
+kind = "connect"
+target = "10.99.0.5:80"
+proto = "udp"
+expect = "audit"

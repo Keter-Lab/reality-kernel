@@ -555,6 +555,14 @@ struct EngineState {
     previous_text: Option<String>,
 }
 
+/// Reads a state file, accepting it only when it belongs to the pin set with
+/// `epoch` (hex). A missing, unreadable or foreign file yields `None`: the
+/// engine then rebuilds what it can from the maps alone.
+fn load_state(path: &Path, epoch: &str) -> Option<EngineState> {
+    let state: EngineState = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
+    (!epoch.is_empty() && state.epoch == epoch).then_some(state)
+}
+
 /// What `rk policy apply --dry-run` reports: the apply that would happen,
 /// computed without touching the kernel or creating cgroups.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -671,10 +679,8 @@ impl PolicyEngine {
 
         let state = self
             .state_file
-            .as_ref()
-            .and_then(|path| fs::read(path).ok())
-            .and_then(|bytes| serde_json::from_slice::<EngineState>(&bytes).ok())
-            .filter(|s| !self.epoch.is_empty() && s.epoch == self.epoch);
+            .as_deref()
+            .and_then(|path| load_state(path, &self.epoch));
         let used = state.is_some();
         match state {
             Some(s) => {
@@ -1316,6 +1322,59 @@ fn trie_value(entry: &Entry) -> rk_net_rule {
 mod tests {
     use super::*;
     use rk_policy::net::CompiledRange;
+
+    fn state_path(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("rk-state-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        dir.join("engine.json")
+    }
+
+    /// Phase 8 §3.3: what `persist` writes, `load_state` reads back for the
+    /// same pin epoch, and the file is private to root.
+    #[test]
+    fn engine_state_round_trips() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = state_path("round-trip");
+        let mut engine = PolicyEngine::new(PathBuf::from("/nonexistent"));
+        engine.set_state_file(path.clone(), &[7; 16]);
+        engine.generation = 42;
+        engine.bindings.insert(1234, ("rk.slice/agent".into(), 3));
+        engine.quarantined.insert(99);
+        engine
+            .dynamic
+            .insert(1234, ("ns/pod".into(), "restricted".into()));
+        engine.text = Some("[profiles.p]\nmode = \"audit\"\n".into());
+        engine.persist();
+
+        let s = load_state(&path, &hex::encode([7u8; 16])).expect("same epoch is accepted");
+        assert_eq!(s.generation, 42);
+        assert_eq!(s.bindings, engine.bindings);
+        assert_eq!(s.quarantined, engine.quarantined);
+        assert_eq!(s.dynamic, engine.dynamic);
+        assert_eq!(s.text, engine.text);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// A state file from another pin set (or with no epoch, or corrupt) is
+    /// never used: its profile ids would not match the maps.
+    #[test]
+    fn engine_state_rejects_foreign_epoch() {
+        let path = state_path("epoch");
+        let mut engine = PolicyEngine::new(PathBuf::from("/nonexistent"));
+        engine.set_state_file(path.clone(), &[1; 16]);
+        engine.persist();
+        assert!(load_state(&path, &hex::encode([1u8; 16])).is_some());
+        assert!(load_state(&path, &hex::encode([2u8; 16])).is_none());
+        assert!(load_state(&path, "").is_none());
+        fs::write(&path, b"{not json").unwrap();
+        assert!(load_state(&path, &hex::encode([1u8; 16])).is_none());
+        assert!(load_state(&path.with_extension("gone"), &hex::encode([1u8; 16])).is_none());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
 
     #[test]
     fn key_layout_matches_abi() {
