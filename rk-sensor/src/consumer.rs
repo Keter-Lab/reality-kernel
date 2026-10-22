@@ -1,25 +1,39 @@
-//! Drains `events_ringbuf`. Phase 7 replaces the sleep-based poll with an
-//! epoll-driven drain thread and a bounded channel.
+//! Event pipeline (docs/design/phase-7.md §3).
+//!
+//! A dedicated drain thread waits on the ring buffer with epoll, copies every
+//! available record out, and hands batches to a worker over a bounded channel.
+//! The worker decodes and writes them. The drain thread never decodes, logs or
+//! waits on a sink: when the channel is full the batch is dropped and counted,
+//! so a slow sink can never back the ring up into kernel-side loss.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd, RawFd};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::sync_channel;
 use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use aya::maps::{MapData, RingBuf};
 use aya::Ebpf;
 use rk_agentd::registry::AgentRegistry;
-use tokio::time::{sleep, Duration};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::decoder::DecodeStats;
 use crate::pipeline;
 
+/// Smallest and largest ring buffer, and the share per CPU (§4).
+pub const MIN_RING_BYTES: u32 = 1 << 20;
+pub const MAX_RING_BYTES: u32 = 64 << 20;
+pub const RING_BYTES_PER_CPU: u32 = 256 << 10;
+
+/// Records per batch handed to the worker.
+const BATCH: usize = 512;
+
 /// Takes ownership of the ring buffer so the rest of `ebpf` stays usable (for
-/// example by the policy engine).
-///
-/// Open the ring buffer **once** per loaded object and keep that reader. With
-/// aya 0.13, a second `RingBuf` opened on a partly consumed ring starts from a
-/// stale producer-position cache and reads stale ring memory indefinitely.
+/// example by the policy engine). The pipeline opens it exactly once; aya
+/// 0.14 fixed the stale-position bug that made a second reader unsafe, but one
+/// reader per ring remains the design.
 pub fn take_ring(ebpf: &mut Ebpf) -> Result<RingBuf<MapData>> {
     let map = ebpf
         .take_map("events_ringbuf")
@@ -27,28 +41,240 @@ pub fn take_ring(ebpf: &mut Ebpf) -> Result<RingBuf<MapData>> {
     RingBuf::try_from(map).context("failed to open events_ringbuf")
 }
 
-pub async fn consume_loop(ring: RingBuf<MapData>, stop: Arc<AtomicBool>) -> Result<()> {
-    consume_loop_with_registry(ring, stop, None).await
+/// Ring buffer size: `cpus × 256 KiB` rounded up to a power of two and clamped
+/// to [1 MiB, 64 MiB], or `override_mb` MiB (also clamped) when given.
+pub fn ring_size(cpus: usize, override_mb: Option<u32>) -> u32 {
+    let want = match override_mb {
+        Some(mb) => u64::from(mb.clamp(1, MAX_RING_BYTES >> 20)) << 20,
+        None => (cpus.max(1) as u64).saturating_mul(u64::from(RING_BYTES_PER_CPU)),
+    };
+    let rounded = want.next_power_of_two();
+    rounded.clamp(u64::from(MIN_RING_BYTES), u64::from(MAX_RING_BYTES)) as u32
 }
 
-pub async fn consume_loop_with_registry(
-    mut ring: RingBuf<MapData>,
-    stop: Arc<AtomicBool>,
-    registry: Option<Arc<AgentRegistry>>,
-) -> Result<()> {
-    let stats = DecodeStats::default();
+/// Userspace counters of the pipeline. Kernel-side drops are the per-CPU
+/// `rk_counters` map; `drained + kernel drops` is every event produced.
+#[derive(Debug, Default)]
+pub struct PipelineStats {
+    /// Records copied out of the ring buffer.
+    pub drained: AtomicU64,
+    /// Records dropped because the channel to the worker was full.
+    pub userspace_drops: AtomicU64,
+    /// Decoder outcomes, counted by the worker.
+    pub decode: DecodeStats,
+}
 
-    while !stop.load(Ordering::Relaxed) {
-        while let Some(item) = ring.next() {
-            pipeline::process_record_with_registry(&item, &stats, registry.as_ref());
-        }
-        sleep(Duration::from_millis(10)).await;
+impl PipelineStats {
+    pub fn drained(&self) -> u64 {
+        self.drained.load(Ordering::Relaxed)
     }
 
-    info!(
-        decoded = stats.decoded(),
-        rejected = stats.rejected(),
-        "consumer stopped"
-    );
+    pub fn userspace_drops(&self) -> u64 {
+        self.userspace_drops.load(Ordering::Relaxed)
+    }
+}
+
+/// Pipeline tuning.
+#[derive(Debug, Clone, Copy)]
+pub struct Config {
+    /// Batches the channel holds before the drain thread starts dropping.
+    pub channel_batches: usize,
+    /// Upper bound on event latency when no wakeup arrives (§4): data below
+    /// the kernel's wakeup threshold is picked up after at most this long.
+    pub poll_timeout: Duration,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            channel_batches: 1024,
+            poll_timeout: Duration::from_millis(100),
+        }
+    }
+}
+
+/// Drain thread, channel and worker. Stopping drains what is left first.
+pub struct Consumer {
+    stop: Arc<AtomicBool>,
+    wake: OwnedFd,
+    drain: Option<JoinHandle<()>>,
+    worker: Option<JoinHandle<()>>,
+    stats: Arc<PipelineStats>,
+}
+
+fn owned(fd: RawFd, what: &str) -> Result<OwnedFd> {
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error()).context(what.to_string());
+    }
+    // SAFETY: a freshly created descriptor that nothing else owns.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+fn epoll_add(epoll: &OwnedFd, fd: RawFd, token: u64) -> Result<()> {
+    let mut ev = libc::epoll_event {
+        events: libc::EPOLLIN as u32,
+        u64: token,
+    };
+    // SAFETY: valid epoll and target descriptors, valid event pointer.
+    if unsafe { libc::epoll_ctl(epoll.as_raw_fd(), libc::EPOLL_CTL_ADD, fd, &mut ev) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("epoll_ctl");
+    }
     Ok(())
+}
+
+impl Consumer {
+    /// Starts the drain thread and the worker on `ring`.
+    pub fn start(
+        mut ring: RingBuf<MapData>,
+        registry: Option<Arc<AgentRegistry>>,
+        config: Config,
+    ) -> Result<Self> {
+        let stats = Arc::new(PipelineStats::default());
+        let stop = Arc::new(AtomicBool::new(false));
+        // SAFETY: plain syscalls; results are checked by `owned`.
+        let wake = owned(
+            unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) },
+            "eventfd",
+        )?;
+        let epoll = owned(unsafe { libc::epoll_create1(libc::EPOLL_CLOEXEC) }, "epoll_create1")?;
+        epoll_add(&epoll, ring.as_raw_fd(), 0)?;
+        epoll_add(&epoll, wake.as_raw_fd(), 1)?;
+
+        let (tx, rx) = sync_channel::<Vec<Vec<u8>>>(config.channel_batches.max(1));
+        let timeout_ms = i32::try_from(config.poll_timeout.as_millis()).unwrap_or(i32::MAX);
+
+        let drain_stats = stats.clone();
+        let drain_stop = stop.clone();
+        let drain = thread::Builder::new()
+            .name("rk-drain".into())
+            .spawn(move || {
+                let send = |batch: Vec<Vec<u8>>| {
+                    let n = batch.len() as u64;
+                    drain_stats.drained.fetch_add(n, Ordering::Relaxed);
+                    // Full or disconnected: count the loss, never block.
+                    if tx.try_send(batch).is_err() {
+                        drain_stats.userspace_drops.fetch_add(n, Ordering::Relaxed);
+                    }
+                };
+                let mut events = [libc::epoll_event { events: 0, u64: 0 }; 2];
+                loop {
+                    // SAFETY: valid epoll fd and a buffer of `events.len()` entries.
+                    let n = unsafe {
+                        libc::epoll_wait(epoll.as_raw_fd(), events.as_mut_ptr(), 2, timeout_ms)
+                    };
+                    if n < 0 {
+                        let err = std::io::Error::last_os_error();
+                        if err.raw_os_error() != Some(libc::EINTR) {
+                            error!(error = %err, "epoll_wait on the ring buffer failed");
+                            break;
+                        }
+                    }
+                    // Read the flag before draining, so records written before
+                    // a stop request are still delivered.
+                    let stopping = drain_stop.load(Ordering::Relaxed);
+                    let mut batch = Vec::with_capacity(BATCH);
+                    while let Some(item) = ring.next() {
+                        batch.push(item.to_vec());
+                        if batch.len() == BATCH {
+                            send(std::mem::replace(&mut batch, Vec::with_capacity(BATCH)));
+                        }
+                    }
+                    if !batch.is_empty() {
+                        send(batch);
+                    }
+                    if stopping {
+                        break;
+                    }
+                }
+            })
+            .context("spawn drain thread")?;
+
+        let worker_stats = stats.clone();
+        let worker = thread::Builder::new()
+            .name("rk-worker".into())
+            .spawn(move || {
+                for batch in rx {
+                    for record in &batch {
+                        pipeline::process_record_with_registry(
+                            record,
+                            &worker_stats.decode,
+                            registry.as_ref(),
+                        );
+                    }
+                }
+            })
+            .context("spawn worker thread")?;
+
+        Ok(Self {
+            stop,
+            wake,
+            drain: Some(drain),
+            worker: Some(worker),
+            stats,
+        })
+    }
+
+    /// Live pipeline counters.
+    pub fn stats(&self) -> Arc<PipelineStats> {
+        self.stats.clone()
+    }
+
+    /// Stops the drain thread (after a final drain) and the worker (after it
+    /// has written everything already queued).
+    pub fn stop(mut self) {
+        self.shutdown();
+    }
+
+    fn shutdown(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        let one: u64 = 1;
+        // SAFETY: writes 8 bytes from a valid u64 to our own eventfd.
+        unsafe {
+            libc::write(
+                self.wake.as_raw_fd(),
+                (&one as *const u64).cast(),
+                std::mem::size_of::<u64>(),
+            );
+        }
+        if let Some(drain) = self.drain.take() {
+            let _ = drain.join();
+        }
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+            info!(
+                drained = self.stats.drained(),
+                userspace_drops = self.stats.userspace_drops(),
+                decoded = self.stats.decode.decoded(),
+                rejected = self.stats.decode.rejected(),
+                "consumer stopped"
+            );
+        }
+    }
+}
+
+impl Drop for Consumer {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ring_size_scales_with_cpus_and_is_clamped() {
+        assert_eq!(ring_size(1, None), MIN_RING_BYTES);
+        assert_eq!(ring_size(4, None), MIN_RING_BYTES);
+        assert_eq!(ring_size(8, None), 2 << 20);
+        assert_eq!(ring_size(12, None), 4 << 20); // 3 MiB rounds up
+        assert_eq!(ring_size(1024, None), MAX_RING_BYTES);
+        assert_eq!(ring_size(0, None), MIN_RING_BYTES);
+        assert_eq!(ring_size(64, Some(3)), 4 << 20);
+        assert_eq!(ring_size(64, Some(0)), MIN_RING_BYTES);
+        assert_eq!(ring_size(1, Some(1000)), MAX_RING_BYTES);
+        for cpus in 0..300 {
+            assert!(ring_size(cpus, None).is_power_of_two());
+        }
+    }
 }

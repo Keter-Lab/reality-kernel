@@ -127,7 +127,10 @@ fn read_meta(root: &Path) -> Result<rk_meta> {
 
 /// Opens `bytes` (the production object) with every map pinned under `root`,
 /// adopting an existing pin set when it was created by the same object.
-pub fn open(bytes: &[u8], root: &Path) -> Result<Pinned> {
+/// `ring_bytes` sizes a newly created ring buffer and sets the adaptive
+/// wakeup threshold to an eighth of it (docs/design/phase-7.md §4); an adopted
+/// ring keeps the size it was created with.
+pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
     let mount_point = root.parent().context("pin root has no parent")?;
     ensure_bpffs(mount_point)?;
 
@@ -154,7 +157,11 @@ pub fn open(bytes: &[u8], root: &Path) -> Result<Pinned> {
     create_layout(root)?;
 
     let maps = maps_dir(root);
+    let wakeup_threshold = u64::from(ring_bytes / 8);
     let mut loader = EbpfLoader::new();
+    loader
+        .set_max_entries("events_ringbuf", ring_bytes)
+        .override_global("rk_wakeup_threshold", &wakeup_threshold, true);
     for &name in PINNED_MAPS {
         loader.map_pin_path(name, maps.join(name));
     }

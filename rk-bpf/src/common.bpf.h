@@ -386,16 +386,29 @@ static __always_inline int rk_append_ublob(struct rk_scratch_msg *msg, const voi
 }
 
 /* Emit hdr + payload_len + _reserved + payload at its real size. */
+/*
+ * Adaptive wakeups (docs/design/phase-7.md §4): bytes of unread data at which
+ * a record wakes the consumer. Set by the loader to an eighth of the ring;
+ * below it records are written without a wakeup and the consumer's epoll
+ * timeout picks them up. 0 (not set) keeps the kernel's default behaviour.
+ */
+const volatile __u64 rk_wakeup_threshold = 0;
+
 static __always_inline void rk_emit(struct rk_scratch_msg *msg)
 {
     __u32 len = msg->payload_len;
+    __u64 flags = 0;
 
     if (len > RK_SCRATCH_PAYLOAD_MAX)
         len = RK_SCRATCH_PAYLOAD_MAX;
     /* Mask pinned for the verifier as above; 4095 + 56 still fits the map value. */
     len &= (2 * RK_SCRATCH_PAYLOAD_MAX - 1);
     barrier_var(len);
-    if (bpf_ringbuf_output(&events_ringbuf, msg, sizeof(struct rk_hdr) + 8 + len, 0) < 0)
+    if (rk_wakeup_threshold)
+        flags = bpf_ringbuf_query(&events_ringbuf, BPF_RB_AVAIL_DATA) >= rk_wakeup_threshold
+                    ? BPF_RB_FORCE_WAKEUP
+                    : BPF_RB_NO_WAKEUP;
+    if (bpf_ringbuf_output(&events_ringbuf, msg, sizeof(struct rk_hdr) + 8 + len, flags) < 0)
         rk_count(RK_CNT_RINGBUF_DROP);
 }
 

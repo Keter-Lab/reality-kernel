@@ -160,6 +160,7 @@ impl AgentRegistry {
             generation,
             active_profiles,
             agents: self.snapshot_agents(),
+            counters: Default::default(),
             containers: self.container_count(),
             capabilities,
         }

@@ -7,14 +7,16 @@ compile_error!(
 );
 
 use std::os::unix::io::AsRawFd;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use rk_agentd::protocol::{ApplyReportData, CapabilityStatus, DryRunData};
+use rk_ebpf_common::rk_counter;
 use rk_agentd::registry::AgentRegistry;
 use rk_agentd::server::{self, PolicyHandler, ServerConfig};
 use rk_sensor::loader::{self, Object};
@@ -27,7 +29,7 @@ use tracing::{error, info, warn};
 
 const USAGE: &str = "usage: rk-sensor [--policy FILE] [--watch-policy] \
                      [--k8s-cgroup-root auto|DIR] [--heartbeat-timeout SECS] \
-                     [--state-file FILE] | --uninstall | --selftest | --version | --help";
+                     [--state-file FILE] [--ring-size-mb N] | --uninstall | --selftest | --version | --help";
 
 /// Policy file read at start and on SIGHUP when `--policy` is not given.
 const DEFAULT_POLICY: &str = "/etc/rk/policy.toml";
@@ -51,6 +53,9 @@ const K8S_ROOTS: &[&str] = &[
 /// How often `--watch-policy` checks the policy file.
 const WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
+/// How often the pipeline counters are logged (Phase 7 §5).
+const STATS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
 #[derive(Debug, Default, PartialEq, Eq)]
 struct RunOpts {
     policy: Option<String>,
@@ -62,6 +67,8 @@ struct RunOpts {
     /// denied (Phase 6 §4); `None` means the default.
     heartbeat_secs: Option<u64>,
     state_file: Option<String>,
+    /// Ring buffer size in MiB; default scales with CPUs (Phase 7 §4).
+    ring_mb: Option<u32>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -108,6 +115,13 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
                 opts.heartbeat_secs = Some(secs);
             }
             "--state-file" => opts.state_file = Some(it.next().ok_or_else(unrecognised)?.clone()),
+            "--ring-size-mb" => {
+                opts.ring_mb = Some(
+                    it.next()
+                        .and_then(|s| s.parse().ok())
+                        .ok_or_else(unrecognised)?,
+                )
+            }
             _ => return Err(unrecognised()),
         }
     }
@@ -185,6 +199,7 @@ struct SensorPolicyHandler {
     engine: PolicyEngine,
     lsm_active: bool,
     k8s_root: Option<String>,
+    pipeline: Arc<consumer::PipelineStats>,
 }
 
 impl PolicyHandler for SensorPolicyHandler {
@@ -292,6 +307,27 @@ impl PolicyHandler for SensorPolicyHandler {
 
     fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64> {
         self.engine.bind_container(&mut self.ebpf, cgroup, profile)
+    }
+
+    fn counters(&self) -> BTreeMap<String, u64> {
+        let mut out = BTreeMap::new();
+        if let Some(map) = self.ebpf.map("rk_counters") {
+            if let Ok(per_cpu) = aya::maps::PerCpuArray::<_, u64>::try_from(map) {
+                for (name, index) in [
+                    ("ringbuf_drops", rk_counter::RK_CNT_RINGBUF_DROP),
+                    ("scratch_misses", rk_counter::RK_CNT_SCRATCH_MISS),
+                ] {
+                    if let Ok(values) = per_cpu.get(&index, 0) {
+                        out.insert(name.to_string(), values.iter().sum());
+                    }
+                }
+            }
+        }
+        out.insert("records_drained".into(), self.pipeline.drained());
+        out.insert("userspace_drops".into(), self.pipeline.userspace_drops());
+        out.insert("decoded".into(), self.pipeline.decode.decoded());
+        out.insert("decode_rejected".into(), self.pipeline.decode.rejected());
+        out
     }
 }
 
@@ -404,7 +440,14 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             adoption,
             epoch,
             links,
-        } = pins::open(bytes, Path::new(pins::PIN_ROOT))?;
+        } = pins::open(
+            bytes,
+            Path::new(pins::PIN_ROOT),
+            consumer::ring_size(
+                std::thread::available_parallelism().map_or(1, usize::from),
+                opts.ring_mb,
+            ),
+        )?;
         let timeout = Duration::from_secs(opts.heartbeat_secs.unwrap_or(DEFAULT_HEARTBEAT_SECS));
         let _heartbeat = Heartbeat::start(&mut ebpf, timeout)?;
         resilience::protect_self(&mut ebpf)?;
@@ -467,21 +510,17 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
                 "adopted the running policy"
             );
         }
-        let stop = Arc::new(AtomicBool::new(false));
         let ring = consumer::take_ring(&mut ebpf)?;
-
         let registry = AgentRegistry::new();
-        let consumer = tokio::spawn(consumer::consume_loop_with_registry(
-            ring,
-            stop.clone(),
-            Some(registry.clone()),
-        ));
+        let consumer =
+            consumer::Consumer::start(ring, Some(registry.clone()), consumer::Config::default())?;
 
         let mut handler_inner = SensorPolicyHandler {
             ebpf,
             engine,
             lsm_active,
             k8s_root: k8s_root.clone(),
+            pipeline: consumer.stats(),
         };
         // Last policy text seen on disk, applied or not, so the watcher acts
         // (and logs a rejection) once per change.
@@ -525,6 +564,7 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         let mut hangup = signal(SignalKind::hangup()).context("install SIGHUP handler")?;
         let mut terminate = signal(SignalKind::terminate()).context("install SIGTERM handler")?;
         let mut watch = tokio::time::interval(WATCH_INTERVAL);
+        let mut stats_tick = tokio::time::interval(STATS_INTERVAL);
         loop {
             tokio::select! {
                 _ = hangup.recv() => {
@@ -564,13 +604,16 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
                         }
                     }
                 }
+                _ = stats_tick.tick() => {
+                    let counters = handler.lock().await.counters();
+                    info!(?counters, "pipeline stats");
+                }
                 _ = terminate.recv() => break,
                 _ = tokio::signal::ctrl_c() => break,
             }
         }
 
-        stop.store(true, Ordering::Relaxed);
-        consumer.await.context("consumer task panicked")??;
+        consumer.stop();
         info!("rk-sensor stopped");
         Ok(())
     })
@@ -628,6 +671,14 @@ mod tests {
             assert!(parse_args(&args(&bad)).is_err(), "{bad:?}");
         }
         assert_eq!(parse_args(&args(&["--uninstall"])), Ok(Mode::Uninstall));
+        assert_eq!(
+            parse_args(&args(&["--ring-size-mb", "8"])),
+            Ok(Mode::Run(RunOpts {
+                ring_mb: Some(8),
+                ..RunOpts::default()
+            }))
+        );
+        assert!(parse_args(&args(&["--ring-size-mb", "x"])).is_err());
         assert_eq!(parse_args(&args(&["--selftest"])), Ok(Mode::Selftest));
         assert_eq!(parse_args(&args(&["-V"])), Ok(Mode::Version));
         assert_eq!(
