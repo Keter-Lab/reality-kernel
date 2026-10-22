@@ -39,7 +39,12 @@ pub struct Report {
     pub checks: Vec<Check>,
 }
 
-fn check(name: &'static str, status: Status, detail: impl Into<String>, fix: Option<&str>) -> Check {
+fn check(
+    name: &'static str,
+    status: Status,
+    detail: impl Into<String>,
+    fix: Option<&str>,
+) -> Check {
     Check {
         name,
         status,
@@ -63,7 +68,9 @@ impl Host {
     }
 
     fn read(&self, p: &str) -> Option<String> {
-        fs::read_to_string(self.path(p)).ok().map(|s| s.trim().to_string())
+        fs::read_to_string(self.path(p))
+            .ok()
+            .map(|s| s.trim().to_string())
     }
 
     fn exists(&self, p: &str) -> bool {
@@ -75,13 +82,22 @@ impl Host {
 pub fn parse_release(release: &str) -> Option<(u64, u64)> {
     let mut parts = release.split('.');
     let major = parts.next()?.parse().ok()?;
-    let minor: String = parts.next()?.chars().take_while(char::is_ascii_digit).collect();
+    let minor: String = parts
+        .next()?
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
     Some((major, minor.parse().ok()?))
 }
 
 fn kernel_version(release: &str) -> Check {
     match parse_release(release) {
-        Some(v) if v >= SUPPORTED => check("kernel_version", Status::Ok, format!("{release} (supported: 5.15 and later)"), None),
+        Some(v) if v >= SUPPORTED => check(
+            "kernel_version",
+            Status::Ok,
+            format!("{release} (supported: 5.15 and later)"),
+            None,
+        ),
         Some(v) if v >= MINIMUM => check(
             "kernel_version",
             Status::Warn,
@@ -94,7 +110,12 @@ fn kernel_version(release: &str) -> Check {
             format!("{release}: the sensor needs at least 5.8 (BPF ring buffer)"),
             Some("upgrade the kernel to 5.15 or newer"),
         ),
-        None => check("kernel_version", Status::Warn, format!("cannot parse kernel release `{release}`"), None),
+        None => check(
+            "kernel_version",
+            Status::Warn,
+            format!("cannot parse kernel release `{release}`"),
+            None,
+        ),
     }
 }
 
@@ -113,9 +134,12 @@ fn btf(h: &Host) -> Check {
 
 /// Kernel config from `/boot/config-<release>` or `/lib/modules/<release>/config`.
 fn kernel_config(h: &Host, release: &str) -> Check {
-    let text = [format!("/boot/config-{release}"), format!("/lib/modules/{release}/config")]
-        .iter()
-        .find_map(|p| h.read(p));
+    let text = [
+        format!("/boot/config-{release}"),
+        format!("/lib/modules/{release}/config"),
+    ]
+    .iter()
+    .find_map(|p| h.read(p));
     let Some(text) = text else {
         return check(
             "kernel_config",
@@ -128,10 +152,18 @@ fn kernel_config(h: &Host, release: &str) -> Check {
         text.lines()
             .any(|l| l.strip_prefix(opt).is_some_and(|v| v == "=y" || v == "=m"))
     };
-    let required = ["CONFIG_BPF_SYSCALL", "CONFIG_CGROUP_BPF", "CONFIG_DEBUG_INFO_BTF"];
+    let required = [
+        "CONFIG_BPF_SYSCALL",
+        "CONFIG_CGROUP_BPF",
+        "CONFIG_DEBUG_INFO_BTF",
+    ];
     let recommended = ["CONFIG_BPF_LSM", "CONFIG_BPF_JIT"];
     let missing: Vec<&str> = required.iter().copied().filter(|o| !enabled(*o)).collect();
-    let weak: Vec<&str> = recommended.iter().copied().filter(|o| !enabled(*o)).collect();
+    let weak: Vec<&str> = recommended
+        .iter()
+        .copied()
+        .filter(|o| !enabled(*o))
+        .collect();
     if !missing.is_empty() {
         check(
             "kernel_config",
@@ -147,7 +179,12 @@ fn kernel_config(h: &Host, release: &str) -> Check {
             Some("without CONFIG_BPF_LSM only network rules can be enforced"),
         )
     } else {
-        check("kernel_config", Status::Ok, "BPF, cgroup BPF, BTF, BPF LSM and JIT enabled", None)
+        check(
+            "kernel_config",
+            Status::Ok,
+            "BPF, cgroup BPF, BTF, BPF LSM and JIT enabled",
+            None,
+        )
     }
 }
 
@@ -178,7 +215,12 @@ fn bpf_lsm(h: &Host) -> Check {
 
 fn cgroup_v2(h: &Host) -> Check {
     if h.exists("/sys/fs/cgroup/cgroup.controllers") {
-        check("cgroup_v2", Status::Ok, "unified cgroup v2 hierarchy at /sys/fs/cgroup", None)
+        check(
+            "cgroup_v2",
+            Status::Ok,
+            "unified cgroup v2 hierarchy at /sys/fs/cgroup",
+            None,
+        )
     } else {
         check(
             "cgroup_v2",
@@ -190,12 +232,12 @@ fn cgroup_v2(h: &Host) -> Check {
 }
 
 fn bpffs(h: &Host) -> Check {
-    let mounted = h
-        .read("/proc/self/mounts")
-        .is_some_and(|m| m.lines().any(|l| {
+    let mounted = h.read("/proc/self/mounts").is_some_and(|m| {
+        m.lines().any(|l| {
             let f: Vec<&str> = l.split_whitespace().collect();
             f.len() > 2 && f[1] == "/sys/fs/bpf" && f[2] == "bpf"
-        }));
+        })
+    });
     if mounted {
         check("bpffs", Status::Ok, "bpffs mounted at /sys/fs/bpf", None)
     } else {
@@ -216,7 +258,11 @@ pub fn lockdown_mode(text: &str) -> Option<&str> {
 }
 
 fn lockdown(h: &Host) -> Check {
-    match h.read("/sys/kernel/security/lockdown").as_deref().and_then(lockdown_mode) {
+    match h
+        .read("/sys/kernel/security/lockdown")
+        .as_deref()
+        .and_then(lockdown_mode)
+    {
         Some("confidentiality") => check(
             "lockdown",
             Status::Fail,
@@ -230,20 +276,38 @@ fn lockdown(h: &Host) -> Check {
             format!("lockdown={mode}"),
             Some("lockdown=integrity is recommended (docs/hardening.md)"),
         ),
-        None => check("lockdown", Status::Info, "kernel lockdown not available", None),
+        None => check(
+            "lockdown",
+            Status::Info,
+            "kernel lockdown not available",
+            None,
+        ),
     }
 }
 
 fn unprivileged_bpf(h: &Host) -> Check {
-    match h.read("/proc/sys/kernel/unprivileged_bpf_disabled").as_deref() {
-        Some("1") | Some("2") => check("unprivileged_bpf", Status::Ok, "unprivileged bpf() disabled", None),
+    match h
+        .read("/proc/sys/kernel/unprivileged_bpf_disabled")
+        .as_deref()
+    {
+        Some("1") | Some("2") => check(
+            "unprivileged_bpf",
+            Status::Ok,
+            "unprivileged bpf() disabled",
+            None,
+        ),
         Some(v) => check(
             "unprivileged_bpf",
             Status::Warn,
             format!("kernel.unprivileged_bpf_disabled = {v}"),
             Some("sysctl -w kernel.unprivileged_bpf_disabled=2 (docs/hardening.md)"),
         ),
-        None => check("unprivileged_bpf", Status::Info, "sysctl not readable", None),
+        None => check(
+            "unprivileged_bpf",
+            Status::Info,
+            "sysctl not readable",
+            None,
+        ),
     }
 }
 
@@ -255,7 +319,12 @@ fn bpf_jit(h: &Host) -> Check {
             "BPF JIT disabled: programs run in the interpreter, slower",
             Some("sysctl -w net.core.bpf_jit_enable=1"),
         ),
-        Some(v) => check("bpf_jit", Status::Ok, format!("net.core.bpf_jit_enable = {v}"), None),
+        Some(v) => check(
+            "bpf_jit",
+            Status::Ok,
+            format!("net.core.bpf_jit_enable = {v}"),
+            None,
+        ),
         None => check("bpf_jit", Status::Info, "sysctl not readable", None),
     }
 }
@@ -346,10 +415,19 @@ mod tests {
             fs::write(path, text).unwrap();
         };
         put("/sys/kernel/btf/vmlinux", "btf");
-        put("/sys/kernel/security/lsm", "lockdown,capability,landlock,yama,bpf\n");
-        put("/sys/kernel/security/lockdown", "none [integrity] confidentiality\n");
+        put(
+            "/sys/kernel/security/lsm",
+            "lockdown,capability,landlock,yama,bpf\n",
+        );
+        put(
+            "/sys/kernel/security/lockdown",
+            "none [integrity] confidentiality\n",
+        );
         put("/sys/fs/cgroup/cgroup.controllers", "cpu memory\n");
-        put("/proc/self/mounts", "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\nbpf /sys/fs/bpf bpf rw 0 0\n");
+        put(
+            "/proc/self/mounts",
+            "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\nbpf /sys/fs/bpf bpf rw 0 0\n",
+        );
         put("/proc/sys/kernel/unprivileged_bpf_disabled", "2\n");
         put("/proc/sys/net/core/bpf_jit_enable", "1\n");
         put(
@@ -368,7 +446,15 @@ mod tests {
         let root = healthy("ok");
         let r = run_checks(&Host::new(&root), "6.12.0");
         assert!(r.ok, "{:?}", r.checks);
-        for name in ["kernel_version", "btf", "kernel_config", "bpf_lsm", "cgroup_v2", "bpffs", "lockdown"] {
+        for name in [
+            "kernel_version",
+            "btf",
+            "kernel_config",
+            "bpf_lsm",
+            "cgroup_v2",
+            "bpffs",
+            "lockdown",
+        ] {
             assert_eq!(status(&r, name), Status::Ok, "{name}");
         }
         assert_eq!(status(&r, "sensor"), Status::Info);
@@ -378,12 +464,20 @@ mod tests {
     #[test]
     fn missing_bpf_lsm_is_explained_as_a_warning() {
         let root = healthy("nolsm");
-        fs::write(root.join("sys/kernel/security/lsm"), "lockdown,capability,yama,apparmor\n").unwrap();
+        fs::write(
+            root.join("sys/kernel/security/lsm"),
+            "lockdown,capability,yama,apparmor\n",
+        )
+        .unwrap();
         let r = run_checks(&Host::new(&root), "6.12.0");
         assert!(r.ok);
         let c = r.checks.iter().find(|c| c.name == "bpf_lsm").unwrap();
         assert_eq!(c.status, Status::Warn);
-        assert!(c.fix.as_deref().unwrap().contains("lsm=lockdown,capability,yama,apparmor,bpf"));
+        assert!(c
+            .fix
+            .as_deref()
+            .unwrap()
+            .contains("lsm=lockdown,capability,yama,apparmor,bpf"));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -392,8 +486,16 @@ mod tests {
         let root = healthy("fail");
         fs::remove_file(root.join("sys/kernel/btf/vmlinux")).unwrap();
         fs::remove_file(root.join("sys/fs/cgroup/cgroup.controllers")).unwrap();
-        fs::write(root.join("proc/self/mounts"), "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n").unwrap();
-        fs::write(root.join("sys/kernel/security/lockdown"), "none integrity [confidentiality]\n").unwrap();
+        fs::write(
+            root.join("proc/self/mounts"),
+            "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("sys/kernel/security/lockdown"),
+            "none integrity [confidentiality]\n",
+        )
+        .unwrap();
         fs::write(root.join("boot/config-6.12.0"), "CONFIG_BPF_SYSCALL=y\n").unwrap();
         let r = run_checks(&Host::new(&root), "6.12.0");
         assert!(!r.ok);

@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-
 mod doctor;
 
 #[derive(Parser, Debug)]

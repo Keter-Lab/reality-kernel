@@ -25,7 +25,9 @@ fn main() {
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let dir = match env::var("RK_BPF_VARIANT").as_deref() {
-        Ok("next") => manifest_dir.join("../rk-bpf/build").join(format!("{bpf_arch}-next")),
+        Ok("next") => manifest_dir
+            .join("../rk-bpf/build")
+            .join(format!("{bpf_arch}-next")),
         Ok(other) => panic!("RK_BPF_VARIANT `{other}`: only `next` is defined"),
         Err(_) => manifest_dir.join("../rk-bpf/build").join(bpf_arch),
     };

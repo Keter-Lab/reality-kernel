@@ -40,7 +40,11 @@ fn log_path(tag: &str) -> PathBuf {
 }
 
 fn policy_text(lsm: bool) -> String {
-    let raw = if lsm { "" } else { "network.deny_raw_sockets = false\n" };
+    let raw = if lsm {
+        ""
+    } else {
+        "network.deny_raw_sockets = false\n"
+    };
     let mut p = format!(
         r#"
 [profiles.up-enforce]
@@ -204,7 +208,11 @@ fn rk_cli(rk: &Path, args: &[&str]) -> Result<(i32, String)> {
     let out = Command::new(rk).args(args).output().context("run rk")?;
     Ok((
         out.status.code().unwrap_or(-1),
-        format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
     ))
 }
 
@@ -216,7 +224,11 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         ));
         return;
     };
-    let (sensor, next, rk) = (PathBuf::from(sensor), PathBuf::from(next), PathBuf::from(rk));
+    let (sensor, next, rk) = (
+        PathBuf::from(sensor),
+        PathBuf::from(next),
+        PathBuf::from(rk),
+    );
     let lsm = rk_sensor::policy::bpf_lsm_active();
     let _ = Command::new(&sensor).arg("--uninstall").status();
     if let Err(e) = prepare(lsm) {
@@ -252,7 +264,8 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         b.stop()?;
         let mut a2 = Daemon::start(&sensor, "a2")?;
         ensure!(
-            a2.text().contains("replaced the running object without a gap"),
+            a2.text()
+                .contains("replaced the running object without a gap"),
             "downgrade did not take the replace path: {}",
             a2.tail()
         );
@@ -261,17 +274,42 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         a2.stop()?;
         let (net_tries, net_ok) = (count(&result, "net_tries"), count(&result, "net_ok"));
         let (exec_tries, exec_ok) = (count(&result, "exec_tries"), count(&result, "exec_ok"));
-        ensure!(net_ok == 0, "{net_ok} of {net_tries} denied connects got through during the upgrade: {result}");
-        ensure!(exec_ok == 0, "{exec_ok} of {exec_tries} denied execs got through during the upgrade: {result}");
-        ensure!(net_tries >= 1000, "probe made only {net_tries} attempts: the window was not covered");
+        ensure!(
+            net_ok == 0,
+            "{net_ok} of {net_tries} denied connects got through during the upgrade: {result}"
+        );
+        ensure!(
+            exec_ok == 0,
+            "{exec_ok} of {exec_tries} denied execs got through during the upgrade: {result}"
+        );
+        ensure!(
+            net_tries >= 1000,
+            "probe made only {net_tries} attempts: the window was not covered"
+        );
         if lsm {
-            ensure!(exec_tries >= 10, "probe made only {exec_tries} exec attempts");
+            ensure!(
+                exec_tries >= 10,
+                "probe made only {exec_tries} exec attempts"
+            );
         }
 
         // The audit chain continues across both replacements.
         let pubkey = format!("{KEY}.pub");
-        let (code, out) = rk_cli(&rk, &["audit", "verify", "--dir", AUDIT_DIR, "--pubkey", pubkey.as_str()])?;
-        ensure!(code == 0, "audit log does not verify across the upgrade ({code}): {out}");
+        let (code, out) = rk_cli(
+            &rk,
+            &[
+                "audit",
+                "verify",
+                "--dir",
+                AUDIT_DIR,
+                "--pubkey",
+                pubkey.as_str(),
+            ],
+        )?;
+        ensure!(
+            code == 0,
+            "audit log does not verify across the upgrade ({code}): {out}"
+        );
         Ok(format!(
             "upgrade and downgrade replaced the object; 0 of {net_tries} connects and 0 of {exec_tries} execs got through; audit chain verified"
         ))
@@ -286,13 +324,19 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         ensure!(st.success(), "rk-sensor --uninstall failed");
         let result = probe_result(probe)?;
         let net_ok = count(&result, "net_ok");
-        ensure!(net_ok > 0, "probe saw no successes after protection was removed: {result}");
-        Ok(format!("probe reported {net_ok} connects after the pins were removed"))
+        ensure!(
+            net_ok > 0,
+            "probe saw no successes after protection was removed: {result}"
+        );
+        Ok(format!(
+            "probe reported {net_ok} connects after the pins were removed"
+        ))
     });
 
     run_test(checks, "doctor_passes_on_supported_kernels", || {
         let (code, out) = rk_cli(&rk, &["doctor", "--json"])?;
-        let report: Value = serde_json::from_str(&out).with_context(|| format!("rk doctor --json: {out}"))?;
+        let report: Value =
+            serde_json::from_str(&out).with_context(|| format!("rk doctor --json: {out}"))?;
         let failed: Vec<String> = report["checks"]
             .as_array()
             .context("no checks in the doctor report")?
@@ -300,7 +344,10 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             .filter(|c| c["status"] == "fail")
             .map(|c| format!("{}: {}", c["name"], c["detail"]))
             .collect();
-        ensure!(code == 0 && failed.is_empty(), "rk doctor failed ({code}): {failed:?}");
+        ensure!(
+            code == 0 && failed.is_empty(),
+            "rk doctor failed ({code}): {failed:?}"
+        );
         let lsm_check = report["checks"]
             .as_array()
             .and_then(|a| a.iter().find(|c| c["name"] == "bpf_lsm"))
@@ -310,7 +357,10 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             "doctor's bpf_lsm check ({}) disagrees with the kernel ({lsm})",
             lsm_check["status"]
         );
-        Ok(format!("rk doctor: no failed check; bpf_lsm {}", lsm_check["status"]))
+        Ok(format!(
+            "rk doctor: no failed check; bpf_lsm {}",
+            lsm_check["status"]
+        ))
     });
 
     let _ = Command::new(&sensor).arg("--uninstall").status();

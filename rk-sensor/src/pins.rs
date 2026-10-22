@@ -108,7 +108,9 @@ pub fn reconcile(root: &Path) -> Result<Option<&'static str>> {
     }
     if root.exists() {
         fs::remove_dir_all(&next).with_context(|| format!("remove {}", next.display()))?;
-        Ok(Some("removed an unfinished replacement; the running object stays attached"))
+        Ok(Some(
+            "removed an unfinished replacement; the running object stays attached",
+        ))
     } else {
         fs::rename(&next, root)
             .with_context(|| format!("rename {} to {}", next.display(), root.display()))?;
