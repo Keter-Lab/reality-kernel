@@ -204,7 +204,11 @@ fn link_pin(links: Option<&Path>, name: &str, root: Option<&Path>) -> Option<Pat
         None => dir.join(name),
         Some(root) => {
             let rel = root.strip_prefix(CGROUP_FS).unwrap_or(root);
-            let tag = rel.to_string_lossy().trim_matches('/').replace('/', "+");
+            let tag = rel
+                .to_string_lossy()
+                .trim_matches('/')
+                .replace('/', "+")
+                .replace('.', "_");
             dir.join(format!("{name}@{tag}"))
         }
     })
@@ -1483,5 +1487,19 @@ mod tests {
     fn profile_index_separates_slots() {
         assert_eq!(profile_index(0, 3), 3);
         assert_eq!(profile_index(1, 3), RK_MAX_PROFILES + 3);
+    }
+
+    #[test]
+    fn link_pin_replaces_dots_and_slashes_for_bpffs() {
+        let dir = Path::new("/sys/fs/bpf/rk/links");
+        let pin = link_pin(
+            Some(dir),
+            "rk_net_connect4",
+            Some(Path::new("/sys/fs/cgroup/rk.slice")),
+        )
+        .unwrap();
+        let fname = pin.file_name().unwrap().to_string_lossy();
+        assert!(!fname.contains('.'));
+        assert_eq!(fname, "rk_net_connect4@rk_slice");
     }
 }

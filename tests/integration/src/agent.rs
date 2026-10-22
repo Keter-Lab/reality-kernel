@@ -547,6 +547,7 @@ fn prepare(rk_bin: &Path) -> Result<()> {
 
 struct Daemon {
     child: Child,
+    sensor: PathBuf,
 }
 
 impl Daemon {
@@ -560,7 +561,10 @@ impl Daemon {
             .stderr(log)
             .spawn()
             .context("spawn rk-sensor")?;
-        let mut daemon = Self { child };
+        let mut daemon = Self {
+            child,
+            sensor: sensor.to_path_buf(),
+        };
         let start = Instant::now();
         loop {
             if let Some(st) = daemon.child.try_wait()? {
@@ -585,12 +589,14 @@ impl Drop for Daemon {
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(10) {
             if matches!(self.child.try_wait(), Ok(Some(_))) {
+                let _ = Command::new(&self.sensor).arg("--uninstall").status();
                 return;
             }
             thread::sleep(Duration::from_millis(50));
         }
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = Command::new(&self.sensor).arg("--uninstall").status();
     }
 }
 
