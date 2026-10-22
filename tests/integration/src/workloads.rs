@@ -658,8 +658,7 @@ fn handle_guard_ptrace(args: &[String]) -> i32 {
 }
 
 fn handle_guard_pins() -> i32 {
-    let unlink_res =
-        unsafe { libc::unlink(b"/sys/fs/bpf/rk/maps/rk_meta\0".as_ptr() as *const libc::c_char) };
+    let unlink_res = unsafe { libc::unlink(c"/sys/fs/bpf/rk/maps/rk_meta".as_ptr()) };
     let unlink_err = if unlink_res != 0 {
         std::io::Error::last_os_error().raw_os_error()
     } else {
@@ -667,8 +666,8 @@ fn handle_guard_pins() -> i32 {
     };
     let rename_res = unsafe {
         libc::rename(
-            b"/sys/fs/bpf/rk/maps/rk_meta\0".as_ptr() as *const libc::c_char,
-            b"/sys/fs/bpf/rk/maps/rk_meta_renamed\0".as_ptr() as *const libc::c_char,
+            c"/sys/fs/bpf/rk/maps/rk_meta".as_ptr(),
+            c"/sys/fs/bpf/rk/maps/rk_meta_renamed".as_ptr(),
         )
     };
     let rename_err = if rename_res != 0 {
@@ -676,7 +675,7 @@ fn handle_guard_pins() -> i32 {
     } else {
         None
     };
-    let umount_res = unsafe { libc::umount(b"/sys/fs/bpf\0".as_ptr() as *const libc::c_char) };
+    let umount_res = unsafe { libc::umount(c"/sys/fs/bpf".as_ptr()) };
     let umount_err = if umount_res != 0 {
         std::io::Error::last_os_error().raw_os_error()
     } else {
