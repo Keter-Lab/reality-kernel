@@ -1,0 +1,63 @@
+# Testing strategy
+
+How Reality Kernel is tested, and why the layers are what they are. The file
+layout and how to add tests are in [tests/README.md](../tests/README.md).
+Design: [docs/design/phase-8.md](design/phase-8.md).
+
+## Principle: every claim has a named test
+
+Each phase's acceptance criteria are listed in `tests/traceability.toml`
+together with the tests that prove them. CI checks the mapping twice:
+
+- **statically** on every push (`ci.yml` / python): every criterion names at
+  least one test, and every named test exists in the source;
+- **against results** after the kernel matrix (`kernel.yml` / traceability):
+  every named VM and Kubernetes test passed on every kernel of that run.
+  A missing report counts as a failure.
+
+So a criterion cannot silently lose its evidence through a renamed,
+deleted, skipped or failing test.
+
+## Layers
+
+| Layer | What it catches | Where |
+|---|---|---|
+| Unit tests | Logic: policy parsing and compilation, map key layouts, ABI struct sizes (on x86_64 and arm64), consumer accounting | `cargo test`, both architectures |
+| Property tests | Invariants over all inputs: dev_t encoding, CIDR normalisation, v4 vs v4-mapped verdicts, compile/diff stability, the engine state file | `proptest`, in the unit test runs |
+| Conformance corpus | Drift between the userspace reference evaluator and the kernel: the same TOML cases run against both | `rk-policy/tests/conformance.rs`, VM harness |
+| Fuzzing | Panics and inconsistencies on hostile input: ring buffer event decoding, policy text | `cargo fuzz`, 2 × 5 min per run |
+| Kernel integration | That programs load, attach and enforce: real `connect`, `execve` and `open` calls in governed cgroups, restarts and tampering | VM per kernel, as root |
+| Kubernetes | Deployment, NRI binding, annotations, fail-closed behaviour | kind cluster |
+| Performance | Hook cost and event loss against a budget | Phase 7 bench and `tests/bench/gate.py` |
+| Coverage | Untested userspace code (report-only for now) | `cargo llvm-cov`, job summary |
+
+## The kernel matrix
+
+The VM suites run on Linux 5.15, 6.1, 6.6, 6.12 and 6.18: the oldest
+supported LTS, every LTS since, and the newest stable. Kernel behaviour
+that differs between them (BPF-LSM availability, kfuncs, verifier limits)
+is exercised where it actually happens instead of being mocked. See
+[kernel-matrix.md](kernel-matrix.md).
+
+## What cannot be unit-tested in the kernel, and why
+
+`BPF_PROG_TEST_RUN` runs a program on a synthetic input without attaching
+it. It exists only for program types whose `bpf_prog_ops` define a
+`test_run` callback. Per type, as of Linux 6.12:
+
+| Program | Type | `test_run` | How it is tested instead |
+|---|---|---|---|
+| `rk_net_connect4/6`, `rk_net_sendmsg4/6` | `cgroup/sock_addr` | none (`cg_sock_addr_prog_ops`) | real connects in the VM verdict and conformance suites |
+| `rk_exec_check`, `rk_file_open`, `rk_net_socket_create`, guard hooks | `lsm` | none (`lsm_prog_ops`) | real exec, open and socket calls in the VMs |
+| `rk_exec_record` | `tp_btf` (raw tracepoint) | only fentry/fexit/fmod_ret have one in `tracing_prog_ops` | exec events checked end to end in the VMs |
+
+Every enforcement hook is therefore tested by real operations in real
+kernels. That is slower than `BPF_PROG_TEST_RUN` would be, but it also
+proves the attachment and the verifier's acceptance on each kernel, which a
+synthetic run never could.
+
+## Known gaps
+
+- Coverage has no threshold yet. One will be set once a few runs show a
+  stable baseline.
+- The process table (Phase 9) is not covered yet.

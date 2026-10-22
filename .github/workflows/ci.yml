@@ -125,3 +125,43 @@ jobs:
         if: always()
         working-directory: rk-nri
         run: test -z "$(gofmt -l .)" || { gofmt -d .; echo "::error::run gofmt (autofix does this on phase branches)"; exit 1; }
+
+  # docs/design/phase-8.md §3.5: userspace line coverage, report-only.
+  coverage:
+    name: Coverage (userspace, report-only)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install libclang (bindgen)
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: cargo llvm-cov (userspace crates)
+        run: >-
+          .github/scripts/run-logged.sh coverage cargo llvm-cov --no-report
+          -p rk-policy -p rk-sensor -p rk-agentd -p rk-ebpf-common -p rk-cli
+
+      - name: Reports (lcov, HTML, summary)
+        run: |
+          cargo llvm-cov report --lcov --output-path lcov.info
+          cargo llvm-cov report --html --output-dir coverage
+          cargo llvm-cov report --json --summary-only --output-path coverage.json
+          python3 tests/coverage_summary.py coverage.json "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage
+          path: |
+            lcov.info
+            coverage/html

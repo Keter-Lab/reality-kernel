@@ -272,3 +272,35 @@ phase = "0"
 id = "no-object-override"
 text = "Release builds contain no runtime override for the BPF object path"
 tests = ["unit:no_object_path_flag"]
+
+# ---- Phase 8: test strategy ----------------------------------------------
+
+[[criterion]]
+phase = "8"
+id = "traceability"
+text = "Every acceptance criterion maps to named tests that exist and passed on every kernel"
+tests = ["py:test_repository_index_is_complete", "py:test_reports_flag_missing_kernel", "ci:traceability"]
+
+[[criterion]]
+phase = "8"
+id = "conformance"
+text = "The policy conformance corpus agrees with both the userspace evaluator and the kernel"
+tests = ["unit:conformance_corpus_is_well_formed", "unit:conformance_userspace", "vm:conformance_kernel"]
+
+[[criterion]]
+phase = "8"
+id = "fuzzing"
+text = "The event decoder and the policy compiler are fuzzed on every run"
+tests = ["ci:fuzz"]
+
+[[criterion]]
+phase = "8"
+id = "properties"
+text = "Property tests cover the identity encodings, CIDR normalisation and the engine state file"
+tests = ["unit:kernel_dev_matches_kernel_encoding", "unit:ipv4_cidr_normalises_to_v4_mapped", "unit:v4_and_v4_mapped_get_the_same_verdict", "unit:engine_state_round_trips", "unit:engine_state_rejects_foreign_epoch"]
+
+[[criterion]]
+phase = "8"
+id = "coverage"
+text = "Userspace line coverage is reported on every run"
+tests = ["ci:coverage", "py:test_groups_by_crate_and_skips_dependencies"]

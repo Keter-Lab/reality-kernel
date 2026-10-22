@@ -2232,3 +2232,41 @@ allowed = ["strict"]
         assert!(diff(Some(&old), &old).is_empty());
     }
 }
+
+#[cfg(test)]
+mod normalisation_props {
+    use super::*;
+    use proptest::prelude::*;
+    use std::net::Ipv4Addr;
+
+    proptest! {
+        /// Phase 8 §3.3: every IPv4 CIDR normalises to its v4-mapped IPv6
+        /// network (prefix + 96), the form the kernel tries match against.
+        #[test]
+        fn ipv4_cidr_normalises_to_v4_mapped(a in any::<u32>(), len in 0u8..=32) {
+            let net = ipnet::Ipv4Net::new(Ipv4Addr::from(a), len).unwrap().trunc();
+            let parsed = parse_cidr(&net.to_string()).unwrap();
+            prop_assert_eq!(parsed.prefix_len(), len + 96);
+            prop_assert_eq!(parsed.network(), net.network().to_ipv6_mapped());
+        }
+
+        /// Any address inside the CIDR, written as v4 or v4-mapped v6, gets
+        /// the same verdict from the reference evaluator.
+        #[test]
+        fn v4_and_v4_mapped_get_the_same_verdict(a in any::<u32>(), len in 8u8..=32, host in any::<u32>()) {
+            let net = ipnet::Ipv4Net::new(Ipv4Addr::from(a), len).unwrap().trunc();
+            let mask = if len == 32 { 0 } else { u32::MAX >> len };
+            let inside = Ipv4Addr::from(u32::from(net.network()) | (host & mask));
+            let text = format!(
+                "[profiles.p]\nmode = \"enforce\"\nnetwork.default = \"allow\"\n\
+                 [[profiles.p.network.deny]]\ncidr = \"{net}\"\nproto = [\"udp\"]\n"
+            );
+            let policy = parse(&text, &mut ProfileIds::default()).unwrap();
+            let id = policy.profiles.iter().find(|p| p.name == "p").unwrap().id;
+            let v4 = evaluate(&policy, id, IpAddr::V4(inside), 53, PROTO_UDP).unwrap();
+            let v6 = evaluate(&policy, id, IpAddr::V6(inside.to_ipv6_mapped()), 53, PROTO_UDP).unwrap();
+            prop_assert_eq!(v4.action, Action::Deny);
+            prop_assert_eq!(v4, v6);
+        }
+    }
+}
