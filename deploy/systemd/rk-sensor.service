@@ -13,6 +13,11 @@ After=local-fs.target
 
 [Service]
 Type=simple
+# The cgroup root is mode 0555 (kernfs), so creating rk.slice under it needs
+# CAP_DAC_OVERRIDE, which the sensor does not get. This one step runs with
+# full privileges ("+"); the sensor then owns rk.slice and creates the agent
+# and binding cgroups inside it.
+ExecStartPre=+/bin/mkdir -p /sys/fs/cgroup/rk.slice
 ExecStart=/usr/bin/rk-sensor --policy /etc/rk/policy.toml --state-file /var/lib/rk/engine-state.json
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure

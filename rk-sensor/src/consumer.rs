@@ -5,13 +5,19 @@
 //! The worker decodes and writes them. The drain thread never decodes, logs or
 //! waits on a sink: when the channel is full the batch is dropped and counted,
 //! so a slow sink can never back the ring up into kernel-side loss.
+//!
+//! Stopping is bounded (docs/design/phase-10.md §9): the final drain reads
+//! the ring for at most [`STOP_DRAIN`] (what is left stays in the pinned ring
+//! for the next sensor), and the worker processes what is queued for at most
+//! [`STOP_BUDGET`]; the rest is counted as dropped, which the audit observer
+//! records as a loss.
 
 use std::os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd, RawFd};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, RecvTimeoutError};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use aya::maps::{MapData, RingBuf};
@@ -29,6 +35,13 @@ pub const RING_BYTES_PER_CPU: u32 = 256 << 10;
 
 /// Records per batch handed to the worker.
 const BATCH: usize = 512;
+
+/// Longest final drain of the ring buffer after a stop request.
+pub const STOP_DRAIN: Duration = Duration::from_millis(500);
+
+/// Longest time the worker keeps processing queued records after a stop
+/// request.
+pub const STOP_BUDGET: Duration = Duration::from_secs(2);
 
 /// Takes ownership of the ring buffer so the rest of `ebpf` stays usable (for
 /// example by the policy engine). The pipeline opens it exactly once; aya
@@ -209,11 +222,17 @@ impl Consumer {
                     // Read the flag before draining, so records written before
                     // a stop request are still delivered.
                     let stopping = drain_stop.load(Ordering::Relaxed);
+                    // Producers keep writing while we read: bound the final
+                    // drain, or a busy host could keep it going forever.
+                    let deadline = stopping.then(|| Instant::now() + STOP_DRAIN);
                     let mut batch = Vec::with_capacity(BATCH);
                     while let Some(item) = ring.next() {
                         batch.push(item.to_vec());
                         if batch.len() == BATCH {
                             send(std::mem::replace(&mut batch, Vec::with_capacity(BATCH)));
+                            if deadline.is_some_and(|d| Instant::now() >= d) {
+                                break;
+                            }
                         }
                     }
                     if !batch.is_empty() {
@@ -227,12 +246,24 @@ impl Consumer {
             .context("spawn drain thread")?;
 
         let worker_stats = stats.clone();
+        let worker_stop = stop.clone();
         let tick_every = config.poll_timeout;
         let worker = thread::Builder::new()
             .name("rk-worker".into())
-            .spawn(move || loop {
+            .spawn(move || {
+                let mut stop_seen: Option<Instant> = None;
+                loop {
                 match rx.recv_timeout(tick_every) {
                     Ok(batch) => {
+                        if worker_stop.load(Ordering::Relaxed) {
+                            let since = *stop_seen.get_or_insert_with(Instant::now);
+                            if since.elapsed() >= STOP_BUDGET {
+                                worker_stats
+                                    .userspace_drops
+                                    .fetch_add(batch.len() as u64, Ordering::Relaxed);
+                                continue;
+                            }
+                        }
                         for record in &batch {
                             handler.record(record, &worker_stats.decode);
                         }
@@ -243,6 +274,7 @@ impl Consumer {
                         handler.tick();
                         break;
                     }
+                }
                 }
             })
             .context("spawn worker thread")?;

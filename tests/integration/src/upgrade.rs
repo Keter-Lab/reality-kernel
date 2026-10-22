@@ -238,9 +238,10 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
 
     run_test(checks, "upgrade_replaces_object_without_gap", || {
         let mut a = Daemon::start(&sensor, "a")?;
-        // Long enough to cover both switches (each: a 2 s stop, then load,
-        // attach and migrate) with margin after the second.
-        let probe = start_probe(20_000, lsm)?;
+        // Long enough to cover both switches (each: a bounded stop of up to
+        // ~4.5 s under the probe's load, then load, attach and migrate) with
+        // margin after the second.
+        let probe = start_probe(30_000, lsm)?;
         thread::sleep(Duration::from_millis(1500));
 
         // Upgrade: A -> B (different object).
@@ -257,7 +258,7 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             "policy was not carried over from the old pin set's state: {}",
             b.tail()
         );
-        ensure!(Path::new(PIN_ROOT).exists() && !Path::new(&format!("{PIN_ROOT}.next")).exists());
+        ensure!(Path::new(PIN_ROOT).exists() && !Path::new(&format!("{PIN_ROOT}-next")).exists());
         thread::sleep(Duration::from_millis(4000));
 
         // Downgrade: B -> A, the same path in the other direction.
@@ -318,7 +319,9 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
     run_test(checks, "upgrade_gap_detector_works", || {
         // No sensor; the pins still enforce. Removing them mid-probe opens a
         // real gap, which the probe must report.
-        let probe = start_probe(3000, false)?;
+        // Links detach once their bpffs inodes are released, after an RCU
+        // grace period (resilience suite: up to 5 s), so watch for 7 s.
+        let probe = start_probe(8000, false)?;
         thread::sleep(Duration::from_millis(1000));
         let st = Command::new(&sensor).arg("--uninstall").status()?;
         ensure!(st.success(), "rk-sensor --uninstall failed");

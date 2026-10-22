@@ -40,24 +40,24 @@ it; the LSM and `tp_btf` links (`bpf_tracing_link`) have no `update_prog`.
 So replacement is **make-before-break**:
 
 1. `pins::open` finds `/sys/fs/bpf/rk` created by a different object. It
-   loads the new object with its maps pinned under `/sys/fs/bpf/rk.next`
+   loads the new object with its maps pinned under `/sys/fs/bpf/rk-next`
    and returns `Adoption::Replacing`.
 2. The sensor starts the heartbeat on the new maps, and the engine migrates
    its state: the state file is read with the **old** pin set's epoch (from
    the old `rk_meta`), then the stored policy text, static and dynamic
    bindings and quarantine are applied to the new maps.
-3. All programs are attached, with links pinned under `rk.next/links`. Both
+3. All programs are attached, with links pinned under `rk-next/links`. Both
    generations now run: for cgroup `sock_addr` and BPF-LSM hooks every
    attached program runs and any deny wins, so for this moment the effective
    policy is the stricter of the two, never looser.
 4. Events the old programs left in the old ring buffer are drained through
    the audit observer, so the audit log keeps them.
 5. The old pin set is removed (its links detach: nothing else holds them),
-   and `rk.next` is renamed to `rk` (bpffs supports rename).
+   and `rk-next` is renamed to `rk` (bpffs supports rename).
 
 Crash safety: a sensor that dies in steps 1–4 leaves `rk` attached;
-the next start deletes the partial `rk.next` and starts over. One that dies
-between removing `rk` and the rename leaves only `rk.next`, which the next
+the next start deletes the partial `rk-next` and starts over. One that dies
+between removing `rk` and the rename leaves only `rk-next`, which the next
 start renames and adopts. At no point is neither set attached.
 
 The old programs check the old heartbeat, which stops being renewed when the
@@ -190,12 +190,12 @@ checked by the `traceability` job like the VM and kind reports.
 - **Unit verification** runs inside the package test (`pkg_unit_verifies`:
   `systemd-analyze verify` and the `security` exposure score), where the
   binary the unit names is installed, rather than in a separate CI job.
-- **Replacement order** in the sensor: load the new object under `rk.next`,
+- **Replacement order** in the sensor: load the new object under `rk-next`,
   start its heartbeat, attach every program, carry the policy over (the old
   pin set's state file, else the policy file; if neither works the new set is
   removed and the old one keeps enforcing), drain the old ring buffer through
-  the audit observer, then remove `rk` and rename `rk.next`.
-  `rk-sensor --uninstall` also removes a leftover `rk.next`.
+  the audit observer, then remove `rk` and rename `rk-next`.
+  `rk-sensor --uninstall` also removes a leftover `rk-next`.
 - **rpm has no purge**: `rpm -e` deletes the private key and engine state,
   like `dpkg --purge`; `dpkg --remove` keeps them.
 - **Rocky Linux 9 container**: built in CI from the digest-pinned
@@ -223,4 +223,15 @@ checked by the `traceability` job like the VM and kind reports.
 - **The old-ring drain is bounded** (1 s): the old programs keep writing
   until they are detached, so an unbounded drain could never finish under
   sustained traffic.
+- **Stopping is bounded.** Under heavy governed traffic (the upgrade probe
+  makes ~85 000 denied connects a second), stopping used to process every
+  queued event first and could take arbitrarily long. Now the final ring
+  drain is capped at 0.5 s (the rest stays in the pinned ring for the next
+  sensor) and the worker at 2 s (the rest is counted as dropped and recorded
+  in the audit log as a loss).
+- **bpffs refuses dotted names** (`bpf_lookup` returns `EPERM`), so the
+  replacement directory is `rk-next`, not `rk.next`.
+- **rk.slice is created by `ExecStartPre=+`**: the cgroup root is mode 0555
+  (kernfs), so creating a top-level cgroup needs `CAP_DAC_OVERRIDE`, which
+  the sensor does not get. That one step runs with full privileges.
 

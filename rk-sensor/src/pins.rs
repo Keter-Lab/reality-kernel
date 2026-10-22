@@ -7,7 +7,7 @@
 //! attach helpers in `policy` skip any link that is already pinned.
 //!
 //! A different object (a new release) is not adopted. It is loaded beside the
-//! running one under `<root>.next`, and the old pin set is removed only after
+//! running one under `<root>-next`, and the old pin set is removed only after
 //! the new programs are attached and hold the policy: make-before-break, so
 //! there is never a moment with nothing attached (docs/design/phase-10.md §3).
 
@@ -64,7 +64,7 @@ pub enum Adoption {
     /// Pins of the same object existed and were adopted: no gap.
     Adopted,
     /// Pins of a different object (ABI or build) exist and stay attached; the
-    /// new object was loaded under `<root>.next`. The caller attaches the new
+    /// new object was loaded under `<root>-next`. The caller attaches the new
     /// programs, moves the policy over, then calls [`finish_replacement`].
     Replacing,
 }
@@ -89,17 +89,19 @@ pub struct Pinned {
     pub previous: Option<Previous>,
 }
 
-/// `<root>.next`, where a replacing object is pinned.
+/// `<root>-next`, where a replacing object is pinned.
 pub fn next_root(root: &Path) -> PathBuf {
     let mut p = root.as_os_str().to_owned();
-    p.push(".next");
+    // bpffs refuses names containing a dot (EPERM in bpf_lookup:
+    // dotted names are reserved for the kernel), hence `-next`.
+    p.push("-next");
     PathBuf::from(p)
 }
 
 /// Puts the pin directories in a consistent state after a sensor that died
-/// mid-replacement: with both `root` and `<root>.next`, the replacement had
-/// not switched yet, so the partial `.next` is dropped (the old set is still
-/// attached); with only `.next`, the old set was already removed, so `.next`
+/// mid-replacement: with both `root` and `<root>-next`, the replacement had
+/// not switched yet, so the partial `-next` is dropped (the old set is still
+/// attached); with only `-next`, the old set was already removed, so `-next`
 /// becomes `root`. Returns what it did, for the log.
 pub fn reconcile(root: &Path) -> Result<Option<&'static str>> {
     let next = next_root(root);
@@ -293,7 +295,7 @@ pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
 /// holds it. Returns whether anything was removed.
 pub fn uninstall(root: &Path) -> Result<bool> {
     let mut removed = false;
-    // `.next` too: a replacement interrupted mid-way is attached as well.
+    // `-next` too: a replacement interrupted mid-way is attached as well.
     for dir in [next_root(root), root.to_path_buf()] {
         if dir.exists() {
             fs::remove_dir_all(&dir).with_context(|| format!("remove {}", dir.display()))?;
