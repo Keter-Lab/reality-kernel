@@ -39,6 +39,12 @@ spec:
             - --watch-policy
             - --k8s-cgroup-root
             - {{ .Values.k8sCgroupRoot | quote }}
+            # Phase 6: pins in the host bpffs and state on the host survive a pod
+            # replacement, so protection never pauses (docs/design/phase-6.md §3).
+            - --heartbeat-timeout
+            - {{ .Values.heartbeatTimeoutSeconds | quote }}
+            - --state-file
+            - /var/run/reality-kernel/engine-state.json
           env:
             - name: RUST_LOG
               value: {{ .Values.logLevel | quote }}
@@ -62,6 +68,11 @@ spec:
             - name: securityfs
               mountPath: /sys/kernel/security
               readOnly: true
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: HostToContainer
+            - name: state
+              mountPath: /var/run/reality-kernel
         - name: rk-nri
           image: {{ include "rk.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -111,6 +122,14 @@ spec:
           hostPath:
             path: /sys/kernel/security
             type: Directory
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: state
+          hostPath:
+            path: /var/run/reality-kernel
+            type: DirectoryOrCreate
         - name: nri
           hostPath:
             path: {{ dir .Values.nri.socket }}
