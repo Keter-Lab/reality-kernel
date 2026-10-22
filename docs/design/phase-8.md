@@ -125,10 +125,12 @@ in place.
 ## 6. Decisions requested from the reviewer
 
 1. **Conformance corpus in TOML, not YAML.** Recommended: the plan says YAML,
-   but the Rust YAML crate (`serde_yaml`) is unmaintained (RustSec
-   RUSTSEC-2024-0320), which our cargo-deny gate rejects. TOML is already a
-   dependency, the policy itself is TOML, so a case's policy embeds without
-   quoting games.
+   but the Rust YAML options are poor. `serde_yaml` is deprecated (its last
+   release is `0.9.34+deprecated`). Its fork `serde_yml` carries an
+   unsoundness advisory (RUSTSEC-2025-0068) and was archived. `yaml-rust`,
+   which others build on, is flagged unmaintained (RUSTSEC-2024-0320), which
+   our cargo-deny gate rejects. TOML is already a dependency, and the policy
+   itself is TOML, so a case's policy embeds without quoting games.
 2. **Traceability checked statically and against the run's actual
    reports.** Recommended: "exists in the source" alone would pass a test
    that is skipped or failing; checking the reports proves it ran and passed
