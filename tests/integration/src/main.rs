@@ -7,9 +7,9 @@
 
 #[cfg(target_os = "linux")]
 mod agent;
+mod bpf;
 #[cfg(target_os = "linux")]
 mod resilience;
-mod bpf;
 mod workloads;
 
 use std::collections::HashSet;

@@ -226,8 +226,7 @@ fn get_link_ids(bpftool: &Path) -> Result<Vec<u64>> {
             String::from_utf8_lossy(&out.stderr).trim()
         );
     }
-    let val: Value = serde_json::from_slice(&out.stdout)
-        .context("parse bpftool link list json")?;
+    let val: Value = serde_json::from_slice(&out.stdout).context("parse bpftool link list json")?;
     let mut ids = Vec::new();
     if let Some(arr) = val.as_array() {
         for item in arr {
@@ -365,19 +364,15 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         daemon.stop_cleanly()?;
         daemon = ResilienceDaemon::start(sensor, 3)?;
 
-        let paced_out = wait_with_deadline(
-            paced_child,
-            "paced workload",
-            Duration::from_secs(15),
-        )?;
+        let paced_out = wait_with_deadline(paced_child, "paced workload", Duration::from_secs(15))?;
         if !paced_out.status.success() {
             bail!(
                 "paced workload failed: {}",
                 String::from_utf8_lossy(&paced_out.stderr).trim()
             );
         }
-        let stats: Value = serde_json::from_slice(&paced_out.stdout)
-            .context("parse paced workload stats")?;
+        let stats: Value =
+            serde_json::from_slice(&paced_out.stdout).context("parse paced workload stats")?;
         let ok = stats["ok"].as_u64().unwrap_or(1);
         let eperm = stats["eperm"].as_u64().unwrap_or(0);
         if ok != 0 || eperm == 0 {
@@ -462,7 +457,11 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             bail!("/sys/fs/bpf/rk mode is {:o}, expected 0700", mode);
         }
         if meta.uid() != 0 || meta.gid() != 0 {
-            bail!("/sys/fs/bpf/rk owner is {}:{}, expected 0:0", meta.uid(), meta.gid());
+            bail!(
+                "/sys/fs/bpf/rk owner is {}:{}, expected 0:0",
+                meta.uid(),
+                meta.gid()
+            );
         }
         Ok(())
     });

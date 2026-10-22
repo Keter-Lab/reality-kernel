@@ -619,9 +619,7 @@ fn handle_guard_ptrace(args: &[String]) -> i32 {
         }
     };
     let expected = &args[1];
-    let ptrace_res = unsafe {
-        libc::ptrace(libc::PTRACE_SEIZE, target_pid as libc::pid_t, 0, 0)
-    };
+    let ptrace_res = unsafe { libc::ptrace(libc::PTRACE_SEIZE, target_pid as libc::pid_t, 0, 0) };
     let ptrace_err = if ptrace_res != 0 {
         std::io::Error::last_os_error().raw_os_error()
     } else {
@@ -651,9 +649,7 @@ fn handle_guard_ptrace(args: &[String]) -> i32 {
             if ptrace_err.is_none() && mem_err.is_none() {
                 0
             } else {
-                eprintln!(
-                    "[guard_ptrace] expected OK, got ptrace={ptrace_err:?}, mem={mem_err:?}"
-                );
+                eprintln!("[guard_ptrace] expected OK, got ptrace={ptrace_err:?}, mem={mem_err:?}");
                 1
             }
         }
@@ -662,9 +658,8 @@ fn handle_guard_ptrace(args: &[String]) -> i32 {
 }
 
 fn handle_guard_pins() -> i32 {
-    let unlink_res = unsafe {
-        libc::unlink(b"/sys/fs/bpf/rk/maps/rk_meta\0".as_ptr() as *const libc::c_char)
-    };
+    let unlink_res =
+        unsafe { libc::unlink(b"/sys/fs/bpf/rk/maps/rk_meta\0".as_ptr() as *const libc::c_char) };
     let unlink_err = if unlink_res != 0 {
         std::io::Error::last_os_error().raw_os_error()
     } else {
@@ -681,9 +676,7 @@ fn handle_guard_pins() -> i32 {
     } else {
         None
     };
-    let umount_res = unsafe {
-        libc::umount(b"/sys/fs/bpf\0".as_ptr() as *const libc::c_char)
-    };
+    let umount_res = unsafe { libc::umount(b"/sys/fs/bpf\0".as_ptr() as *const libc::c_char) };
     let umount_err = if umount_res != 0 {
         std::io::Error::last_os_error().raw_os_error()
     } else {
