@@ -85,4 +85,12 @@ if [ -n "$rk_cli" ]; then
     fi
 fi
 
+if [ -x "$integration" ]; then
+    # Phase 6: resilience suite. Runs after agent suite.
+    "$integration" --resilience-suite "$sensor" "$bpftool" 2>&1
+    resilience_rc=$?
+    echo "resilience suite exit code: $resilience_rc"
+    [ "$resilience_rc" -eq 0 ] || rc=1
+fi
+
 exit "$rc"

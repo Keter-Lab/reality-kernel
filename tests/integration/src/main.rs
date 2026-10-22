@@ -7,6 +7,8 @@
 
 #[cfg(target_os = "linux")]
 mod agent;
+#[cfg(target_os = "linux")]
+mod resilience;
 mod bpf;
 mod workloads;
 
@@ -414,6 +416,17 @@ fn main() {
         let mut checks = Vec::new();
         agent::run_suite(&args[2..], &mut checks);
         output_results("RK_AGENT", &checks);
+        std::process::exit(if checks.iter().all(|c| c.passed) {
+            0
+        } else {
+            1
+        });
+    }
+    #[cfg(target_os = "linux")]
+    if args.len() > 1 && args[1] == resilience::SUITE_FLAG {
+        let mut checks = Vec::new();
+        resilience::run_suite(&args[2..], &mut checks);
+        output_results("RK_RESILIENCE", &checks);
         std::process::exit(if checks.iter().all(|c| c.passed) {
             0
         } else {

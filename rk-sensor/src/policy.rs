@@ -626,8 +626,10 @@ impl PolicyEngine {
         let write = || -> Result<()> {
             use std::io::Write as _;
             use std::os::unix::fs::OpenOptionsExt as _;
+            use std::os::unix::fs::PermissionsExt as _;
             if let Some(dir) = path.parent() {
                 fs::create_dir_all(dir)?;
+                let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
             }
             let tmp = path.with_extension("tmp");
             let mut file = fs::OpenOptions::new()

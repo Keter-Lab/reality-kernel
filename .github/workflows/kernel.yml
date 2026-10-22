@@ -230,9 +230,11 @@ jobs:
             | sed '1d;$d' > "integration-${{ matrix.kernel }}.json"
           sed -n '/===RK_AGENT_BEGIN===/,/===RK_AGENT_END===/p' vm.log \
             | sed '1d;$d' > "agent-${{ matrix.kernel }}.json"
+          sed -n '/===RK_RESILIENCE_BEGIN===/,/===RK_RESILIENCE_END===/p' vm.log \
+            | sed '1d;$d' > "resilience-${{ matrix.kernel }}.json"
           if [ "$rc" -ne 0 ]; then
             .github/scripts/annotate.sh vm.log "Linux ${{ matrix.kernel }}"
-            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" <<'PY'
+            python3 - "selftest-${{ matrix.kernel }}.json" "integration-${{ matrix.kernel }}.json" "agent-${{ matrix.kernel }}.json" "resilience-${{ matrix.kernel }}.json" <<'PY'
           import json, os, sys
           for fname in sys.argv[1:]:
             if os.path.exists(fname) and os.path.getsize(fname) > 0:
@@ -262,6 +264,7 @@ jobs:
             selftest-${{ matrix.kernel }}.json
             integration-${{ matrix.kernel }}.json
             agent-${{ matrix.kernel }}.json
+            resilience-${{ matrix.kernel }}.json
             vm.log
           if-no-files-found: warn
 

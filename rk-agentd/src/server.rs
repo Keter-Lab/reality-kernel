@@ -131,11 +131,9 @@ pub async fn run_server(
     registry: Arc<AgentRegistry>,
 ) -> Result<()> {
     if let Some(parent) = config.socket_path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create socket dir {}", parent.display()))?;
-            let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o755));
-        }
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create socket dir {}", parent.display()))?;
+        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o755));
     }
 
     if config.socket_path.exists() {
