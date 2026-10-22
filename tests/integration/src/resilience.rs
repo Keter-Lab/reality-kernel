@@ -102,7 +102,6 @@ fn log_tail() -> String {
 
 struct ResilienceDaemon {
     child: Child,
-    sensor: PathBuf,
 }
 
 impl ResilienceDaemon {
@@ -125,19 +124,17 @@ impl ResilienceDaemon {
             .stderr(log)
             .spawn()
             .context("spawn rk-sensor")?;
-        let mut daemon = Self {
-            child,
-            sensor: sensor.to_path_buf(),
-        };
+        let mut daemon = Self { child };
         let start = Instant::now();
         loop {
             if let Some(st) = daemon.child.try_wait()? {
                 bail!("rk-sensor exited early ({st}): {}", log_tail());
             }
-            if Path::new(SOCKET).exists() && Path::new(META_PIN).exists() {
-                if std::os::unix::net::UnixStream::connect(SOCKET).is_ok() {
-                    return Ok(daemon);
-                }
+            if Path::new(SOCKET).exists()
+                && Path::new(META_PIN).exists()
+                && std::os::unix::net::UnixStream::connect(SOCKET).is_ok()
+            {
+                return Ok(daemon);
             }
             if start.elapsed() > Duration::from_secs(30) {
                 bail!("rk-sensor not ready after 30s: {}", log_tail());
