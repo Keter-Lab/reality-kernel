@@ -1,4 +1,4 @@
-# Reality Kernel DaemonSet. Host requirements: see README.md.
+# Reality Kernel DaemonSet. Host requirements: docs/install.md and docs/kernel-matrix.md.
 
 image:
   repository: ghcr.io/keter-lab/reality-kernel

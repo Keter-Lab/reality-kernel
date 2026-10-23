@@ -7,10 +7,10 @@ version: "@VERSION@"
 release: "@RELEASE@"
 section: admin
 priority: optional
-maintainer: "Keter Lab <contact@realitykernel.dev>"
-vendor: Keter Lab
+maintainer: "Keter Labs <contact@realitykernel.dev>"
+vendor: Keter Labs
 homepage: https://github.com/Keter-Lab/reality-kernel
-license: MIT OR Apache-2.0
+license: (MIT OR Apache-2.0) AND (GPL-2.0-only OR MIT)
 description: |
   Kernel-level enforcement for AI agents.
   Reality Kernel confines AI agents and other workloads with eBPF programs
@@ -45,6 +45,14 @@ contents:
     dst: /usr/share/doc/reality-kernel/audit.md
   - src: "@ROOT@/docs/hardening.md"
     dst: /usr/share/doc/reality-kernel/hardening.md
+  - src: "@ROOT@/LICENSE"
+    dst: /usr/share/doc/reality-kernel/LICENSE
+  - src: "@ROOT@/LICENSE-APACHE"
+    dst: /usr/share/doc/reality-kernel/LICENSE-APACHE
+  - src: "@ROOT@/LICENSE-MIT"
+    dst: /usr/share/doc/reality-kernel/LICENSE-MIT
+  - src: "@ROOT@/LICENSE-GPL-2.0"
+    dst: /usr/share/doc/reality-kernel/LICENSE-GPL-2.0
 
 scripts:
   postinstall: "@ROOT@/deploy/packaging/scripts/postinstall.sh"

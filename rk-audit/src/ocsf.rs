@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 
 pub const OCSF_VERSION: &str = "1.9.0";
 pub const PRODUCT: &str = "Reality Kernel";
-pub const VENDOR: &str = "Keter Lab";
+pub const VENDOR: &str = "Keter Labs";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {

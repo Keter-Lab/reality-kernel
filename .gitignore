@@ -1,30 +1,12 @@
-node_modules/
-__pycache__/
-*.pyc
-rk_audit.jsonl
-.env
-.vercel
+# Build output
+/target/
 dist/
 build/
-*.egg-info/
-sdk/dist/
-sdk/build/
-sdk/*.egg-info/
+
+# Python test tooling
+__pycache__/
+*.pyc
 .venv/
-*.txt
-!requirements*.txt
-!deploy/helm/*/templates/NOTES.txt
-patch_*.py
-fix_*.js
-patch_*.js
-fix.js
-fix.py
-initTelemetry.js
-*.docx
-cleanup_pending.py
-emit_telemetry*.py
-# Root-level one-off scripts only (not .github/scripts).
-/scripts/
 
-
-Reality_Kernel_Sponsorship_Prospectus.*
+# Local environment
+.env

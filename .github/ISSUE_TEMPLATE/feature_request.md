@@ -1,25 +1,25 @@
 ---
 name: Feature request
-about: Suggest an idea or architectural improvement for Reality Kernel
-title: '[FEAT] '
+about: Propose a new capability or an improvement
+title: ''
 labels: enhancement
 assignees: ''
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem or limitation is (e.g., support for a new syscall intercept, novel sandbox environment, etc.).
+**Problem**
+What you are trying to do, and what stops you today.
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**Proposal**
+What you would like to happen. For policy changes, an example profile helps.
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've evaluated.
+**Alternatives considered**
 
-**Target Component**
-- [ ] eBPF Probes / Rust Kernel Layer
-- [ ] Symbolic Execution & Static Analysis
-- [ ] Policy Engine & Boundary Rules
-- [ ] Integration / Agent Harnesses (OpenHands, Cline, LangChain, etc.)
+**Area**
+- [ ] Enforcement (network, exec, files)
+- [ ] Policy language or rollout
+- [ ] Audit log, metrics or tracing
+- [ ] Kubernetes
+- [ ] Packaging, deployment or upgrades
+- [ ] Documentation
 
-**Additional context**
-Add any diagrams, architecture notes, or references here.
+Significant changes start with a design note (see GOVERNANCE.md, "Design decisions").

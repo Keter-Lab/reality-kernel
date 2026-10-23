@@ -1,33 +1,39 @@
 ---
 name: Bug report
-about: Create a report to help us improve Reality Kernel
-title: '[BUG] '
+about: Something does not work as documented
+title: ''
 labels: bug
 assignees: ''
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+<!-- Security vulnerabilities: please do not open an issue. See SECURITY.md. -->
 
-**Component Affected**
-- [ ] eBPF Kernel Probes (`rk-bpf`)
-- [ ] Symbolic Execution Engine (`core/engine.py` / `core/effect_engine.py`)
-- [ ] Basin Mapper / Sandbox Delta (`core/basin_mapper.py`)
-- [ ] CLI / SDK (`rk-cli` / `sdk`)
-- [ ] API Server / Gateway (`api/`)
+**What happened**
+What you did, what you expected, and what happened instead.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Agent command: `'...'`
-2. Execution configuration:
-3. Observed verdict:
-4. Expected verdict:
+**Component**
+- [ ] Kernel programs (`rk-bpf`) or ABI (`rk-ebpf-common`)
+- [ ] Sensor (`rk-sensor`), agent daemon (`rk-agentd`) or audit log (`rk-audit`)
+- [ ] Policy (`rk-policy`)
+- [ ] CLI (`rk`)
+- [ ] Kubernetes: NRI plugin (`rk-nri`) or Helm chart
+- [ ] Packages, systemd unit or container image
+- [ ] Documentation or website
 
-**Environment Information:**
- - OS / Linux Kernel version: (e.g. Ubuntu 22.04, Linux 6.5.0)
- - Python version:
- - Rust toolchain version:
- - eBPF runtime: (e.g. Aya)
+**To reproduce**
+1. Policy (the smallest profile that shows the problem):
+   ```toml
+   ```
+2. Command or workload:
+3. Observed result (error, `rk audit tail` output, sensor log):
+4. Expected result:
 
-**Additional context**
-Add any other context, logs, or error traces here.
+**Environment**
+- Reality Kernel version (`rk --version`):
+- Kernel and distribution (`uname -r`, `/etc/os-release`):
+- Install method: deb / rpm / tarball / Helm
+- `rk doctor` output:
+  ```
+  ```
+
+**Anything else**

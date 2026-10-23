@@ -30,6 +30,12 @@ on:
       - ".github/CODEOWNERS"
       - "requirements-ci.txt"
       - "tests/readme_claims.py"
+      - "public/**"
+      - "scripts/partials.py"
+      - "vercel.json"
+      - "LICENSE*"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
   pull_request:
     branches: [main]
 
