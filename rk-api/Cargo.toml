@@ -15,7 +15,7 @@ axum.workspace = true
 chrono.workspace = true
 hex.workspace = true
 http.workspace = true
-hmac = "0.12"
+hmac = "0.13"
 regex.workspace = true
 rk-engine-core = { path = "../rk-engine-core" }
 rk-policy = { path = "../rk-policy" }
@@ -29,7 +29,7 @@ serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "compression-gzip", "set-header"] }
+tower-http = { version = "0.7", features = ["cors", "compression-gzip", "set-header"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
