@@ -9,7 +9,7 @@
     "partials": "python3 scripts/partials.py"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^4.3.3"
   },
   "overrides": {
     "source-map-js": "^1.2.1",
