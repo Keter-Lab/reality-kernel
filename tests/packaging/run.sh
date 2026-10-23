@@ -76,6 +76,12 @@ installed() {
 
 journal() { journalctl -u rk-sensor --no-pager -o cat 2>/dev/null; }
 
+# `cmd | grep -q` under pipefail fails when grep exits on the first match
+# while cmd is still writing (SIGPIPE): grep -c reads all of its input.
+contains() { # pattern; reads stdin
+    grep -c -- "$1" >/dev/null
+}
+
 wait_ready() { # service active and answering `rk status`, within 30 s
     for _ in $(seq 1 60); do
         if systemctl is-active --quiet rk-sensor && rk status --json >/dev/null 2>&1; then
@@ -101,7 +107,7 @@ wait_generation() { # at least $1, within 15 s
 }
 
 audit_verifies() {
-    rk audit verify --pubkey "$KEY.pub" 2>&1 | grep -q '^VERIFIED$'
+    rk audit verify --pubkey "$KEY.pub" 2>&1 | contains '^VERIFIED$'
 }
 
 # The runner kernel has no BPF LSM: network rules only (docs/policy.md).
@@ -148,7 +154,7 @@ t_fresh_install() {
 
     sleep 2 # one audit batch interval
     audit_verifies || fail "audit log does not verify: $(rk audit verify 2>&1 | tail -n 5)"
-    rk audit tail -n 50 --verdict deny | grep -q "DENY" || fail "no deny in the audit log"
+    rk audit tail -n 50 --verdict deny | contains "DENY" || fail "no deny in the audit log"
     out="$(rk doctor --json)"
     code=$?
     [ "$code" -eq 0 ] || fail "rk doctor exited $code: $out"
@@ -176,10 +182,10 @@ t_upgrade() {
     sleep 1
     install_pkg "$pkg" || fail "upgrading to $pkg failed"
     for _ in $(seq 1 60); do
-        journal | grep -q "replaced the running object without a gap" && break
+        journal | contains "replaced the running object without a gap" && break
         sleep 0.5
     done
-    journal | grep -q "replaced the running object without a gap" \
+    journal | contains "replaced the running object without a gap" \
         || fail "the upgrade did not replace the running object: $(journal | tail -n 20)"
     wait "$probe" || fail "gap probe failed: $(cat /tmp/rk-probe.err)"
     ok="$(jq -r .net_ok /tmp/rk-probe.json)"
