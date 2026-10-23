@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter">
+  <!-- The Warden: Reality Kernel's guardian owl, as a sigil. -->
+  <path d="M14 14 L20 22 M50 14 L44 22"/>
+  <path d="M20 22 Q32 16 44 22 L48 34 Q50 52 32 58 Q14 52 16 34 Z"/>
+  <circle cx="25" cy="31" r="6"/>
+  <circle cx="39" cy="31" r="6"/>
+  <rect x="23.5" y="29.5" width="3" height="3" fill="#000" stroke="none"/>
+  <rect x="37.5" y="29.5" width="3" height="3" fill="#000" stroke="none"/>
+  <path d="M30 38 L32 42 L34 38"/>
+  <path d="M26 46 L29 48 L32 46 L35 48 L38 46"/>
+  <path d="M28 51 L32 53 L36 51"/>
+  <path d="M8 58 L56 58"/>
+</svg>

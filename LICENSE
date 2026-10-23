@@ -15,8 +15,9 @@ The BPF programs in rk-bpf/ are dual-licensed under either of
 at your option. SPDX-License-Identifier: GPL-2.0-only OR MIT
 See docs/decisions/0012-bpf-licensing.md for why.
 
-The website's fonts (public/fonts/) are IBM Plex, licensed under the SIL Open
-Font License 1.1 (public/fonts/OFL.txt).
+The website's fonts (public/fonts/) are IBM Plex and Instrument Serif,
+licensed under the SIL Open Font License 1.1 (public/fonts/OFL-IBM-Plex.txt,
+public/fonts/OFL-Instrument-Serif.txt).
 
 Unless you explicitly state otherwise, any contribution you submit for
 inclusion is licensed as above, without any additional terms or conditions.
