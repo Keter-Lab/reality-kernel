@@ -2,6 +2,7 @@
 """Acceptance criterion -> test traceability (docs/design/phase-8.md §3.1).
 
     traceability.py static  [--root DIR]
+    traceability.py evidence [--root DIR]   (prints docs/evidence.md)
     traceability.py reports [--root DIR] --kernels 5.15,6.1,... [--distros A,B] ARTIFACT_DIR
 
 static:  every criterion in tests/traceability.toml has at least one test,
@@ -11,6 +12,10 @@ reports: every vm: test passed on every listed kernel, and every k8s: test
          (integration-/agent-/resilience-<kernel>.json and k8s.json), and
          every pkg: test passed on every listed distribution
          (pkg-<distro>.json, docs/design/phase-10.md §7).
+
+evidence: the evidence page, one section per criterion with its tests;
+         `static` also fails when docs/evidence.md is not current
+         (docs/design/phase-11.md §5).
 
 Exits 1 on any gap and prints a Markdown summary. Standard library only.
 """
@@ -79,10 +84,55 @@ def exists(kind, name, index):
     return re.search(patterns[kind], index[kind], re.MULTILINE) is not None
 
 
+KIND_WHERE = {
+    "vm": "VM suite, every kernel",
+    "k8s": "Kubernetes (kind)",
+    "pkg": "package test, every distribution",
+    "unit": "Rust test",
+    "go": "Go test",
+    "py": "Python test",
+    "ci": "CI job",
+}
+
+
+def phase_key(phase):
+    return (int(re.match(r"\d+", phase).group()), phase)
+
+
+def evidence_page(criteria):
+    """docs/evidence.md: every criterion, with the tests that prove it."""
+    lines = [
+        "# Evidence",
+        "",
+        "Generated from `tests/traceability.toml` by `python3 tests/traceability.py",
+        "evidence`; CI fails if this page is out of date. Every test listed here",
+        "exists in the source, and the `traceability` job checks that every VM,",
+        "Kubernetes and package test passed on every kernel and distribution in",
+        "the same run (docs/testing.md).",
+        "",
+    ]
+    for phase in sorted({c.get("phase", "?") for c in criteria}, key=phase_key):
+        lines += [f"## Phase {phase}", ""]
+        for c in (c for c in criteria if c.get("phase") == phase):
+            lines += [f"### {c['id']}", "", c["text"], ""]
+            for t in c.get("tests", []):
+                try:
+                    kind, name = split(t)
+                except ValueError:
+                    lines.append(f"- `{t}` (malformed reference)")
+                    continue
+                lines.append(f"- `{name}` ({KIND_WHERE[kind]})")
+            lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 def check_static(root):
     criteria = load_criteria(root)
     index = source_index(root)
     failures = []
+    evidence = root / "docs" / "evidence.md"
+    if not evidence.is_file() or evidence.read_text(encoding="utf-8") != evidence_page(criteria):
+        failures.append("docs/evidence.md is not current: run `python3 tests/traceability.py evidence > docs/evidence.md`")
     if not criteria:
         failures.append("tests/traceability.toml lists no criteria")
     ids = set()
@@ -171,7 +221,7 @@ def summary(title, criteria, failures, ok_line):
     lines.append("")
     lines.append("| Phase | Criteria |")
     lines.append("|---|---|")
-    for phase in sorted(by_phase, key=lambda p: (int(re.match(r"\d+", p).group()), p)):
+    for phase in sorted(by_phase, key=phase_key):
         lines.append(f"| {phase} | {len(by_phase[phase])} |")
     lines.append("")
     if failures:
@@ -185,12 +235,15 @@ def summary(title, criteria, failures, ok_line):
 
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("mode", choices=("static", "reports"))
+    ap.add_argument("mode", choices=("static", "reports", "evidence"))
     ap.add_argument("--root", default=pathlib.Path(__file__).resolve().parents[1], type=pathlib.Path)
     ap.add_argument("--kernels", default="")
     ap.add_argument("--distros", default="")
     ap.add_argument("artifacts", nargs="?", type=pathlib.Path)
     args = ap.parse_intermixed_args(argv)
+    if args.mode == "evidence":
+        sys.stdout.write(evidence_page(load_criteria(args.root)))
+        return 0
     if args.mode == "static":
         criteria, failures = check_static(args.root)
         print(summary("Traceability (source)", criteria, failures,

@@ -23,7 +23,15 @@ def tree(tmp_path, toml):
     (tmp_path / "tests" / "k8s" / "run.sh").write_text("    run_test k8s_demo t_demo\n")
     (tmp_path / "lib.rs").write_text("#[test]\nfn demo_unit() {}\n")
     (tmp_path / "tests" / "traceability.toml").write_text(toml)
+    write_evidence(tmp_path)
     return tmp_path
+
+
+def write_evidence(root):
+    """The generated evidence page, as CI expects it to be committed."""
+    (root / "docs").mkdir(exist_ok=True)
+    page = tr.evidence_page(tr.load_criteria(root))
+    (root / "docs" / "evidence.md").write_text(page, encoding="utf-8", newline="\n")
 
 
 GOOD = """
@@ -133,6 +141,15 @@ def test_reports_check_package_tests_per_distribution(tmp_path):
     assert any("rockylinux-9: no package test report" in f for f in failures)
     _, failures = tr.check_reports(root, art, ["5.15"])
     assert any("no --distros" in f for f in failures)
+
+
+def test_stale_evidence_page_fails(tmp_path):
+    root = tree(tmp_path, GOOD)
+    (root / "docs" / "evidence.md").write_text("# Evidence\n\nold\n")
+    _, failures = tr.check_static(root)
+    assert any("docs/evidence.md is not current" in f for f in failures)
+    write_evidence(root)
+    assert tr.check_static(root)[1] == []
 
 
 def test_repository_index_is_complete():

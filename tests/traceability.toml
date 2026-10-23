@@ -364,3 +364,39 @@ phase = "10"
 id = "doctor"
 text = "rk doctor explains missing kernel features, and passes on every supported kernel"
 tests = ["vm:doctor_passes_on_supported_kernels", "unit:healthy_host_passes", "unit:missing_bpf_lsm_is_explained_as_a_warning", "unit:blocking_problems_fail", "unit:kernel_versions_are_graded", "unit:stale_pins_without_a_sensor_are_flagged"]
+
+[[criterion]]
+phase = "11"
+id = "scorecard"
+text = "OpenSSF Scorecard analyses main weekly and on every push and publishes the result; the repository-controlled properties it scores are tested: actions pinned by commit SHA and read-only default token permissions"
+tests = ["ci:analysis", "py:test_actions_pinned_by_commit_sha", "py:test_default_token_permissions_are_read_only"]
+
+[[criterion]]
+phase = "11"
+id = "sast"
+text = "CodeQL analyses the Rust, Go, Python and workflow code on every pull request and push to main"
+tests = ["ci:analyze"]
+
+[[criterion]]
+phase = "11"
+id = "nri_fuzz"
+text = "The NRI plugin's message handling is fuzzed: decoding a reply never panics and accepts only valid JSON, and every bind request survives encoding unchanged"
+tests = ["go:FuzzDecodeReply", "go:FuzzEncodeBind"]
+
+[[criterion]]
+phase = "11"
+id = "release_signed"
+text = "Every release artifact and the image is signed (Sigstore), with SLSA build provenance and an SPDX SBOM, and the release is drafted only after all of them verify"
+tests = ["ci:release", "ci:image", "py:test_release_signs_attests_and_verifies_every_artifact"]
+
+[[criterion]]
+phase = "11"
+id = "readme_claims"
+text = "Every README claim links to the criterion that proves it, every evidence link resolves, the evidence page is current, and the README states no performance number or superlative outside its claims"
+tests = ["py:test_readme_claims_have_evidence", "py:test_claim_without_evidence_fails", "py:test_unknown_criterion_fails_in_readme_and_docs", "py:test_numbers_and_superlatives_outside_claims_fail", "py:test_stale_evidence_page_fails"]
+
+[[criterion]]
+phase = "11"
+id = "dco"
+text = "Every commit in a pull request is signed off by its author under the DCO; bot commits are exempt"
+tests = ["ci:dco", "py:test_signed_off_commits_pass", "py:test_missing_or_foreign_sign_off_fails", "py:test_bot_commits_are_exempt"]

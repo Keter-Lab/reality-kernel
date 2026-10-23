@@ -68,6 +68,25 @@ kernels. That is slower than `BPF_PROG_TEST_RUN` would be, but it also
 proves the attachment and the verifier's acceptance on each kernel, which a
 synthetic run never could.
 
+## Repository and supply chain checks
+
+Phase 11 ([design](design/phase-11.md)) adds checks on the repository
+itself, so that what it promises stays true:
+
+| Check | What fails it | Where |
+|---|---|---|
+| README claims (`tests/readme_claims.py`) | A README claim without an evidence link, an evidence link to an unknown criterion, a performance number or superlative outside the claims block | `ci.yml` / python |
+| Evidence page | `docs/evidence.md` differs from what `traceability.py evidence` generates from `traceability.toml` | `ci.yml` / python (static check) |
+| Workflow policy (`tests/test_workflows.py`) | An action not pinned by commit SHA, a workflow without read-only default permissions, a release workflow that no longer signs, attests or verifies every artifact | `ci.yml` / python |
+| DCO (`.github/scripts/dco_check.py`) | A pull request commit without its author's `Signed-off-by` | `dco.yml`, pull requests |
+| CodeQL | Static analysis findings in Rust, Go, Python and workflows | `codeql.yml` |
+| OpenSSF Scorecard | Published score; see the design note for what it measures | `scorecard.yml`, `main` |
+| Release verification | Any artifact or the image without a valid signature from the release workflow, provenance or SBOM: the release is not drafted | `release.yml`, tags |
+| NRI fuzzing | A panic or inconsistency in the plugin's message handling (`FuzzDecodeReply`, `FuzzEncodeBind`) | `ci.yml` / go (seed corpus) |
+
+After changing `tests/traceability.toml`, regenerate the evidence page:
+`python3 tests/traceability.py evidence > docs/evidence.md`.
+
 ## Known gaps
 
 - Coverage has no threshold yet. One will be set once a few runs show a
