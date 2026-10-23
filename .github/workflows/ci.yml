@@ -90,10 +90,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      # docs/design/phase-11.md §4: exact versions, verified by hash.
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+        run: python -m pip install --require-hashes -r requirements-ci.txt
 
       - name: pytest
         run: .github/scripts/run-logged.sh pytest pytest tests/ -v
