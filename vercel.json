@@ -1,114 +1,91 @@
 {
-  "rewrites": [
-    {
-      "source": "/v1/(.*)",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/v1",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/healthz",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/docs",
-      "destination": "/integration.html"
-    },
-    {
-      "source": "/openapi.json",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/playground",
-      "destination": "/playground.html"
-    },
-    {
-      "source": "/blog",
-      "destination": "/blog.html"
-    },
-    {
-      "source": "/research",
-      "destination": "/blog.html"
-    },
-    {
-      "source": "/faq",
-      "destination": "/faq.html"
-    },
-    {
-      "source": "/security",
-      "destination": "/security.html"
-    },
-    {
-      "source": "/integrate",
-      "destination": "/integration.html"
-    },
-    {
-      "source": "/integration",
-      "destination": "/integration.html"
-    },
-    {
-      "source": "/pricing",
-      "destination": "/pricing.html"
-    },
-    {
-      "source": "/sdk",
-      "destination": "/sdk.html"
-    },
-    {
-      "source": "/benchmark",
-      "destination": "/benchmark.html"
-    },
-    {
-      "source": "/verifier",
-      "destination": "/verifier.html"
-    },
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "redirects": [
     {
       "source": "/login",
-      "destination": "/login.html"
+      "destination": "/",
+      "permanent": true
     },
     {
       "source": "/dashboard",
-      "destination": "/dashboard.html"
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/pricing",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/playground",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/demo",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/faq",
+      "destination": "/",
+      "permanent": true
     },
     {
       "source": "/landing",
-      "destination": "/landing.html"
+      "destination": "/",
+      "permanent": true
     },
     {
-      "source": "/about",
-      "destination": "/about.html"
+      "source": "/blog",
+      "destination": "/",
+      "permanent": true
     },
     {
-      "source": "/privacy",
-      "destination": "/privacy.html"
+      "source": "/research",
+      "destination": "/",
+      "permanent": true
     },
     {
-      "source": "/terms",
-      "destination": "/terms.html"
+      "source": "/integration",
+      "destination": "/docs",
+      "permanent": true
     },
     {
-      "source": "/cookies",
-      "destination": "/cookies.html"
+      "source": "/integrate",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/sdk",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/benchmark",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/verifier",
+      "destination": "/docs",
+      "permanent": true
     },
     {
       "source": "/cookie-policy",
-      "destination": "/cookies.html"
+      "destination": "/cookies",
+      "permanent": true
     }
   ],
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 30,
-      "memory": 512
-    }
-  },
-  "cleanUrls": true,
-  "trailingSlash": false,
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://vitals.vercel-insights.com; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+        },
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
@@ -123,11 +100,20 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "geolocation=(), camera=(), microphone=()"
+          "value": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
         },
         {
           "key": "Strict-Transport-Security",
           "value": "max-age=31536000; includeSubDomains"
+        }
+      ]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
         }
       ]
     }
