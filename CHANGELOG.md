@@ -10,8 +10,7 @@ and container image. The format follows
 
 ### Changed
 
-- Dependencies: `ed25519-dalek` 3, `sha2` 0.11, `lru` 0.19, `reqwest` 0.13 (still without a TLS stack), `containerd/nri` 0.12.3, and
-  current GitHub Actions. The minimum supported Rust version is now 1.89
+- Dependencies: `lru` 0.19, `containerd/nri` 0.12.3 and current GitHub Actions
   (phase 13).
 
 ## [0.1.0] - 2026-10-23
