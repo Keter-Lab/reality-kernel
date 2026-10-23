@@ -12,4 +12,4 @@ build = "build.rs"
 bytemuck.workspace = true
 
 [build-dependencies]
-bindgen = "0.73"
+bindgen = "0.72"

@@ -5,6 +5,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # bindgen 0.73 accepts syn 2 or 3 and prettyplease 0.2 or 0.3 independently,
+    # so Cargo can build it on syn 3 against a syn-2 prettyplease and it fails to
+    # compile (docs/design/phase-13.md). Revisit when upstream ties the two.
+    ignore:
+      - dependency-name: "bindgen"
+        versions: [">= 0.73"]
     groups:
       cargo:
         patterns: ["*"]

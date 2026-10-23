@@ -24,7 +24,7 @@ No new behaviour, so no new criteria.
 |---|---|---|
 | `ed25519-dalek` 2 → 3, `sha2` 0.10 → 0.11 | Applied together | Every API we call is unchanged; ed25519-dalek 3 depends on sha2 0.11, so they move as one |
 | `lru` 0.18 → 0.19 | Applied | The only change is a `Sync` bound on iterators, which we do not use |
-| `bindgen` 0.72 → 0.73 | Applied | Builder and callback APIs unchanged; the output changes concern bitfields, unions and flexible arrays, none of which `rk_abi.h` has. The hand-written size and offset assertions catch any layout drift at compile time |
+| `bindgen` 0.72 → 0.73 | Held at 0.72 | Our API use is unchanged, but bindgen 0.73 accepts `syn` 2–3 and `prettyplease` 0.2–0.3 independently. With `syn` 3 already in the tree, Cargo built bindgen on `syn` 3 against a `syn`-2 `prettyplease`, and bindgen itself failed to compile (first CI run of this phase). Other projects report the same. Dependabot skips 0.73 until upstream ties the two |
 | `reqwest` 0.12 → 0.13 | Applied | The new default TLS backend sits behind default features, which we disable: still no TLS stack in the sensor |
 | `rust-version` 1.87 → 1.89 | Applied | `sha2` 0.11.1 needs 1.88 and `uuid` 1.27+ needs 1.89. The clippy lints gated on 1.88/1.89 (let chains, `as_chunks`, raw-pointer `Default`, `NonNull::from_mut`) match no code here |
 | GitHub Actions: checkout 7.0.1, setup-python 7.0.0, upload-artifact 7.0.2, download-artifact 8.0.2, cache 6.1.0, rust-cache 2.9.3, codeql-action 4.39.0, scorecard-action 2.5.0 | Applied, every SHA verified against its tag | All need Node 24, which GitHub-hosted runners have. Every input we pass keeps its meaning; upload and download move together because download-artifact 8 checks digests by default |
