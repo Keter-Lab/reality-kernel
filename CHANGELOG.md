@@ -8,6 +8,11 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Dependencies: `lru` 0.19, `containerd/nri` 0.12.3 and current GitHub Actions
+  (phase 13).
+
 ## [0.1.0] - 2026-10-23
 
 The first release of the rebuilt, kernel-enforced Reality Kernel. Each item

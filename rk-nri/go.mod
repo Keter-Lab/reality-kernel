@@ -5,7 +5,7 @@ go 1.26.0
 // The toolchain CI and releases build with; setup-go reads it.
 toolchain go1.27.3
 
-require github.com/containerd/nri v0.11.0
+require github.com/containerd/nri v0.12.3
 
 // govulncheck, pinned here and run with `go tool govulncheck` in CI.
 tool golang.org/x/vuln/cmd/govulncheck
@@ -17,8 +17,8 @@ require (
 	github.com/containerd/ttrpc v1.2.7 // indirect
 	github.com/knqyf263/go-plugin v0.9.0 // indirect
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/tetratelabs/wazero v1.10.1 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/tetratelabs/wazero v1.11.0 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
