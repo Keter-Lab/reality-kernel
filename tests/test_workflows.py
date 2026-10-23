@@ -63,3 +63,39 @@ def test_release_signs_attests_and_verifies_every_artifact():
     assert missing == []
     # Nothing is drafted before it is verified.
     assert text.index("- name: Verify every artifact") < text.index("- name: Draft the GitHub release")
+
+
+def job(text, name):
+    """The text of one job in a workflow, up to the next job."""
+    m = re.search(rf"^  {re.escape(name)}:\n(.*?)(?=^  [a-z][a-z0-9_-]*:\n|\Z)", text, re.MULTILINE | re.DOTALL)
+    assert m, f"no job {name}"
+    return m.group(1)
+
+
+def test_release_builds_every_chart_binary():
+    # The chart runs every container from the release image (rk.image); the
+    # Kubernetes test builds its own image, so only this keeps a release whole.
+    chart = (ROOT / "deploy" / "helm" / "reality-kernel" / "templates" / "daemonset.yaml").read_text(encoding="utf-8")
+    commands = set(re.findall(r"/usr/local/bin/([a-z0-9-]+)", chart))
+    assert commands >= {"rk-sensor", "rk", "rk-nri"}
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    binaries = job(release, "binaries")
+    for name in commands:
+        assert re.search(rf"(release/{name}\s|out/{name}\b)", binaries), f"{name} is not built for the release"
+    assert 'cp "bin-$arch"/* "ctx-$arch/bin/"' in job(release, "image")
+
+
+def test_release_job_logs_in_before_verifying():
+    # A new ghcr.io package is private, so the release job reads it with its token.
+    release = job((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"), "release")
+    assert "packages: read" in release
+    login = release.index("docker login ghcr.io")
+    assert login < release.index('cosign verify "$IMAGE:$VERSION"')
+    assert login < release.index('gh attestation verify "oci://$IMAGE:$VERSION"')
+
+
+def test_go_vulnerabilities_are_checked():
+    gomod = (ROOT / "rk-nri" / "go.mod").read_text(encoding="utf-8")
+    assert re.search(r"^toolchain go1\.\d+\.\d+$", gomod, re.MULTILINE), "pin the Go toolchain"
+    assert "tool golang.org/x/vuln/cmd/govulncheck" in gomod
+    assert "run: go tool govulncheck ./..." in job((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"), "go")

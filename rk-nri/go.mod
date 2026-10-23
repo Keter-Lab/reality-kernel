@@ -1,8 +1,16 @@
 module github.com/Keter-Lab/reality-kernel/rk-nri
 
-go 1.25.0
+go 1.26.0
+
+// The toolchain CI and releases build with; setup-go reads it.
+toolchain go1.27.3
 
 require github.com/containerd/nri v0.11.0
+
+// govulncheck, pinned here and run with `go tool govulncheck` in CI.
+tool golang.org/x/vuln/cmd/govulncheck
+
+require golang.org/x/vuln v1.9.0 // indirect
 
 require (
 	github.com/containerd/log v0.1.0 // indirect
