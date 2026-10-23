@@ -97,4 +97,5 @@ Policy reloads are atomic: [net-atomic-reload](evidence.md#net-atomic-reload).
 |---|---|
 | Truncation of the newest audit batches by host root | The chain head is exported in the metrics and the OTLP stream ships records off host |
 | Theft of the audit signing key by host root | Out of scope (§5); a hardware-backed key is future work |
+| A governed workload holding `CAP_NET_ADMIN` creates a TUN/TAP interface | Not hooked yet ([ADR-0006](decisions/0006-packet-injection-surface.md#status-note-2026-10-23)). Agents launched with `rk run` have no capabilities; do not grant `CAP_NET_ADMIN` to governed pods. A device rule is planned |
 | A single maintainer reviews every change | CI is the reviewer of record: every criterion's tests must pass on every kernel before merge; GOVERNANCE.md requires two reviewers for kernel code once there are two maintainers |

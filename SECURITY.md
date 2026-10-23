@@ -10,14 +10,11 @@ are welcome and are handled as described here.
 |---|---|---|
 | Sensor (`rk-sensor`), kernel programs, CLI (`rk`) | 0.1.x | Supported |
 | NRI plugin (`rk-nri`), Helm chart, container image | 0.1.x | Supported |
-| Python SDK (`realitykernel` on PyPI) | 0.7.x | Best effort |
-| Hosted API (`api/`) | — | Best effort |
 | Anything older | — | Not supported |
+| Python SDK (`realitykernel` on PyPI) and the hosted API | — | Retired ([ADR-0016](docs/decisions/0016-retire-the-hosted-product.md)) |
 
 "Supported" means fixes are released for the latest minor version.
-"Best effort" means reports are triaged and fixed when practical, without
-the timelines below. Versioning and the support window:
-[docs/releases.md](docs/releases.md).
+Versioning and the support window: [docs/releases.md](docs/releases.md).
 
 ## Reporting a vulnerability
 

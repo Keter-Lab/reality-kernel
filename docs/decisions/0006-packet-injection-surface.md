@@ -30,3 +30,14 @@ However, standard cgroup socket address hooks only intercept standard `AF_INET` 
 - Malicious or compromised agent processes cannot circumvent kernel egress policies by assembling raw packets or exploiting deferred checksum offload vulnerabilities.
 - Packet sniffers (e.g. `tcpdump`) and link-layer injection tools cannot run within governed agent cgroups.
 - Clean defense-in-depth: socket creation is blocked at Layer 4/LSM in Phase 2; character device access (`/dev/net/tun`) is blocked at Layer 0/VFS in Phase 4.
+
+## Status note (2026-10-23)
+
+The Phase 4 TUN/TAP item above was not implemented: `docs/design/phase-4.md`
+deferred it to an addendum that was never written, and no hook governs
+`/dev/net/tun`. What holds today: creating a TUN/TAP interface needs
+`CAP_NET_ADMIN`, and agents launched with `rk run` run with every capability
+cleared and `no_new_privs` set (Phase 5). A governed workload that keeps
+`CAP_NET_ADMIN`, such as a privileged pod or a statically bound service, is not
+covered. The threat model lists this as a residual risk; closing it is planned
+hardening work and will be recorded in a new ADR.

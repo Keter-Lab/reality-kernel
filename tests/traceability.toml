@@ -400,3 +400,27 @@ phase = "11"
 id = "dco"
 text = "Every commit in a pull request is signed off by its author under the DCO; bot commits are exempt"
 tests = ["ci:dco", "py:test_signed_off_commits_pass", "py:test_missing_or_foreign_sign_off_fails", "py:test_bot_commits_are_exempt"]
+
+[[criterion]]
+phase = "12"
+id = "retired_product_removed"
+text = "The repository holds only the open-source project: the hosted API, its backend crates, the analysis engine and the SDK are gone, and the workspace has only the product crates"
+tests = ["py:test_retired_product_is_gone"]
+
+[[criterion]]
+phase = "12"
+id = "release_complete"
+text = "The release builds every binary the Helm chart runs, and the release job can verify its own image while the package is still private"
+tests = ["py:test_release_builds_every_chart_binary", "py:test_release_job_logs_in_before_verifying", "ci:release"]
+
+[[criterion]]
+phase = "12"
+id = "go_vulnerabilities"
+text = "rk-nri builds with a pinned, current Go toolchain, and CI fails on any known vulnerability reachable from it, the standard library included"
+tests = ["py:test_go_vulnerabilities_are_checked", "ci:go"]
+
+[[criterion]]
+phase = "12"
+id = "site_honest"
+text = "The website has no broken links, nothing of the retired product, no performance number or superlative, and no inline script or style, so it runs under a strict Content-Security-Policy"
+tests = ["py:test_site_links_resolve", "py:test_site_has_no_retired_product", "py:test_site_claims_rules", "py:test_site_fits_the_content_security_policy", "py:test_site_partials_current", "py:test_site_config_and_sitemap"]

@@ -10,7 +10,6 @@ behind the layout is in [docs/testing.md](../docs/testing.md).
 | `k8s/run.sh` | The DaemonSet, NRI plugin and annotation binding on a kind cluster | `kernel.yml` / k8s |
 | `packaging/run.sh` | The deb and rpm: fresh install enforces under the systemd unit, upgrade to a different object with a gap probe running, uninstall removes everything (Phase 10) | `kernel.yml` / package-test, on Ubuntu 24.04 (runner) and Rocky Linux 9 (systemd container) |
 | `conformance/` | One TOML file per policy semantic, with expected verdicts. The **same files** are checked by the userspace evaluator (`rk-policy/tests/conformance.rs`) and by the kernel (`integration/src/conformance.rs`), so the two engines cannot drift | `ci.yml` / test, and vm-matrix |
-| `parity/` | Golden cases for `rk-engine-core` | `ci.yml` / test |
 | `bench/` | `gate.py` compares bench reports with `budget.json` (Phase 7) | `kernel.yml` / bench-report |
 | `traceability.toml` | Every acceptance criterion of every phase, mapped to the named tests that prove it | see below |
 | `traceability.py` | `static`: every criterion has tests, every named test exists, and `docs/evidence.md` is current. `reports`: every named VM and k8s test passed on every kernel in this run. `evidence`: prints the evidence page | `ci.yml` / python, and `kernel.yml` / traceability |
@@ -18,7 +17,9 @@ behind the layout is in [docs/testing.md](../docs/testing.md).
 | `test_workflows.py` | Actions pinned by commit SHA, read-only default token permissions, and a release workflow that signs, attests and verifies every artifact | `ci.yml` / python |
 | `coverage_summary.py` | The per-crate line coverage table | `ci.yml` / coverage |
 | `test_dashboard.py` | The Grafana dashboard (`deploy/grafana/`) queries only metrics the sensor exports | `ci.yml` / python |
-| `test_*.py` | Unit tests for the scripts above, and the security regressions | `ci.yml` / python |
+| `test_site.py` | The website: links resolve, nothing of the retired product, the README's claims rules, strict-CSP compatibility, partials and sitemap (Phase 12) | `ci.yml` / python |
+| `test_repository.py` | Only the open-source project's crates and paths are present (Phase 12) | `ci.yml` / python |
+| `test_*.py` | Unit tests for the scripts above and the workflow policy | `ci.yml` / python |
 
 Fuzz targets live in `../fuzz/` (`decoder_fuzz`, `policy_fuzz`; five minutes
 each in `kernel.yml` / fuzz). Unit and property tests live next to the code

@@ -74,12 +74,11 @@ same identity and issuer.
 
 ## Versioning
 
-[Semantic Versioning](https://semver.org/), per component:
+[Semantic Versioning](https://semver.org/):
 
 | Component | Version | Notes |
 |---|---|---|
 | Sensor, kernel programs, CLI, NRI plugin, Helm chart, image | one version, from `Cargo.toml` | Released together; the release workflow refuses a tag that differs from the workspace version |
-| Python SDK (`realitykernel`) | 0.7.x | Released separately on PyPI, best effort ([SECURITY.md](../SECURITY.md)) |
 | Website | not versioned | |
 
 While the version is 0.x:
