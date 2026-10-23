@@ -30,7 +30,7 @@ libc.workspace = true
 lru.workspace = true
 # Plain HTTP only: OTLP goes to a node-local collector, which owns TLS to
 # the backend. No TLS stack keeps the static musl build pure Rust.
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 rk-audit = { path = "../rk-audit" }
 rk-ebpf-common = { path = "../rk-ebpf-common" }
 rk-policy = { path = "../rk-policy" }
