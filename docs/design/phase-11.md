@@ -152,9 +152,9 @@ second person reviews changes.
    Test (arm64), Python tests, Go, Traceability.
 2. Settings → Code security: private vulnerability reporting and Dependabot
    security updates on.
-3. bestpractices.dev project 15819: answer the questionnaire from
-   `docs/openssf-best-practices.md` (prepared in this phase, one answer and
-   evidence link per criterion) until it shows "passing".
+3. bestpractices.dev project 15819: answer the questionnaire (answers
+   prepared in this phase, one per criterion with an evidence link, kept
+   outside the repository) until it shows "passing".
 4. After this phase merges: push tag `v0.1.0`, review the draft release
    (signatures, SBOMs, provenance verified by the workflow), publish it.
 
