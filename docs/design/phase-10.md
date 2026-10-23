@@ -234,4 +234,12 @@ checked by the `traceability` job like the VM and kind reports.
 - **rk.slice is created by `ExecStartPre=+`**: the cgroup root is mode 0555
   (kernfs), so creating a top-level cgroup needs `CAP_DAC_OVERRIDE`, which
   the sensor does not get. That one step runs with full privileges.
+- **Per-decision log lines are debug level.** At INFO they flooded the
+  system journal under load (the upgrade probe makes ~85 000 decisions a
+  second), and journald's rate limit (10 000 messages per 30 s per service)
+  then dropped the sensor's own messages, including "replaced the running
+  object without a gap". The signed audit log is the record of every
+  decision; the line is still available with
+  `RUST_LOG=info,rk_sensor::pipeline=debug`, which the agent, resilience and
+  Kubernetes suites set because they read it.
 

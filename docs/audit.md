@@ -40,6 +40,12 @@ evidence of tampering (each problem names the segment, line and batch), and
 time; without it the verifier trusts the key named in the files and only
 warns when it changes.
 
+The sensor's own log (journald under systemd) carries operational messages
+only. A line per decision is available for debugging with
+`RUST_LOG=info,rk_sensor::pipeline=debug`; it is off by default because the
+audit log already records every decision and, on a busy host, that many lines
+would exceed journald's rate limit.
+
 ## File format
 
 A segment is JSON Lines. It starts with a header line, then holds records,

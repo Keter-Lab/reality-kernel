@@ -5,7 +5,7 @@
 //! an injectable root, so tests run the checks against fake trees.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::Serialize;
 
@@ -158,11 +158,11 @@ fn kernel_config(h: &Host, release: &str) -> Check {
         "CONFIG_DEBUG_INFO_BTF",
     ];
     let recommended = ["CONFIG_BPF_LSM", "CONFIG_BPF_JIT"];
-    let missing: Vec<&str> = required.iter().copied().filter(|o| !enabled(*o)).collect();
+    let missing: Vec<&str> = required.iter().copied().filter(|o| !enabled(o)).collect();
     let weak: Vec<&str> = recommended
         .iter()
         .copied()
-        .filter(|o| !enabled(*o))
+        .filter(|o| !enabled(o))
         .collect();
     if !missing.is_empty() {
         check(
