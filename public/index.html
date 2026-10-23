@@ -14,18 +14,19 @@
   <meta name="twitter:card" content="summary_large_image" />
   <!-- @rk:head -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#090e19" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#08090c" />
   <link rel="preload" href="/fonts/ibm-plex-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/instrument-serif-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/site.css" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <script src="/app.js"></script>
+  <script defer src="/warden.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
   <!-- @rk:/head -->
 </head>
-<body>
+<body class="home">
   <!-- @rk:header -->
   <a class="skip" href="#main">Skip to content</a>
   <header class="site-header">
@@ -41,7 +42,8 @@
         <a href="/about">About</a>
       </nav>
       <div class="header-actions">
-        <a class="icon-btn" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener" aria-label="Reality Kernel on GitHub"><svg class="fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg></a>
+        <button class="mode-switch" type="button" role="switch" aria-checked="true" data-mode-switch aria-label="Site mode: enforce or audit"><span class="mode-dot" aria-hidden="true"></span><span class="mode-text"><span class="mode-key">mode = </span>"<span class="mode-value">enforce</span>"</span></button>
+        <a class="icon-btn header-gh" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener" aria-label="Reality Kernel on GitHub"><svg class="fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg></a>
         <button class="icon-btn menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Menu">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
@@ -51,16 +53,18 @@
   <!-- @rk:/header -->
 
   <main id="main">
-    <section class="hero">
+    <section class="stage hero" aria-labelledby="hero-title">
       <div class="wrap">
-        <div class="hero-copy">
-          <p class="label">Open source &middot; Linux &middot; eBPF</p>
-          <h1>Your AI agent can run commands. <em>The kernel decides which ones happen.</em></h1>
-          <p class="lede">Reality Kernel enforces network, exec and file policy for AI agents inside the Linux kernel, before the action takes place. Every decision lands in a signed, tamper-evident audit log.</p>
+        <div class="hero-text">
+          <pre class="boot" aria-hidden="true"><span>$ rk-sensor --policy /etc/rk/policy.toml</span><span>attach  lsm/bprm_check_security  lsm/file_open  cgroup/connect4  <b>ok</b></span><span>profile research-agent  mode = "<i class="boot-mode">enforce</i>"  <b>ready</b></span></pre>
+          <p class="sigil">kernel enforcement for AI agents</p>
+          <h1 class="wordmark" id="hero-title"><span>Reality</span> <span class="k">Kernel</span></h1>
+          <p class="tagline">Your agent can run commands. <em class="when-enforce">The kernel decides which ones happen.</em><em class="when-audit">The kernel watches, and writes down what it would stop.</em></p>
+          <p class="lede">Network, exec and file policy decided in eBPF, inside the Linux kernel, before the action takes place. Every decision lands in a signed, tamper-evident audit log.</p>
           <div class="actions">
             <a class="btn primary" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>View on GitHub</a>
             <a class="btn" href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/install.md" rel="noopener">Install</a>
-            <a class="btn" href="#how">How it works</a>
+            <a class="btn" href="#boundary">See it decide</a>
           </div>
           <ul class="hero-facts">
             <li>Linux 5.15 and newer</li>
@@ -68,8 +72,36 @@
             <li>MIT OR Apache-2.0</li>
           </ul>
         </div>
+        <div class="watch">
+          <div class="watch-stage">
+            <canvas id="owl-canvas" aria-hidden="true"></canvas>
+            <canvas id="hero-canvas" aria-hidden="true"></canvas>
+          </div>
+          <p class="watch-status"><span class="mode-dot" aria-hidden="true"></span><span class="when-enforce">the warden &middot; <b>mode = "enforce"</b> &middot; denied calls get EPERM</span><span class="when-audit">the warden &middot; <b>mode = "audit"</b> &middot; would-deny calls are logged</span></p>
+        </div>
+      </div>
+    </section>
 
-        <figure class="trace" aria-labelledby="trace-caption">
+    <div class="tape" aria-label="Example audit log lines">
+      <p class="tape-head">$ rk audit tail -f</p>
+      <div class="tape-track">
+          <ul class="when-enforce"><li>09:14:02.118Z <b>DENY</b>  <i>Open 203.0.113.7:443/tcp</i>  rule 4 (research-agent)</li><li>09:14:02.451Z <b>DENY</b>  <i>Launch /usr/bin/curl</i>  rule 9 (research-agent)</li><li>09:14:03.007Z <b>DENY</b>  <i>Open /home/agent/.ssh/id_ed25519</i>  rule 12 (research-agent)</li><li>09:14:05.630Z <b>DENY</b>  <i>Open 169.254.169.254:80/tcp</i>  rule 2 (research-agent)</li><li>09:14:07.212Z <b>DENY</b>  <i>Launch /tmp/x</i>  rule 9 (research-agent)</li></ul>
+          <ul class="when-enforce" aria-hidden="true"><li>09:14:02.118Z <b>DENY</b>  <i>Open 203.0.113.7:443/tcp</i>  rule 4 (research-agent)</li><li>09:14:02.451Z <b>DENY</b>  <i>Launch /usr/bin/curl</i>  rule 9 (research-agent)</li><li>09:14:03.007Z <b>DENY</b>  <i>Open /home/agent/.ssh/id_ed25519</i>  rule 12 (research-agent)</li><li>09:14:05.630Z <b>DENY</b>  <i>Open 169.254.169.254:80/tcp</i>  rule 2 (research-agent)</li><li>09:14:07.212Z <b>DENY</b>  <i>Launch /tmp/x</i>  rule 9 (research-agent)</li></ul>
+          <ul class="when-audit"><li>09:14:02.118Z <b>AUDIT</b>  <i>Open 203.0.113.7:443/tcp</i>  rule 4 (research-agent)</li><li>09:14:02.451Z <b>AUDIT</b>  <i>Launch /usr/bin/curl</i>  rule 9 (research-agent)</li><li>09:14:03.007Z <b>AUDIT</b>  <i>Open /home/agent/.ssh/id_ed25519</i>  rule 12 (research-agent)</li><li>09:14:05.630Z <b>AUDIT</b>  <i>Open 169.254.169.254:80/tcp</i>  rule 2 (research-agent)</li><li>09:14:07.212Z <b>AUDIT</b>  <i>Launch /tmp/x</i>  rule 9 (research-agent)</li></ul>
+          <ul class="when-audit" aria-hidden="true"><li>09:14:02.118Z <b>AUDIT</b>  <i>Open 203.0.113.7:443/tcp</i>  rule 4 (research-agent)</li><li>09:14:02.451Z <b>AUDIT</b>  <i>Launch /usr/bin/curl</i>  rule 9 (research-agent)</li><li>09:14:03.007Z <b>AUDIT</b>  <i>Open /home/agent/.ssh/id_ed25519</i>  rule 12 (research-agent)</li><li>09:14:05.630Z <b>AUDIT</b>  <i>Open 169.254.169.254:80/tcp</i>  rule 2 (research-agent)</li><li>09:14:07.212Z <b>AUDIT</b>  <i>Launch /tmp/x</i>  rule 9 (research-agent)</li></ul>
+      </div>
+    </div>
+    <div class="chain" aria-hidden="true"><div class="wrap"><span>batch <b>1</b></span><span>prev 0000a1&hellip;</span><span>head 9f2c41&hellip;</span><span class="ok">sig &#10003;</span></div></div>
+
+    <section class="section" id="boundary">
+      <div class="wrap">
+        <div class="split-2">
+          <div class="section-head reveal">
+            <p class="sigil">the boundary</p>
+            <h2>Guardrails can be talked around. <em>The kernel can't.</em></h2>
+            <p>Prompt filters and tool wrappers sit in front of the agent. A prompt injection, a bug or a child process can step around them. Reality Kernel attaches eBPF programs to the kernel's BPF-LSM and cgroup socket hooks, so the decision is made at the system call, for every process in a governed cgroup, however the request was phrased.</p>
+          </div>
+          <figure class="trace reveal" aria-labelledby="trace-caption">
           <div class="trace-pane">
             <div class="trace-title"><span>Inside the agent</span><span>strace, abridged</span></div>
 <pre><span class="p">$</span> rk run --profile research-agent -- python3 agent.py
@@ -90,22 +122,13 @@ connect(3, {AF_INET, 10.20.0.12:443}) = <span class="allow">0</span></pre>
           </div>
           <figcaption id="trace-caption" class="visually-hidden">Example session: an agent's denied connect, exec and open calls return EPERM, and the host's audit log records each decision.</figcaption>
         </figure>
-      </div>
-    </section>
-
-    <section class="section" id="why">
-      <div class="wrap">
-        <div class="section-head">
-          <p class="label">Why the kernel</p>
-          <h2>Guardrails in front of an agent can be talked around. The kernel can't.</h2>
-          <p>Prompt filters and tool wrappers sit in front of the agent. A prompt injection, a bug or a child process can step around them. Reality Kernel attaches eBPF programs to the kernel's BPF-LSM and cgroup socket hooks, so the decision is made at the system call, for every process in a governed cgroup, however the request was phrased.</p>
         </div>
         <div class="diagram" role="img" aria-label="Diagram: an agent's system calls cross from user space into the kernel, where BPF hooks allow them or return EPERM and record the decision.">
           <div class="layer">
             <div class="layer-name">user space</div>
             <div class="layer-body">
               <span class="node">agent</span><span class="arrow">&rarr;</span><span class="node">python3</span><span class="arrow">&rarr;</span><span class="node">bash</span><span class="arrow">&rarr;</span><span class="node">curl</span>
-              <span class="arrow">&nbsp;&nbsp;</span>
+              <span class="spacer"></span>
               <span class="node">rk-sensor</span><span class="node">rk audit</span><span class="node">/metrics</span>
             </div>
           </div>
@@ -116,60 +139,62 @@ connect(3, {AF_INET, 10.20.0.12:443}) = <span class="allow">0</span></pre>
           <div class="layer kernel">
             <div class="layer-name">kernel</div>
             <div class="layer-body">
-              <span class="node key">cgroup sock_addr</span><span class="node key">BPF-LSM</span><span class="arrow">&rarr;</span><span class="node">policy maps</span><span class="arrow">&rarr;</span><span class="node">allow</span><span class="node">EPERM</span><span class="arrow">&rarr;</span><span class="node">ring buffer</span>
+              <span class="node key">cgroup sock_addr</span><span class="node key">BPF-LSM</span><span class="arrow">&rarr;</span><span class="node">policy maps</span><span class="arrow">&rarr;</span><span class="node">allow</span><span class="node deny">EPERM</span><span class="arrow">&rarr;</span><span class="node">ring buffer</span>
             </div>
           </div>
         </div>
       </div>
     </section>
+    <div class="chain" aria-hidden="true"><div class="wrap"><span>batch <b>2</b></span><span>prev 9f2c41&hellip;</span><span>head 4c1d9a&hellip;</span><span class="ok">sig &#10003;</span></div></div>
 
-    <section class="section" id="what">
+    <section class="section paper" id="what">
       <div class="wrap">
-        <div class="section-head">
-          <p class="label">What it enforces</p>
-          <h2>Each capability links to the tests that prove it.</h2>
+        <div class="section-head reveal">
+          <p class="sigil">what it enforces</p>
+          <h2>Every capability <em>links to its tests.</em></h2>
           <p>The project keeps a map from every claim to the named tests behind it, and CI checks that those tests passed on every supported kernel. Follow any link to see them.</p>
         </div>
         <div class="caps">
-          <article class="cap">
-            <p class="label">Network</p>
+          <article class="cap reveal">
+            <p class="label">// net</p>
             <p>Denies governed connections over TCP and UDP, IPv4 and IPv6, and closes the usual bypasses: raw and packet sockets, io_uring, TCP Fast Open and NAT64 addresses.</p>
             <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-enforce-eperm" rel="noopener">net-enforce-eperm</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-bypasses" rel="noopener">net-bypasses</a></p>
           </article>
-          <article class="cap">
-            <p class="label">Exec</p>
+          <article class="cap reveal">
+            <p class="label">// exec</p>
             <p>Allows only listed executables, decided on file identity rather than path, so symlinks, replaced binaries, scripts and memfd tricks do not get around it.</p>
             <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#exec-allowlist" rel="noopener">exec-allowlist</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#exec-identity" rel="noopener">exec-identity</a></p>
           </article>
-          <article class="cap">
-            <p class="label">Files</p>
+          <article class="cap reveal">
+            <p class="label">// files</p>
             <p>Protects files per access type: read, write, delete, rename, link, create and setattr, whatever name the file is reached by.</p>
             <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#file-access-types" rel="noopener">file-access-types</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#file-identity" rel="noopener">file-identity</a></p>
           </article>
-          <article class="cap">
-            <p class="label">Agents and pods</p>
+          <article class="cap reveal">
+            <p class="label">// agents · pods</p>
             <p>Governs an agent started with <code>rk run</code>, or a Kubernetes pod selected by annotation, from its first instruction, along with every process it starts.</p>
             <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#agent-first-instruction" rel="noopener">agent-first-instruction</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#k8s-first-instruction" rel="noopener">k8s-first-instruction</a></p>
           </article>
-          <article class="cap">
-            <p class="label">Resilience</p>
+          <article class="cap reveal">
+            <p class="label">// resilience</p>
             <p>Keeps enforcing while the sensor restarts or upgrades, fails closed if it stays down, and denies governed workloads the means to tamper with it.</p>
             <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#survives-restart" rel="noopener">survives-restart</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#heartbeat-fail-closed" rel="noopener">heartbeat-fail-closed</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#self-protection" rel="noopener">self-protection</a></p>
           </article>
-          <article class="cap">
-            <p class="label">Audit</p>
+          <article class="cap reveal">
+            <p class="label">// audit</p>
             <p>Records every deny and audit-would-deny as an OCSF record in a hash-chained log signed with Ed25519. <code>rk audit verify</code> detects any edit.</p>
             <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#audit_complete" rel="noopener">audit_complete</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#audit_tamper" rel="noopener">audit_tamper</a></p>
           </article>
         </div>
       </div>
     </section>
+    <div class="chain" aria-hidden="true"><div class="wrap"><span>batch <b>3</b></span><span>prev 4c1d9a&hellip;</span><span>head 7b30e8&hellip;</span><span class="ok">sig &#10003;</span></div></div>
 
     <section class="section" id="how">
       <div class="wrap">
         <div class="section-head">
-          <p class="label">How it works</p>
-          <h2>From policy file to kernel decision</h2>
+          <p class="sigil">how it works</p>
+          <h2>From policy file <em>to kernel decision</em></h2>
         </div>
         <ol class="steps">
           <li>
@@ -195,8 +220,8 @@ connect(3, {AF_INET, 10.20.0.12:443}) = <span class="allow">0</span></pre>
     <section class="section" id="start">
       <div class="wrap">
         <div class="section-head">
-          <p class="label">Quick start</p>
-          <h2>Install, check the host, govern an agent</h2>
+          <p class="sigil">quick start</p>
+          <h2>Install. Check the host. <em>Govern an agent.</em></h2>
           <p>Packages for Debian, Ubuntu, RHEL and Rocky, a Helm chart for Kubernetes, and static binaries. Releases are signed with Sigstore and carry SLSA provenance and an SBOM.</p>
         </div>
         <div class="split">
@@ -239,8 +264,8 @@ access = [<span class="s">"all"</span>]</pre>
     <section class="section" id="tested">
       <div class="wrap">
         <div class="section-head">
-          <p class="label">Tested where it runs</p>
-          <h2>Every acceptance test runs on real kernels</h2>
+          <p class="sigil">tested where it runs</p>
+          <h2>Every acceptance test runs <em>on real kernels</em></h2>
           <p>Kernel behaviour differs between versions, so the integration suites run as root in a virtual machine for each supported kernel instead of against mocks.</p>
         </div>
         <ul class="kernels" aria-label="Kernels tested in CI">
@@ -259,12 +284,13 @@ access = [<span class="s">"all"</span>]</pre>
         <p class="actions after-list"><a class="btn" href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md" rel="noopener">See the evidence for every claim</a></p>
       </div>
     </section>
+    <div class="chain" aria-hidden="true"><div class="wrap"><span>batch <b>4</b></span><span>prev 7b30e8&hellip;</span><span>head e51f02&hellip;</span><span class="ok">sig &#10003;</span></div></div>
 
-    <section class="closing">
+    <section class="stage closing">
       <div class="wrap">
-        <p class="label">Get involved</p>
-        <h2>Put the kernel between your agents and the host.</h2>
-        <p class="lede">Reality Kernel is developed in the open. Read the threat model, try it on a test host, and open an issue or a pull request.</p>
+        <p class="sigil">get involved</p>
+        <h2>Put the kernel between your agents <em>and the host.</em></h2>
+        <p class="lede">Reality Kernel is developed in the open. Read the threat model, try it on a test host in audit mode first, and open an issue or a pull request.</p>
         <div class="actions">
           <a class="btn primary" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener">GitHub repository</a>
           <a class="btn" href="/docs">Documentation</a>
@@ -322,5 +348,7 @@ access = [<span class="s">"all"</span>]</pre>
     </div>
   </footer>
   <!-- @rk:/footer -->
+  <script src="/owl3d.js" defer></script>
+  <script src="/hero.js" defer></script>
 </body>
 </html>

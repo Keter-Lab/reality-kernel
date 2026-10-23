@@ -76,14 +76,15 @@ def link(href, label, cls=""):
 
 HEAD = """<!-- @rk:head -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#090e19" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#08090c" />
   <link rel="preload" href="/fonts/ibm-plex-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/instrument-serif-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/site.css" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <script src="/app.js"></script>
+  <script defer src="/warden.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
   <!-- @rk:/head -->"""
 
@@ -99,7 +100,8 @@ HEADER = """<!-- @rk:header -->
 """ + "\n".join("        " + link(h, l) for h, l in NAV_LINKS) + """
       </nav>
       <div class="header-actions">
-        <a class="icon-btn" href=\"""" + REPO + """\" rel="noopener" aria-label="Reality Kernel on GitHub">""" + GITHUB_SVG.replace("<svg ", '<svg class="fill" ') + """</a>
+        <button class="mode-switch" type="button" role="switch" aria-checked="true" data-mode-switch aria-label="Site mode: enforce or audit"><span class="mode-dot" aria-hidden="true"></span><span class="mode-text"><span class="mode-key">mode = </span>"<span class="mode-value">enforce</span>"</span></button>
+        <a class="icon-btn header-gh" href=\"""" + REPO + """\" rel="noopener" aria-label="Reality Kernel on GitHub">""" + GITHUB_SVG.replace("<svg ", '<svg class="fill" ') + """</a>
         <button class="icon-btn menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Menu">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>

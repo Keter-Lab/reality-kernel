@@ -7,14 +7,15 @@
   <link rel="canonical" href="https://www.realitykernel.dev/privacy" />
   <!-- @rk:head -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#090e19" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#08090c" />
   <link rel="preload" href="/fonts/ibm-plex-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/instrument-serif-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/site.css" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <script src="/app.js"></script>
+  <script defer src="/warden.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
   <!-- @rk:/head -->
 </head>
@@ -34,7 +35,8 @@
         <a href="/about">About</a>
       </nav>
       <div class="header-actions">
-        <a class="icon-btn" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener" aria-label="Reality Kernel on GitHub"><svg class="fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg></a>
+        <button class="mode-switch" type="button" role="switch" aria-checked="true" data-mode-switch aria-label="Site mode: enforce or audit"><span class="mode-dot" aria-hidden="true"></span><span class="mode-text"><span class="mode-key">mode = </span>"<span class="mode-value">enforce</span>"</span></button>
+        <a class="icon-btn header-gh" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener" aria-label="Reality Kernel on GitHub"><svg class="fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg></a>
         <button class="icon-btn menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Menu">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
@@ -44,16 +46,16 @@
   <!-- @rk:/header -->
 
   <main id="main">
-    <section class="page-head">
+    <section class="page-head stage">
       <div class="wrap">
-        <p class="label">Privacy</p>
+        <p class="sigil">Privacy</p>
         <h1>Privacy policy</h1>
         <p class="lede">Short version: the software sends nothing to us, and this website has no accounts, forms or tracking cookies.</p>
         <p class="muted">Last updated 23 October 2026.</p>
       </div>
     </section>
 
-    <section class="prose">
+    <section class="prose paper">
       <div class="wrap">
         <h2>The software</h2>
         <p>Reality Kernel runs on your machines and sends no data to Keter Labs. Its audit log, metrics and traces stay on your hosts, or go only to endpoints you configure yourself, such as your own OpenTelemetry collector.</p>
