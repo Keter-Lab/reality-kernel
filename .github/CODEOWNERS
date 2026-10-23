@@ -1,0 +1,16 @@
+# Owners are requested for review automatically. GOVERNANCE.md says how
+# changes are approved; kernel code needs two maintainers once there are two.
+# Later rules take precedence.
+
+*                       @HunterX461
+
+# Kernel side: BPF programs, the shared ABI, loading and pins
+/rk-bpf/                @HunterX461
+/rk-ebpf-common/        @HunterX461
+/rk-sensor/             @HunterX461
+
+# Supply chain and governance
+/.github/               @HunterX461
+/deploy/                @HunterX461
+/SECURITY.md            @HunterX461
+/GOVERNANCE.md          @HunterX461

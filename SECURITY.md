@@ -1,31 +1,81 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+Reality Kernel enforces policy in the Linux kernel on behalf of its users, so
+a flaw in it can widen what a governed workload is allowed to do. Reports
+are welcome and are handled as described here.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.3.x   | :white_check_mark: |
-| < 0.3   | :x:                |
+## Supported versions
 
-## Reporting a Vulnerability
+| Component | Version | Status |
+|---|---|---|
+| Sensor (`rk-sensor`), kernel programs, CLI (`rk`) | 0.1.x | Supported |
+| NRI plugin (`rk-nri`), Helm chart, container image | 0.1.x | Supported |
+| Python SDK (`realitykernel` on PyPI) | 0.7.x | Best effort |
+| Hosted API (`api/`) | — | Best effort |
+| Anything older | — | Not supported |
 
-We take the security of Reality Kernel, its eBPF kernel probes, and symbolic execution engine extremely seriously. If you discover a vulnerability or execution bypass, please report it responsibly.
+"Supported" means fixes are released for the latest minor version.
+"Best effort" means reports are triaged and fixed when practical, without
+the timelines below. Versioning and the support window:
+[docs/releases.md](docs/releases.md).
 
-### Responsible Disclosure Process
+## Reporting a vulnerability
 
-1. **Do not open a public issue.** Please report vulnerabilities privately.
-2. Email your findings directly to the maintainer at:
-   **security@realitykernel.dev** (or open a private GitHub Security Advisory).
-3. Include the following details:
-   - Type of vulnerability (e.g., eBPF probe bypass, symbolic execution evasion, fast-path escape).
-   - Step-by-step reproduction instructions or proof-of-concept (PoC) script.
-   - Affected components (`core/engine.py`, `rk-bpf`, `api`, etc.).
-   - Potential impact on host isolation or agent execution.
+Please do **not** open a public issue, discussion or pull request.
 
-### Response Timeline
+Report privately through either channel:
 
-- **Initial Response:** Within 48 hours of receipt.
-- **Triage & Status Update:** Within 5 business days.
-- **Remediation & Advisory Release:** Coordinated with the reporter prior to public release.
+- **GitHub:** [Report a vulnerability](https://github.com/Keter-Lab/reality-kernel/security/advisories/new)
+  (private vulnerability reporting), or
+- **Email:** security@realitykernel.dev
 
-Thank you for helping keep the open-source autonomous agent ecosystem secure.
+Helpful details:
+
+- the affected component and version (`rk-sensor --version`, `rk --version`);
+- the kernel version and distribution (`uname -r`, and `rk doctor` output);
+- the policy profile involved, reduced to the smallest one that reproduces it;
+- steps to reproduce, or a proof of concept;
+- the impact as you understand it: for example, a governed workload making
+  a connection, running a program or touching a file its profile denies.
+
+## What happens next
+
+| Step | Target |
+|---|---|
+| Acknowledgement of your report | within 3 business days |
+| Initial assessment (confirmed or not, severity) | within 7 days |
+| Fix released for a critical issue | within 30 days |
+| Coordinated public disclosure | within 90 days of the report, or earlier once a fix is released |
+
+Fixes are published as a GitHub Security Advisory with a CVE where one
+applies, and are listed in [CHANGELOG.md](CHANGELOG.md). Reporters are
+credited unless they ask not to be.
+
+## Scope
+
+In scope:
+
+- a governed workload acting outside its profile (network, exec, file);
+- a governed workload tampering with the sensor, its pins or its maps;
+- an enforcement gap during restart, reload or upgrade;
+- an unprivileged local user changing policy or bindings through the agentd
+  socket;
+- forging or undetectably altering the audit log;
+- release artifacts that verify but were not built by this repository's
+  release workflow.
+
+Out of scope, by design ([threat model](docs/threat-model.md#5-explicitly-out-of-scope)):
+root on the host or a compromised kernel, ungoverned workloads, kernels
+without BPF LSM for exec and file rules (reported by `rk doctor`), side
+channels, physical access and denial of service against the host.
+
+## Safe harbour
+
+Good-faith research that follows this policy, avoids privacy violations and
+service disruption, and is limited to systems you own or are authorised to
+test will not be pursued by the maintainers.
+
+## Verifying what you run
+
+Every release file is signed with Sigstore and carries SLSA build provenance
+and an SPDX SBOM: [docs/releases.md](docs/releases.md#verifying-a-release).
