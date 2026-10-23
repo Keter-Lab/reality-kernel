@@ -148,10 +148,13 @@ def test_site_fits_the_content_security_policy():
 
 
 def test_site_config_and_sitemap():
-    root = (ROOT / "vercel.json").read_text(encoding="utf-8")
-    assert (PUBLIC / "vercel.json").read_text(encoding="utf-8") == root, "public/vercel.json must match vercel.json"
-    config = json.loads(root)
+    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    # A static site whatever the dashboard says: `"framework": null` is Vercel's
+    # "Other" preset, so with no package.json nothing is installed or built.
+    assert config["framework"] is None
+    assert not (ROOT / "package.json").exists()
     assert "rewrites" not in config and "functions" not in config
+    assert not (PUBLIC / "vercel.json").exists(), "only the repository root holds vercel.json"
     for r in config["redirects"]:
         assert resolves(r["destination"]), r
         assert not resolves(r["source"]), f"{r['source']} redirects but still exists"
