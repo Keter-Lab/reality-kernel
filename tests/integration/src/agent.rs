@@ -556,6 +556,8 @@ impl Daemon {
         let log = File::create(DAEMON_LOG).context("create daemon log")?;
         let child = Command::new(sensor)
             .args(["--policy", POLICY_FILE])
+            // Phase 10: per-decision lines are debug level; this suite reads them.
+            .env("RUST_LOG", "info,rk_sensor::pipeline=debug")
             .stdin(Stdio::null())
             .stdout(log.try_clone()?)
             .stderr(log)

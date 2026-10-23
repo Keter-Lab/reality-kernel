@@ -14,6 +14,10 @@ artifact.
 | 6.18 | x86_64 | CI | CI | Latest stable in the LVH image set |
 | any | arm64 | build + layout checks only | not yet | See "Known gaps" |
 
+On any host, `rk doctor` checks the features the sensor needs and explains
+what is missing (docs/install.md). It runs on every kernel below, in the VM
+job's upgrade suite, and must report no failure.
+
 ## How the VM job works
 
 1. `bpf-build` compiles `rk-bpf/` for x86 and arm64 with `-Wall -Werror` and

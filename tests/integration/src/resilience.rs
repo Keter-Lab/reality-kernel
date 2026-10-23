@@ -140,6 +140,8 @@ impl ResilienceDaemon {
                 "--heartbeat-timeout",
                 &heartbeat_secs.to_string(),
             ])
+            // Phase 10: per-decision lines are debug level; this suite reads them.
+            .env("RUST_LOG", "info,rk_sensor::pipeline=debug")
             .stdin(Stdio::null())
             .stdout(log.try_clone()?)
             .stderr(log)

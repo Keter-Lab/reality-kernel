@@ -1,5 +1,8 @@
 //! With the `embedded-bpf` feature, points `RK_BPF_DIR` at the objects built by
 //! `make -C rk-bpf ARCH=<arch>` so `loader` can embed them with `include_bytes!`.
+//! `RK_BPF_VARIANT=next` embeds the upgrade-test variant from
+//! `build/<arch>-next` instead (docs/design/phase-10.md §7). This is a build
+//! input, not a runtime override: a binary always runs the object it embeds.
 
 use std::env;
 use std::path::PathBuf;
@@ -8,6 +11,7 @@ const OBJECTS: [&str; 3] = ["rk.bpf.o", "rk_selftest.bpf.o", "rk_probes.bpf.o"];
 
 fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_EMBEDDED_BPF");
+    println!("cargo:rerun-if-env-changed=RK_BPF_VARIANT");
     if env::var_os("CARGO_FEATURE_EMBEDDED_BPF").is_none() {
         return;
     }
@@ -20,7 +24,13 @@ fn main() {
     };
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-    let dir = manifest_dir.join("../rk-bpf/build").join(bpf_arch);
+    let dir = match env::var("RK_BPF_VARIANT").as_deref() {
+        Ok("next") => manifest_dir
+            .join("../rk-bpf/build")
+            .join(format!("{bpf_arch}-next")),
+        Ok(other) => panic!("RK_BPF_VARIANT `{other}`: only `next` is defined"),
+        Err(_) => manifest_dir.join("../rk-bpf/build").join(bpf_arch),
+    };
     for object in OBJECTS {
         let path = dir.join(object);
         println!("cargo:rerun-if-changed={}", path.display());

@@ -2,13 +2,15 @@
 """Acceptance criterion -> test traceability (docs/design/phase-8.md §3.1).
 
     traceability.py static  [--root DIR]
-    traceability.py reports [--root DIR] --kernels 5.15,6.1,... ARTIFACT_DIR
+    traceability.py reports [--root DIR] --kernels 5.15,6.1,... [--distros A,B] ARTIFACT_DIR
 
 static:  every criterion in tests/traceability.toml has at least one test,
          and every named test exists in the source.
 reports: every vm: test passed on every listed kernel, and every k8s: test
          passed, according to the JSON reports CI collected in ARTIFACT_DIR
-         (integration-/agent-/resilience-<kernel>.json and k8s.json).
+         (integration-/agent-/resilience-<kernel>.json and k8s.json), and
+         every pkg: test passed on every listed distribution
+         (pkg-<distro>.json, docs/design/phase-10.md §7).
 
 Exits 1 on any gap and prints a Markdown summary. Standard library only.
 """
@@ -20,12 +22,13 @@ import re
 import sys
 import tomllib
 
-KINDS = ("vm", "k8s", "unit", "go", "py", "ci")
+KINDS = ("vm", "k8s", "pkg", "unit", "go", "py", "ci")
 VM_SOURCES = ("tests/integration/src/main.rs", "tests/integration/src/agent.rs",
               "tests/integration/src/conformance.rs",
               "tests/integration/src/observability.rs",
-              "tests/integration/src/resilience.rs")
-VM_REPORTS = ("integration", "agent", "resilience", "conformance", "observability")
+              "tests/integration/src/resilience.rs",
+              "tests/integration/src/upgrade.rs")
+VM_REPORTS = ("integration", "agent", "resilience", "conformance", "observability", "upgrade")
 
 
 def load_criteria(root):
@@ -54,6 +57,7 @@ def source_index(root):
     return {
         "vm": read([root / s for s in VM_SOURCES]),
         "k8s": read([root / "tests" / "k8s" / "run.sh"]),
+        "pkg": read([root / "tests" / "packaging" / "run.sh"]),
         "unit": read(files("*.rs")),
         "go": read(files("*_test.go", "rk-nri")),
         "py": read(files("*.py", "tests")),
@@ -66,6 +70,7 @@ def exists(kind, name, index):
     patterns = {
         "vm": rf'run_test\(\s*checks,\s*"{n}"',
         "k8s": rf"^\s*run_test {n}\s",
+        "pkg": rf"^\s*run_test {n}\s",
         "unit": rf"\bfn {n}\s*\(",
         "go": rf"^func {n}\(",
         "py": rf"^def {n}\(",
@@ -111,7 +116,7 @@ def passed_names(path):
     return {c.get("name") for c in data if isinstance(c, dict) and c.get("passed") is True}
 
 
-def check_reports(root, artifacts, kernels):
+def check_reports(root, artifacts, kernels, distros=()):
     criteria = load_criteria(root)
     failures = []
     per_kernel = {}
@@ -125,6 +130,14 @@ def check_reports(root, artifacts, kernels):
                 continue
             names |= got
         per_kernel[k] = names
+    per_distro = {}
+    for d in distros:
+        found = list(artifacts.rglob(f"pkg-{d}.json"))
+        got = passed_names(found[0]) if found else None
+        if got is None:
+            failures.append(f"{d}: no package test report")
+            got = set()
+        per_distro[d] = got
     k8s_files = list(artifacts.rglob("k8s.json"))
     k8s = passed_names(k8s_files[0]) if k8s_files else None
     if k8s is None:
@@ -139,6 +152,12 @@ def check_reports(root, artifacts, kernels):
                         failures.append(f"[{c['id']}] {name} did not pass on Linux {k}")
             elif kind == "k8s" and name not in k8s:
                 failures.append(f"[{c['id']}] {name} did not pass on Kubernetes")
+            elif kind == "pkg":
+                if not distros:
+                    failures.append(f"[{c['id']}] {name}: no --distros given to check it against")
+                for d, names in per_distro.items():
+                    if name not in names:
+                        failures.append(f"[{c['id']}] {name} did not pass on {d}")
     return criteria, failures
 
 
@@ -169,6 +188,7 @@ def main(argv):
     ap.add_argument("mode", choices=("static", "reports"))
     ap.add_argument("--root", default=pathlib.Path(__file__).resolve().parents[1], type=pathlib.Path)
     ap.add_argument("--kernels", default="")
+    ap.add_argument("--distros", default="")
     ap.add_argument("artifacts", nargs="?", type=pathlib.Path)
     args = ap.parse_intermixed_args(argv)
     if args.mode == "static":
@@ -179,9 +199,11 @@ def main(argv):
         kernels = [k for k in args.kernels.split(",") if k]
         if not kernels or args.artifacts is None:
             ap.error("reports needs --kernels and ARTIFACT_DIR")
-        criteria, failures = check_reports(args.root, args.artifacts, kernels)
+        distros = [d for d in args.distros.split(",") if d]
+        criteria, failures = check_reports(args.root, args.artifacts, kernels, distros)
         print(summary("Traceability (this run's reports)", criteria, failures,
-                      "Every vm: test passed on every kernel and every k8s: test passed."))
+                      "Every vm: test passed on every kernel, every k8s: test passed, "
+                      "and every pkg: test passed on every distribution."))
     return 1 if failures else 0
 
 

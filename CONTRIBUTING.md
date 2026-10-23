@@ -46,4 +46,4 @@ cargo test
 
 ## Reporting Vulnerabilities
 
-If you discover a security vulnerability within Reality Kernel itself, please email **tabrez@realitykernel.dev** directly rather than opening a public issue. We will respond promptly and coordinate disclosure responsibly.
+If you discover a security vulnerability within Reality Kernel itself, please email **security@realitykernel.dev** directly rather than opening a public issue. We will respond promptly and coordinate disclosure responsibly.

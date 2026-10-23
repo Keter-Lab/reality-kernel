@@ -27,6 +27,7 @@ deleted, skipped or failing test.
 | Conformance corpus | Drift between the userspace reference evaluator and the kernel: the same TOML cases run against both | `rk-policy/tests/conformance.rs`, VM harness |
 | Fuzzing | Panics and inconsistencies on hostile input: ring buffer event decoding, policy text | `cargo fuzz`, 2 × 5 min per run |
 | Kernel integration | That programs load, attach and enforce: real `connect`, `execve` and `open` calls in governed cgroups, restarts and tampering | VM per kernel, as root |
+| Observability | Every deny and audit-would-deny reaches the signed audit log with its rule id, the kernel's decision counters agree with the log, a flipped byte fails `rk audit verify`, lost events are recorded, `/metrics` moves | VM per kernel, real daemon (`observability.rs`); OCSF records validated against a vendored 1.9.0 schema subset in unit tests |
 | Kubernetes | Deployment, NRI binding, annotations, fail-closed behaviour | kind cluster |
 | Performance | Hook cost and event loss against a budget | Phase 7 bench and `tests/bench/gate.py` |
 | Coverage | Untested userspace code (report-only for now) | `cargo llvm-cov`, job summary |
@@ -71,4 +72,3 @@ synthetic run never could.
 
 - Coverage has no threshold yet. One will be set once a few runs show a
   stable baseline.
-- The process table (Phase 9) is not covered yet.

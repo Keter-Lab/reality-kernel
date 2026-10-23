@@ -1,0 +1,245 @@
+name: Release
+
+# docs/design/phase-10.md §5. On a v* tag: static binaries, deb and rpm
+# packages, a multi-arch image on ghcr.io, the packaged Helm chart and
+# SHA256SUMS, attached to a *draft* GitHub release for review before it is
+# published. A manual run builds every artifact without publishing.
+# Signing and SBOMs are Phase 11.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  IMAGE: ghcr.io/keter-lab/reality-kernel
+  NFPM_VERSION: 2.47.0
+  NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
+  HELM_VERSION: v3.22.1
+  HELM_SHA256: 896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - id: v
+        name: Tag matches the workspace version
+        run: |
+          set -euo pipefail
+          crate="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "${GITHUB_REF_NAME#v}" != "$crate" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the workspace version $crate"
+            exit 1
+          fi
+          echo "version=$crate" >> "$GITHUB_OUTPUT"
+
+  bpf:
+    name: BPF objects
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install clang, llvm, libbpf headers
+        run: sudo apt-get update && sudo apt-get install -y clang llvm libbpf-dev make
+
+      - name: Build (-Wall -Werror)
+        run: .github/scripts/run-logged.sh "bpf build" make -C rk-bpf all-arches
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bpf-objects
+          path: rk-bpf/build/
+          if-no-files-found: error
+
+  binaries:
+    name: Binaries (${{ matrix.arch }})
+    needs: bpf
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bpf-objects
+          path: rk-bpf/build/
+
+      - name: Install libclang (bindgen) and musl tools
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev musl-tools
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: rk-nri/go.mod
+          cache-dependency-path: rk-nri/go.mod
+
+      - name: Build (static, embedded objects)
+        run: |
+          set -euo pipefail
+          .github/scripts/run-logged.sh "rk-sensor" cargo build --release --locked -p rk-sensor --features embedded-bpf --target ${{ matrix.target }}
+          .github/scripts/run-logged.sh "rk" cargo build --release --locked -p rk-cli --target ${{ matrix.target }}
+          mkdir -p out
+          cp target/${{ matrix.target }}/release/rk-sensor target/${{ matrix.target }}/release/rk out/
+          (cd rk-nri && CGO_ENABLED=0 go build -trimpath -o ../out/rk-nri .)
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bin-${{ matrix.arch }}
+          path: out/
+          if-no-files-found: error
+
+  packages:
+    name: deb, rpm and tarballs
+    needs: [version, binaries]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: bin-*
+
+      - name: Install nFPM (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/nfpm.tgz "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          echo "${NFPM_SHA256}  /tmp/nfpm.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/nfpm.tgz -C /usr/local/bin nfpm
+
+      - name: Build
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            chmod +x "bin-$arch"/*
+            deploy/packaging/build.sh "$arch" "bin-$arch" "$VERSION" 1 dist
+            name="reality-kernel-$VERSION-linux-$arch"
+            mkdir -p "$name"
+            cp "bin-$arch"/* deploy/systemd/rk-sensor.service deploy/packaging/policy.toml \
+              docs/install.md docs/audit.md LICENSE LICENSE-APACHE LICENSE-MIT "$name"/
+            tar -czf "dist/$name.tar.gz" "$name"
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-packages
+          path: dist/
+          if-no-files-found: error
+
+  image:
+    name: Container image
+    needs: [version, binaries]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: bin-*
+
+      - name: Build (and push on tags)
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          push=false
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            push=true
+            echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          fi
+          # The image only copies static binaries, so each platform builds
+          # natively here without emulation.
+          for arch in amd64 arm64; do
+            mkdir -p "ctx-$arch/bin"
+            cp "bin-$arch"/* "ctx-$arch/bin/"
+            chmod +x "ctx-$arch/bin"/*
+            docker build --platform "linux/$arch" -f deploy/docker/Dockerfile -t "$IMAGE:$VERSION-$arch" "ctx-$arch"
+            if $push; then docker push "$IMAGE:$VERSION-$arch"; fi
+          done
+          if $push; then
+            docker buildx imagetools create -t "$IMAGE:$VERSION" "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
+            docker buildx imagetools inspect "$IMAGE:$VERSION"
+          fi
+
+  chart:
+    name: Helm chart
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Package
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -o helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tar.gz" | sha256sum -c -
+          tar -xzf helm.tar.gz --strip-components=1 linux-amd64/helm
+          ./helm lint deploy/helm/reality-kernel
+          ./helm package deploy/helm/reality-kernel --version "$VERSION" --app-version "$VERSION" -d dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-chart
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub release
+    if: github.ref_type == 'tag'
+    needs: [version, packages, image, chart]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Checksums and draft release
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Reality Kernel $VERSION" \
+            --notes "Image: \`$IMAGE:$VERSION\` (linux/amd64, linux/arm64). Install: docs/install.md. Verify downloads with \`sha256sum -c SHA256SUMS\`." \
+            -- *

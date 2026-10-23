@@ -5,6 +5,11 @@
 //! sensor whose object matches `rk_meta` reuses the pinned maps (aya opens a
 //! pinned map instead of creating one) and adopts the pinned links; the
 //! attach helpers in `policy` skip any link that is already pinned.
+//!
+//! A different object (a new release) is not adopted. It is loaded beside the
+//! running one under `<root>-next`, and the old pin set is removed only after
+//! the new programs are attached and hold the policy: make-before-break, so
+//! there is never a moment with nothing attached (docs/design/phase-10.md §3).
 
 use std::ffi::CString;
 use std::fs;
@@ -58,9 +63,18 @@ pub enum Adoption {
     Fresh,
     /// Pins of the same object existed and were adopted: no gap.
     Adopted,
-    /// Pins of a different object (ABI or build) were removed and recreated:
-    /// a gap of one load-and-attach.
-    Replaced,
+    /// Pins of a different object (ABI or build) exist and stay attached; the
+    /// new object was loaded under `<root>-next`. The caller attaches the new
+    /// programs, moves the policy over, then calls [`finish_replacement`].
+    Replacing,
+}
+
+/// The pin set being replaced, while [`Adoption::Replacing`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Previous {
+    pub root: PathBuf,
+    /// Epoch of the old pin set, to read its engine state file.
+    pub epoch: [u8; 16],
 }
 
 /// The production object opened with pinned maps.
@@ -71,6 +85,59 @@ pub struct Pinned {
     pub epoch: [u8; 16],
     /// Directory for link pins, passed to the `policy::attach_*` helpers.
     pub links: PathBuf,
+    /// Set while replacing: the old pin set, still attached.
+    pub previous: Option<Previous>,
+}
+
+/// `<root>-next`, where a replacing object is pinned.
+pub fn next_root(root: &Path) -> PathBuf {
+    let mut p = root.as_os_str().to_owned();
+    // bpffs refuses names containing a dot (EPERM in bpf_lookup:
+    // dotted names are reserved for the kernel), hence `-next`.
+    p.push("-next");
+    PathBuf::from(p)
+}
+
+/// Puts the pin directories in a consistent state after a sensor that died
+/// mid-replacement: with both `root` and `<root>-next`, the replacement had
+/// not switched yet, so the partial `-next` is dropped (the old set is still
+/// attached); with only `-next`, the old set was already removed, so `-next`
+/// becomes `root`. Returns what it did, for the log.
+pub fn reconcile(root: &Path) -> Result<Option<&'static str>> {
+    let next = next_root(root);
+    if !next.exists() {
+        return Ok(None);
+    }
+    if root.exists() {
+        fs::remove_dir_all(&next).with_context(|| format!("remove {}", next.display()))?;
+        Ok(Some(
+            "removed an unfinished replacement; the running object stays attached",
+        ))
+    } else {
+        fs::rename(&next, root)
+            .with_context(|| format!("rename {} to {}", next.display(), root.display()))?;
+        Ok(Some("completed an interrupted replacement"))
+    }
+}
+
+/// Ends a replacement: removes the old pin set (its links detach, nothing
+/// else holds them) and moves the new one to `root`. Call only once the new
+/// programs are attached and the new maps hold the policy.
+pub fn finish_replacement(root: &Path) -> Result<()> {
+    fs::remove_dir_all(root).with_context(|| format!("remove {}", root.display()))?;
+    let next = next_root(root);
+    fs::rename(&next, root)
+        .with_context(|| format!("rename {} to {}", next.display(), root.display()))
+}
+
+/// Abandons a replacement that could not be completed: the new pin set is
+/// removed and the old one, never touched, keeps enforcing.
+pub fn abort_replacement(root: &Path) -> Result<()> {
+    let next = next_root(root);
+    if next.exists() {
+        fs::remove_dir_all(&next).with_context(|| format!("remove {}", next.display()))?;
+    }
+    Ok(())
 }
 
 fn maps_dir(root: &Path) -> PathBuf {
@@ -134,29 +201,56 @@ pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
     let mount_point = root.parent().context("pin root has no parent")?;
     ensure_bpffs(mount_point)?;
 
+    if let Some(what) = reconcile(root)? {
+        tracing::warn!(root = %root.display(), "{what}");
+    }
+
     let sha: [u8; 32] = Sha256::digest(bytes).into();
     let mut adoption = Adoption::Fresh;
     let mut epoch = *uuid::Uuid::new_v4().as_bytes();
+    let mut previous = None;
     if root.exists() {
         match read_meta(root) {
             Ok(meta) if meta.abi == RK_ABI_VERSION && meta.object_sha256 == sha => {
                 adoption = Adoption::Adopted;
                 epoch = meta.epoch;
             }
-            _ => {
+            Ok(meta) => {
+                tracing::info!(
+                    root = %root.display(),
+                    "pins were created by a different object: replacing them without a gap \
+                     (the new object loads beside the running one)"
+                );
+                adoption = Adoption::Replacing;
+                previous = Some(Previous {
+                    root: root.to_path_buf(),
+                    epoch: meta.epoch,
+                });
+            }
+            Err(e) => {
+                // No readable rk_meta: nothing to adopt or migrate from.
+                // Its links (if any) are still attached, so make-before-break
+                // applies all the same; there is just no state to carry over.
                 tracing::warn!(
                     root = %root.display(),
-                    "pins were created by a different object: replacing them \
-                     (protection pauses for one load-and-attach)"
+                    error = %format!("{e:#}"),
+                    "pins without a readable rk_meta: replacing them"
                 );
-                fs::remove_dir_all(root).with_context(|| format!("remove {}", root.display()))?;
-                adoption = Adoption::Replaced;
+                adoption = Adoption::Replacing;
+                previous = Some(Previous {
+                    root: root.to_path_buf(),
+                    epoch: [0; 16],
+                });
             }
         }
     }
-    create_layout(root)?;
+    let pin_root = match adoption {
+        Adoption::Replacing => next_root(root),
+        _ => root.to_path_buf(),
+    };
+    create_layout(&pin_root)?;
 
-    let maps = maps_dir(root);
+    let maps = maps_dir(&pin_root);
     let wakeup_threshold = u64::from(ring_bytes / 8);
     let mut loader = EbpfLoader::new();
     loader
@@ -192,18 +286,23 @@ pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
         ebpf,
         adoption,
         epoch,
-        links: links_dir(root),
+        links: links_dir(&pin_root),
+        previous,
     })
 }
 
 /// Removes the pin set, which detaches every pinned link once no process
 /// holds it. Returns whether anything was removed.
 pub fn uninstall(root: &Path) -> Result<bool> {
-    if !root.exists() {
-        return Ok(false);
+    let mut removed = false;
+    // `-next` too: a replacement interrupted mid-way is attached as well.
+    for dir in [next_root(root), root.to_path_buf()] {
+        if dir.exists() {
+            fs::remove_dir_all(&dir).with_context(|| format!("remove {}", dir.display()))?;
+            removed = true;
+        }
     }
-    fs::remove_dir_all(root).with_context(|| format!("remove {}", root.display()))?;
-    Ok(true)
+    Ok(removed)
 }
 
 #[cfg(test)]
@@ -226,6 +325,62 @@ mod tests {
         ] {
             assert!(PINNED_MAPS.contains(&name), "{name}");
         }
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let root = std::env::temp_dir()
+            .join(format!("rk-pins-{}-{name}", std::process::id()))
+            .join("rk");
+        let _ = fs::remove_dir_all(root.parent().unwrap());
+        fs::create_dir_all(root.parent().unwrap()).unwrap();
+        root
+    }
+
+    fn mark(dir: &Path, tag: &str) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join("tag"), tag).unwrap();
+    }
+
+    fn tag(dir: &Path) -> String {
+        fs::read_to_string(dir.join("tag")).unwrap()
+    }
+
+    /// Phase 10 §3: a replacement interrupted before the switch keeps the
+    /// running set and drops the partial new one.
+    #[test]
+    fn reconcile_drops_an_unfinished_replacement() {
+        let root = scratch("unfinished");
+        mark(&root, "old");
+        mark(&next_root(&root), "new");
+        assert!(reconcile(&root).unwrap().is_some());
+        assert_eq!(tag(&root), "old");
+        assert!(!next_root(&root).exists());
+    }
+
+    /// Interrupted after the old set was removed: the new one takes its place.
+    #[test]
+    fn reconcile_completes_an_interrupted_switch() {
+        let root = scratch("switch");
+        mark(&next_root(&root), "new");
+        assert!(reconcile(&root).unwrap().is_some());
+        assert_eq!(tag(&root), "new");
+        assert!(!next_root(&root).exists());
+        assert_eq!(reconcile(&root).unwrap(), None);
+    }
+
+    #[test]
+    fn finish_replacement_swaps_and_abort_keeps_the_old_set() {
+        let root = scratch("finish");
+        mark(&root, "old");
+        mark(&next_root(&root), "new");
+        abort_replacement(&root).unwrap();
+        assert_eq!(tag(&root), "old");
+        assert!(!next_root(&root).exists());
+
+        mark(&next_root(&root), "new");
+        finish_replacement(&root).unwrap();
+        assert_eq!(tag(&root), "new");
+        assert!(!next_root(&root).exists());
     }
 
     #[test]

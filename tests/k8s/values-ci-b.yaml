@@ -32,3 +32,5 @@ namespaces:
   agents:
     default: k8s-net
     allowed: [k8s-net]
+# The suite reads the per-decision log lines, which are debug level.
+logLevel: "info,rk_sensor::pipeline=debug"

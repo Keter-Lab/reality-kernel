@@ -10,6 +10,15 @@
 
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
 
+#ifdef RK_OBJECT_VARIANT
+/*
+ * Upgrade tests only (docs/design/phase-10.md §7): the `next` build differs
+ * from the production object by this constant, so a sensor embedding it
+ * takes the replace path, as a new release would.
+ */
+const volatile __u32 rk_object_variant = RK_OBJECT_VARIANT;
+#endif
+
 #include "net.bpf.c"
 #include "exec.bpf.c"
 #include "file.bpf.c"

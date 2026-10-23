@@ -1,5 +1,9 @@
 # RK Production Deployment Guide
 
+> **Installing the sensor** (packages, systemd, Kubernetes, upgrades,
+> `rk doctor`): see [docs/install.md](docs/install.md). This guide covers the
+> hosted API service (`rk-api`).
+
 ## 1) Prerequisites
 
 - Linux kernel **>= 5.8**

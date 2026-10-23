@@ -1,0 +1,52 @@
+# nFPM template for the deb and rpm packages (docs/design/phase-10.md §5).
+# deploy/packaging/build.sh fills in the @PLACEHOLDERS@ and runs nfpm.
+name: reality-kernel
+arch: "@ARCH@"
+platform: linux
+version: "@VERSION@"
+release: "@RELEASE@"
+section: admin
+priority: optional
+maintainer: "Keter Lab <contact@realitykernel.dev>"
+vendor: Keter Lab
+homepage: https://github.com/Keter-Lab/reality-kernel
+license: MIT OR Apache-2.0
+description: |
+  Kernel-level enforcement for AI agents.
+  Reality Kernel confines AI agents and other workloads with eBPF programs
+  (cgroup socket hooks and BPF-LSM): network, exec and file policy decided in
+  the kernel, a signed audit log of every decision, and Prometheus metrics.
+
+contents:
+  - src: "@BINDIR@/rk-sensor"
+    dst: /usr/bin/rk-sensor
+    file_info:
+      mode: 0755
+  - src: "@BINDIR@/rk"
+    dst: /usr/bin/rk
+    file_info:
+      mode: 0755
+  - src: "@ROOT@/deploy/systemd/rk-sensor.service"
+    dst: /usr/lib/systemd/system/rk-sensor.service
+    file_info:
+      mode: 0644
+  - dst: /etc/rk
+    type: dir
+    file_info:
+      mode: 0755
+  - src: "@ROOT@/deploy/packaging/policy.toml"
+    dst: /etc/rk/policy.toml
+    type: config|noreplace
+    file_info:
+      mode: 0644
+  - src: "@ROOT@/docs/install.md"
+    dst: /usr/share/doc/reality-kernel/install.md
+  - src: "@ROOT@/docs/audit.md"
+    dst: /usr/share/doc/reality-kernel/audit.md
+  - src: "@ROOT@/docs/hardening.md"
+    dst: /usr/share/doc/reality-kernel/hardening.md
+
+scripts:
+  postinstall: "@ROOT@/deploy/packaging/scripts/postinstall.sh"
+  preremove: "@ROOT@/deploy/packaging/scripts/preremove.sh"
+  postremove: "@ROOT@/deploy/packaging/scripts/postremove.sh"

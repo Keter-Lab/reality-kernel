@@ -656,9 +656,13 @@ impl PolicyEngine {
             use std::io::Write as _;
             use std::os::unix::fs::OpenOptionsExt as _;
             use std::os::unix::fs::PermissionsExt as _;
+            // A new directory is made 0755; an existing one (e.g. systemd's
+            // 0700 StateDirectory) keeps its mode.
             if let Some(dir) = path.parent() {
-                fs::create_dir_all(dir)?;
-                let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
+                if !dir.exists() {
+                    fs::create_dir_all(dir)?;
+                    let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
+                }
             }
             let tmp = path.with_extension("tmp");
             let mut file = fs::OpenOptions::new()
@@ -675,6 +679,37 @@ impl PolicyEngine {
         if let Err(e) = write() {
             tracing::error!(path = %path.display(), error = %format!("{e:#}"), "engine state not saved");
         }
+    }
+
+    /// Carries the state of a pin set being replaced into a new, empty one
+    /// (docs/design/phase-10.md §3): the state file is read with the old pin
+    /// set's `old_epoch`, then its policy text, dynamic agent and container
+    /// bindings and quarantine are written into `ebpf`'s maps. Call after
+    /// [`Self::set_state_file`] (with the new epoch) and before the old pin
+    /// set is removed. Returns false, changing nothing, when there is no
+    /// state for the old epoch or it holds no policy.
+    pub fn migrate(&mut self, ebpf: &mut Ebpf, old_epoch: &[u8; 16]) -> Result<bool> {
+        let Some(path) = self.state_file.clone() else {
+            return Ok(false);
+        };
+        let Some(state) = load_state(&path, &hex::encode(old_epoch)) else {
+            return Ok(false);
+        };
+        let Some(text) = state.text else {
+            return Ok(false);
+        };
+        self.ids = state.ids;
+        self.generation = state.generation;
+        self.dynamic = state.dynamic;
+        self.quarantined = state.quarantined;
+        // The new maps hold no binding yet: forget the old ones so every
+        // binding is written.
+        self.bindings = BTreeMap::new();
+        self.text = None;
+        self.apply_text(ebpf, &text)?;
+        self.previous_text = state.previous_text;
+        self.persist();
+        Ok(true)
     }
 
     /// Takes over the kernel state of an adopted pin set

@@ -1,0 +1,67 @@
+# Reality Kernel sensor (docs/design/phase-10.md §4, docs/install.md).
+#
+# Runs as root with a bounded capability set: what the kernel checks for
+# loading and attaching the programs (kernel/bpf/syscall.c) and what the
+# agent launcher needs. Stopping the service keeps the pinned programs
+# enforcing (fail-closed once the heartbeat is stale); removing protection
+# is `rk-sensor --uninstall`, which package removal runs.
+
+[Unit]
+Description=Reality Kernel sensor (kernel enforcement for AI agents)
+Documentation=https://github.com/Keter-Lab/reality-kernel/blob/main/docs/install.md
+After=local-fs.target
+
+[Service]
+Type=simple
+# The cgroup root is mode 0555 (kernfs), so creating rk.slice under it needs
+# CAP_DAC_OVERRIDE, which the sensor does not get. This one step runs with
+# full privileges ("+"); the sensor then owns rk.slice and creates the agent
+# and binding cgroups inside it.
+ExecStartPre=+/bin/mkdir -p /sys/fs/cgroup/rk.slice
+ExecStart=/usr/bin/rk-sensor --policy /etc/rk/policy.toml --state-file /var/lib/rk/engine-state.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=10s
+KillMode=process
+
+# CAP_BPF: maps, BTF, programs. CAP_PERFMON: LSM and tracing programs.
+# CAP_NET_ADMIN: cgroup sock_addr programs. CAP_SETUID, CAP_SETGID, CAP_KILL:
+# `rk run` agents, which run as another user. CAP_DAC_READ_SEARCH: resolving
+# built-in credential paths (e.g. ~/.ssh) inside other users' home
+# directories, which file rules key by inode.
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SETUID CAP_SETGID CAP_KILL CAP_DAC_READ_SEARCH
+NoNewPrivileges=yes
+LimitMEMLOCK=infinity
+
+StateDirectory=rk
+StateDirectoryMode=0700
+LogsDirectory=rk
+LogsDirectoryMode=0750
+RuntimeDirectory=rk
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+# Agents started by `rk run` are children of this service: they inherit its
+# mount namespace and seccomp filters. So only protections that are also
+# right for an agent are set here; an agent's confinement is the kernel
+# policy of its profile. Not set, for that reason: ProtectSystem=strict and
+# ProtectHome (agents need their working directories), PrivateTmp and
+# PrivateDevices (shared /tmp, GPU device nodes), MemoryDenyWriteExecute
+# (JIT runtimes), RestrictAddressFamilies (netlink in libc), and
+# RestrictNamespaces (systemd blocks clone3 entirely, and the launcher needs
+# clone3(CLONE_INTO_CGROUP) to place agents atomically). Also not set:
+# ProtectControlGroups and ProtectKernelTunables, which would make
+# /sys/fs/cgroup and /sys/fs/bpf read-only.
+ProtectSystem=full
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

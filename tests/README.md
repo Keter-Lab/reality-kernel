@@ -5,9 +5,10 @@ behind the layout is in [docs/testing.md](../docs/testing.md).
 
 | Path | What it proves | Runs in |
 |---|---|---|
-| `integration/` | Every kernel-facing acceptance criterion, by real operations against the loaded programs: verdict suite (`main.rs`), agent/NRI path (`agent.rs`), restart and tamper resilience (`resilience.rs`), the conformance corpus (`conformance.rs`), the audit log, metrics and loss accounting against the real daemon (`observability.rs`), the Phase 7 bench (`bench.rs`) | `kernel.yml` / vm-matrix, as root in a VM per kernel (5.15, 6.1, 6.6, 6.12, 6.18) |
+| `integration/` | Every kernel-facing acceptance criterion, by real operations against the loaded programs: verdict suite (`main.rs`), agent/NRI path (`agent.rs`), restart and tamper resilience (`resilience.rs`), the conformance corpus (`conformance.rs`), the audit log, metrics and loss accounting against the real daemon (`observability.rs`), zero-gap upgrades between two different objects and `rk doctor` (`upgrade.rs`), the Phase 7 bench (`bench.rs`) | `kernel.yml` / vm-matrix, as root in a VM per kernel (5.15, 6.1, 6.6, 6.12, 6.18) |
 | `vm/selftest.sh` | The VM entry point: loads, runs each suite, extracts the JSON reports | vm-matrix |
 | `k8s/run.sh` | The DaemonSet, NRI plugin and annotation binding on a kind cluster | `kernel.yml` / k8s |
+| `packaging/run.sh` | The deb and rpm: fresh install enforces under the systemd unit, upgrade to a different object with a gap probe running, uninstall removes everything (Phase 10) | `kernel.yml` / package-test, on Ubuntu 24.04 (runner) and Rocky Linux 9 (systemd container) |
 | `conformance/` | One TOML file per policy semantic, with expected verdicts. The **same files** are checked by the userspace evaluator (`rk-policy/tests/conformance.rs`) and by the kernel (`integration/src/conformance.rs`), so the two engines cannot drift | `ci.yml` / test, and vm-matrix |
 | `parity/` | Golden cases for `rk-engine-core` | `ci.yml` / test |
 | `bench/` | `gate.py` compares bench reports with `budget.json` (Phase 7) | `kernel.yml` / bench-report |
@@ -35,7 +36,7 @@ or `conformance_kernel`, naming the case and the operation.
    integration harness, `run_test name` in `k8s/run.sh`, or an ordinary
    `#[test] fn name`, `func Test...`, `def test_...`.
 2. Add it to the criterion's `tests` list in `traceability.toml` as
-   `vm:`, `k8s:`, `unit:`, `go:`, `py:` or `ci:` (a workflow job id).
+   `vm:`, `k8s:`, `pkg:`, `unit:`, `go:`, `py:` or `ci:` (a workflow job id).
 3. `python3 tests/traceability.py static` checks the reference locally.
 
 Renaming or deleting a referenced test fails the static check. A VM or k8s
