@@ -20,6 +20,16 @@ on:
       - "tests/coverage_summary.py"
       - ".github/workflows/ci.yml"
       - ".github/workflows/autofix.yml"
+      - ".github/workflows/codeql.yml"
+      - ".github/workflows/scorecard.yml"
+      - ".github/workflows/dco.yml"
+      - ".github/workflows/release.yml"
+      - ".github/scripts/install-signing-tools.sh"
+      - ".github/scripts/dco_check.py"
+      - ".github/dependabot.yml"
+      - ".github/CODEOWNERS"
+      - "requirements-ci.txt"
+      - "tests/readme_claims.py"
   pull_request:
     branches: [main]
 

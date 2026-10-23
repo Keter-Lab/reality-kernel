@@ -1,28 +1,32 @@
-## Description
-Brief summary of the changes introduced in this PR and why they are needed.
+## What and why
 
-## Type of Change
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Performance optimization (in-memory fast path, eBPF probe throughput)
-- [ ] Documentation update
+<!-- What this changes, and the problem it solves. Link the issue or design note. -->
 
-## Areas Impacted
-- [ ] `rk-bpf` / `rk-sensor` (Kernel)
-- [ ] `core/` (Symbolic execution / static analysis)
-- [ ] `sdk/` / `rk-cli/`
-- [ ] `tests/`
+## Type of change
 
-## Testing Done
-Describe the automated tests or manual test commands executed to verify your changes. Include test commands or benchmark output if applicable.
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change (policy format, agentd protocol, audit format, pin layout)
+- [ ] Documentation
+- [ ] CI, build or release
 
-- [ ] All existing automated tests pass
-- [ ] Added new unit/integration tests covering this change
-- [ ] Verified fail-closed security guarantees remain intact
+## Areas
+
+- [ ] Kernel programs or ABI (`rk-bpf/`, `rk-ebpf-common/`): two-person review, see GOVERNANCE.md
+- [ ] Sensor, agentd, audit (`rk-sensor/`, `rk-agentd/`, `rk-audit/`)
+- [ ] Policy (`rk-policy/`)
+- [ ] CLI (`rk-cli/`)
+- [ ] Kubernetes (`rk-nri/`, `deploy/helm/`)
+- [ ] Packaging and release (`deploy/`, `.github/`)
+- [ ] Python SDK (`sdk/`)
+
+## Testing
+
+<!-- The tests that cover this change, and which acceptance criteria they belong to. -->
 
 ## Checklist
-- [ ] My code adheres to the project's coding standards
-- [ ] I have performed a self-review of my code
-- [ ] I have commented my code, particularly in hard-to-understand areas (e.g. unsafe Rust blocks, eBPF maps)
-- [ ] I have updated the documentation accordingly
+
+- [ ] Every commit is signed off (`git commit -s`, see CONTRIBUTING.md)
+- [ ] Behaviour changes come with tests; `tests/traceability.toml` is updated if a criterion's tests changed
+- [ ] Docs updated; any new README claim links to its evidence
+- [ ] CHANGELOG.md updated under "Unreleased" for user-visible changes

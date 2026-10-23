@@ -211,6 +211,18 @@ include = []                       # and no [exec] section
 Raw sockets bypass connect rules, so also drop `CAP_NET_RAW` from such
 workloads.
 
+## Rolling out a profile
+
+`mode` has no default: a profile states whether it enforces. The recommended
+rollout (ADR-0011):
+
+1. Write the profile with `mode = "audit"` and bind it. Nothing is blocked.
+2. Watch what it would deny: `rk audit tail --verdict audit`, or
+   `rk_rule_hits_total{verdict="audit_would_deny"}` in the metrics.
+3. Adjust the rules until only the actions you mean to block appear.
+4. Switch to `mode = "enforce"` and apply. The switch is atomic, like every
+   apply.
+
 ## Operations
 
 `rk-sensor` reads the policy file at start and on `SIGHUP`, and with

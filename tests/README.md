@@ -13,7 +13,9 @@ behind the layout is in [docs/testing.md](../docs/testing.md).
 | `parity/` | Golden cases for `rk-engine-core` | `ci.yml` / test |
 | `bench/` | `gate.py` compares bench reports with `budget.json` (Phase 7) | `kernel.yml` / bench-report |
 | `traceability.toml` | Every acceptance criterion of every phase, mapped to the named tests that prove it | see below |
-| `traceability.py` | `static`: every criterion has tests, and every named test exists. `reports`: every named VM and k8s test passed on every kernel in this run | `ci.yml` / python, and `kernel.yml` / traceability |
+| `traceability.py` | `static`: every criterion has tests, every named test exists, and `docs/evidence.md` is current. `reports`: every named VM and k8s test passed on every kernel in this run. `evidence`: prints the evidence page | `ci.yml` / python, and `kernel.yml` / traceability |
+| `readme_claims.py` | Every README claim links to a criterion, every evidence link resolves, and no performance number or superlative appears outside the claims (Phase 11) | `ci.yml` / python, through `test_readme_claims.py` |
+| `test_workflows.py` | Actions pinned by commit SHA, read-only default token permissions, and a release workflow that signs, attests and verifies every artifact | `ci.yml` / python |
 | `coverage_summary.py` | The per-crate line coverage table | `ci.yml` / coverage |
 | `test_dashboard.py` | The Grafana dashboard (`deploy/grafana/`) queries only metrics the sensor exports | `ci.yml` / python |
 | `test_*.py` | Unit tests for the scripts above, and the security regressions | `ci.yml` / python |
@@ -38,6 +40,8 @@ or `conformance_kernel`, naming the case and the operation.
 2. Add it to the criterion's `tests` list in `traceability.toml` as
    `vm:`, `k8s:`, `pkg:`, `unit:`, `go:`, `py:` or `ci:` (a workflow job id).
 3. `python3 tests/traceability.py static` checks the reference locally.
+4. Regenerate the evidence page:
+   `python3 tests/traceability.py evidence > docs/evidence.md`.
 
 Renaming or deleting a referenced test fails the static check. A VM or k8s
 test that did not pass on every kernel fails the `traceability` job.

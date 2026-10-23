@@ -9,8 +9,10 @@ on:
   push:
     branches: ["phase-*"]
 
+# Read-only by default; only the job below may push (Scorecard
+# Token-Permissions, docs/design/phase-11.md §4).
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: autofix-${{ github.ref }}
@@ -20,6 +22,8 @@ jobs:
   autofix:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

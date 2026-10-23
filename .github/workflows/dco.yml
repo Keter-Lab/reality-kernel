@@ -1,0 +1,26 @@
+name: DCO
+
+# docs/design/phase-11.md decision 4 and CONTRIBUTING.md: every commit in a
+# pull request is signed off by its author (Developer Certificate of Origin).
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Every commit is signed off
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/dco_check.py "$BASE" "$HEAD"
