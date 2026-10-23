@@ -34,3 +34,8 @@ updates:
     directory: /tests/packaging
     schedule:
       interval: weekly
+    # The package test is the evidence for Rocky Linux 9 (docs/evidence.md,
+    # install_upgrade_uninstall); a new major is a deliberate change, not an update.
+    ignore:
+      - dependency-name: "rockylinux/rockylinux"
+        versions: [">= 10"]
