@@ -8,6 +8,13 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Dependencies: `ed25519-dalek` 3, `sha2` 0.11, `lru` 0.19, `bindgen` 0.73,
+  `reqwest` 0.13 (still without a TLS stack), `containerd/nri` 0.12.3, and
+  current GitHub Actions. The minimum supported Rust version is now 1.89
+  (phase 13).
+
 ## [0.1.0] - 2026-10-23
 
 The first release of the rebuilt, kernel-enforced Reality Kernel. Each item
