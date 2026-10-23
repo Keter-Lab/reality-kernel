@@ -83,6 +83,9 @@ itself, so that what it promises stays true:
 | OpenSSF Scorecard | Published score; see the design note for what it measures | `scorecard.yml`, `main` |
 | Release verification | Any artifact or the image without a valid signature from the release workflow, provenance or SBOM: the release is not drafted | `release.yml`, tags |
 | NRI fuzzing | A panic or inconsistency in the plugin's message handling (`FuzzDecodeReply`, `FuzzEncodeBind`) | `ci.yml` / go (seed corpus) |
+| Go vulnerabilities | A known vulnerability reachable from `rk-nri`, the standard library included (`govulncheck`, pinned in `go.mod`) | `ci.yml` / go |
+| Website (`tests/test_site.py`) | A broken link or evidence anchor, content of the retired hosted product, a performance number or superlative, an inline script or style the CSP would block, stale partials or sitemap | `ci.yml` / python |
+| Repository (`tests/test_repository.py`) | A retired path coming back, or a workspace member beyond the product crates | `ci.yml` / python |
 
 After changing `tests/traceability.toml`, regenerate the evidence page:
 `python3 tests/traceability.py evidence > docs/evidence.md`.

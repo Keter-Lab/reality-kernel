@@ -49,10 +49,11 @@ without changing a decision ([ADR-0008](decisions/0008-enforcement-and-observati
 
 ## Phases
 
-The system was built in twelve phases, each with a design note and
-acceptance criteria proven in CI: build and truthful CI (0), the ABI (1),
-network (2), exec (3), files (4), the agent daemon and policy pipeline (5,
-5b for Kubernetes), self-protection and resilience (6), performance (7),
-test strategy (8), observability and audit (9), packaging (10) and
-repository standards (11). Design notes: [design/](design/). Evidence for
+The system was built in phases, each with a design note and acceptance
+criteria proven in CI: build and truthful CI (0), the ABI (1), network (2),
+exec (3), files (4), the agent daemon and policy pipeline (5, 5b for
+Kubernetes), self-protection and resilience (6), performance (7), test
+strategy (8), observability and audit (9), packaging (10), repository
+standards (11) and the open-source cleanup that retired the earlier hosted
+product (12). Design notes: [design/](design/). Evidence for
 every criterion: [evidence.md](evidence.md).

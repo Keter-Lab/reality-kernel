@@ -18,11 +18,11 @@ def test_groups_by_crate_and_skips_dependencies():
     export = {"data": [{"files": [
         entry("/repo/rk-policy/src/net.rs", 90, 100),
         entry("/repo/rk-policy/src/file.rs", 10, 20),
-        entry("/repo/tests/parity/src/lib.rs", 5, 10),
+        entry("/repo/tests/integration/src/main.rs", 5, 10),
         entry("/home/runner/.cargo/registry/src/serde/lib.rs", 1, 1000),
     ]}]}
     totals = cs.per_crate(export, pathlib.PurePath("/repo"))
-    assert totals == {"rk-policy": (100, 120), "tests/parity": (5, 10)}
+    assert totals == {"rk-policy": (100, 120), "tests/integration": (5, 10)}
 
 
 def test_table_has_total_row():

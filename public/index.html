@@ -1,388 +1,326 @@
 <!doctype html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script>try{if(localStorage.getItem('rk-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
-  <title>Reality Kernel · Causal verification for the autonomous era</title>
-  <meta name="description" content="Reality Kernel is an execution-layer security engine and cryptographic audit ledger for autonomous AI agents. Deterministic execution boundaries, kernel-level eBPF attestation, and Ed25519-signed verdicts." />
+  <title>Reality Kernel</title>
+  <meta name="description" content="Open-source eBPF enforcement for AI agents on Linux. Network, exec and file policy decided in the kernel, before the action, with a signed audit log of every decision." />
+  <link rel="canonical" href="https://www.realitykernel.dev/" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.realitykernel.dev/" />
-  <meta property="og:title" content="Reality Kernel · Causal verification for the autonomous era" />
-  <meta property="og:description" content="Execution-layer security and a cryptographic audit ledger for autonomous AI agents. ALLOW / WARN / BLOCK, sealed with Ed25519." />
+  <meta property="og:title" content="Reality Kernel" />
+  <meta property="og:description" content="Open-source eBPF enforcement for AI agents on Linux, decided in the kernel before the action." />
   <meta property="og:image" content="https://www.realitykernel.dev/og-preview.png" />
   <meta property="og:site_name" content="Reality Kernel" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Reality Kernel · Causal verification for the autonomous era" />
-  <meta name="twitter:description" content="Execution-layer security and a cryptographic audit ledger for autonomous AI agents." />
-  <meta name="twitter:image" content="https://www.realitykernel.dev/og-preview.png" />
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' 'unsafe-inline';
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-    font-src 'self' https://fonts.gstatic.com;
-    img-src 'self' data:;
-    connect-src 'self' https://vitals.vercel-insights.com http://localhost:8000;
-    base-uri 'self';
-    form-action 'self'
-  " />
-  <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="/tw.css" />
-  <link rel="stylesheet" href="/theme.css" />
-  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <!-- @rk:head -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#090e19" media="(prefers-color-scheme: dark)" />
+  <link rel="preload" href="/fonts/ibm-plex-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/site.css" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="/favicon.png" />
-  <meta name="theme-color" content="#f8fafc" />
+  <script src="/app.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
+  <!-- @rk:/head -->
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-700 antialiased">
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       CANVAS · blueprint grid behind the whole page, faded toward the bottom
-       ══════════════════════════════════════════════════════════════════════ -->
-  <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10 blueprint blueprint-fade"></div>
-
-  <!-- @rk:header-light -->
-  <header class="rk-header fixed inset-x-0 top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
-    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:gap-6 sm:px-8">
-      <a href="/" class="rk-brand flex items-center gap-3">
-        <span class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 shadow-sm"><img src="/logo.png" alt="Reality Kernel" width="26" height="26" class="h-[26px] w-[26px] rounded-full object-cover" /></span>
-        <span class="leading-none">
-          <span class="block text-[13px] font-bold tracking-[0.12em] text-slate-900">REALITY KERNEL</span>
-          <span class="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500 sm:block">Execution-layer security</span>
-        </span>
+<body>
+  <!-- @rk:header -->
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap">
+      <a href="/" class="brand">
+        <img src="/logo.png" alt="" width="30" height="30" />
+        <span class="brand-text"><strong>Reality Kernel</strong><span>eBPF enforcement for AI agents</span></span>
       </a>
-      <nav class="rk-nav absolute inset-x-0 top-16 hidden flex-col gap-1 border-b border-slate-200 bg-white p-3 shadow-card md:static md:flex md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
-        <a href="/" class="nav-link">Home</a>
-        <a href="/demo.html" class="nav-link">Demo</a>
-        <a href="/playground" class="nav-link">Playground</a>
-        <a href="/verifier" class="nav-link">Verifier</a>
-        <a href="/blog" class="nav-link">Research</a>
-        <a href="/docs" class="nav-link">Docs</a>
-        <a href="/security" class="nav-link">Security</a>
-        
+      <nav class="nav" id="site-nav" aria-label="Main">
+        <a href="/">Home</a>
+        <a href="/docs">Docs</a>
+        <a href="/security">Security</a>
+        <a href="/about">About</a>
       </nav>
-      <div class="rk-header-cta flex items-center gap-2">
-        
-        
-        <button class="rk-menu-toggle inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 md:hidden" type="button" aria-label="Toggle navigation">
-          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <div class="header-actions">
+        <a class="icon-btn" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener" aria-label="Reality Kernel on GitHub"><svg class="fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg></a>
+        <button class="icon-btn menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
       </div>
     </div>
   </header>
-  <!-- @rk:/header-light -->
+  <!-- @rk:/header -->
 
-  <main id="top" class="relative pt-16">
-
-    <!-- ════════════════════════════════════════════════════════════════════
-         HERO · headline + Execution Sandbox Layer
-         ════════════════════════════════════════════════════════════════════ -->
-    <section class="relative overflow-hidden elite-canvas">
-      <div aria-hidden="true" class="pointer-events-none absolute -left-20 top-8 h-72 w-72 rounded-full bg-slate-200/50 blur-3xl"></div>
-      <div aria-hidden="true" class="pointer-events-none absolute -right-24 top-24 h-80 w-80 rounded-full bg-sky-100/45 blur-3xl"></div>
-      <canvas id="rk-kernel-3d" aria-hidden="true" class="pointer-events-none absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 opacity-60"></canvas>
-      <div class="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 pb-14 sm:pt-20">
-
-        <div class="mx-auto max-w-4xl text-center">
-          <span class="eyebrow justify-center animate-fade-up border border-slate-200/50 bg-white/70 px-3 py-1.5 rounded-full">Open Source eBPF Runtime Barrier · PyPI: realitykernel v0.7.1</span>
-          <h1 class="hero-premium mt-6 font-extrabold tracking-tighter leading-[1.08] text-[2.75rem] lg:text-[4rem] text-balance animate-fade-up [animation-delay:60ms]">
-            <span class="text-slate-900">Your AI agent can run commands.</span><br class="hidden sm:block" />
-            <span class="hero-premium-contrast text-slate-500"><span class="rk-gradient-text">We decide which ones actually execute.</span></span>
-          </h1>
-          <p class="mt-6 text-slate-600 text-base lg:text-[1.1rem] leading-relaxed max-w-2xl mx-auto animate-fade-up [animation-delay:120ms]">
-            Reality Kernel simulates every autonomous agent system call against its intended goal. We return sub-millisecond, cryptographically signed verdicts before wrapped host actions are approved for execution.
-          </p>
-          <div class="mt-8 flex flex-wrap items-center justify-center gap-3 animate-fade-up [animation-delay:180ms]">
-            <a href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener" class="bg-slate-900 text-white hover:bg-slate-800 font-medium tracking-wide text-sm px-5 py-2.5 rounded-lg shadow-sm transition-all inline-flex items-center gap-2">
-              <svg viewBox="0 0 24 24" class="h-4 w-4 fill-current" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-              Star on GitHub
-            </a>
-            <a href="/demo.html" class="btn-secondary">Interactive Demo</a>
-            <a href="/login#request" class="btn-secondary !text-slate-600" data-auth="request">Enterprise Fleet</a>
+  <main id="main">
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-copy">
+          <p class="label">Open source &middot; Linux &middot; eBPF</p>
+          <h1>Your AI agent can run commands. <em>The kernel decides which ones happen.</em></h1>
+          <p class="lede">Reality Kernel enforces network, exec and file policy for AI agents inside the Linux kernel, before the action takes place. Every decision lands in a signed, tamper-evident audit log.</p>
+          <div class="actions">
+            <a class="btn primary" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>View on GitHub</a>
+            <a class="btn" href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/install.md" rel="noopener">Install</a>
+            <a class="btn" href="#how">How it works</a>
           </div>
-          <div class="mt-4 flex flex-wrap items-center justify-center font-mono text-[11px] font-semibold tracking-widest text-slate-600 uppercase gap-6 animate-fade-up [animation-delay:220ms]">
-            <span>pip install reality-kernel</span>
-            <span>3 lines to integrate</span>
-            <span>static verdicts p50 0.31ms</span>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ════════════════════════════════════════════════════════════════════
-         TRUST STRIP
-         ════════════════════════════════════════════════════════════════════ -->
-    <section class="border-y border-slate-200/70 bg-white/60 backdrop-blur">
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-        <dl class="grid grid-cols-2 gap-6 sm:grid-cols-4">
-          <div><dt class="text-xs font-semibold text-slate-600">Verdict latency (p50)</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular">0.31<span class="text-base font-semibold text-slate-600"> ms</span></dd></div>
-          <div><dt class="text-xs font-semibold text-slate-600">Signature scheme</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Ed25519</dd></div>
-          <div><dt class="text-xs font-semibold text-slate-600">Proof chain</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">SHA-256</dd></div>
-          <div><dt class="text-xs font-semibold text-slate-600">Integration</dt><dd class="mt-1 text-2xl font-bold tracking-tight text-slate-900">3 lines</dd></div>
-        </dl>
-      </div>
-    </section>
-
-    <section class="rk-compare">
-      <div class="rk-compare-inner">
-        <div class="rk-compare-head">
-          <span class="rk-compare-eyebrow">Why existing tools fail</span>
-          <h2 class="rk-compare-title">
-            The attack changed.<br>
-            <span class="grad">The defense has to change with it.</span>
-          </h2>
-        </div>
-        <div class="rk-compare-grid">
-          <div class="rk-compare-col bad">
-            <p class="label">The old playbook fails</p>
-            <div class="rk-compare-list">
-              <div class="row"><span class="mark">&#10007;</span>Prompt guardrails get jailbroken or bypassed via tool calls</div>
-              <div class="row"><span class="mark">&#10007;</span>Userspace logs get tampered with before alerts fire</div>
-              <div class="row"><span class="mark">&#10007;</span>Machine-speed attacks outpace human-speed runbooks</div>
-              <div class="row"><span class="mark">&#10007;</span>5 benign tool calls chain into 1 catastrophic outcome</div>
-            </div>
-          </div>
-          <div class="rk-compare-col good">
-            <p class="label">Reality Kernel</p>
-            <div class="rk-compare-list">
-              <div class="row"><span class="mark">&#10003;</span>Syscall-level interception before execution &#8212; not after</div>
-              <div class="row"><span class="mark">&#10003;</span>Ed25519-sealed proof chain, offline-verifiable by auditors</div>
-              <div class="row"><span class="mark">&#10003;</span>0.31ms enforcement &#8212; same speed as the attack</div>
-              <div class="row"><span class="mark">&#10003;</span>Causal trajectory simulation across multi-turn session chains</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ════════════════════════════════════════════════════════════════════
-         HOW IT WORKS · the loop, for humans
-         ════════════════════════════════════════════════════════════════════ -->
-    <section id="how" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
-      <div class="max-w-2xl">
-        <span class="eyebrow">How the loop works</span>
-        <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Four steps between &#8220;the agent wants to&#8221; and &#8220;it happened&#8221;.</h2>
-        <p class="mt-4 text-base leading-7 text-slate-600">No model fine-tuning, no prompt guards to bypass. Reality Kernel judges the <em class="not-italic font-semibold text-slate-800">action</em>, not the conversation.</p>
-      </div>
-
-      <ol class="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <li class="card p-6 transition hover:shadow-card-hover">
-          <div class="flex items-center gap-3"><span class="step-num">1</span><h3 class="font-semibold tracking-tight text-slate-900">Intercept</h3></div>
-          <p class="mt-3 text-sm leading-6 text-slate-600">Every shell command, file write or network call the agent emits is paused at the execution layer — a few microseconds before the OS sees it.</p>
-          <div class="mt-4 chip">rk.check(cmd, intent)</div>
-        </li>
-        <li class="card p-6 transition hover:shadow-card-hover">
-          <div class="flex items-center gap-3"><span class="step-num">2</span><h3 class="font-semibold tracking-tight text-slate-900">Simulate</h3></div>
-            <p class="mt-3 text-sm leading-6 text-slate-600">Static analysis yields a verdict in 0.31ms. If divergence risk is detected, deep causal simulation is triggered.</p>
-          <div class="mt-4 flex gap-1.5"><span class="chip">n_worlds 5</span><span class="chip">divergence 0.90</span></div>
-        </li>
-        <li class="card p-6 transition hover:shadow-card-hover">
-          <div class="flex items-center gap-3"><span class="step-num">3</span><h3 class="font-semibold tracking-tight text-slate-900">Verdict</h3></div>
-          <p class="mt-3 text-sm leading-6 text-slate-600">One of three answers, in under a millisecond. Only <span class="font-medium text-slate-800">ALLOW</span> lets the command reach real infrastructure.</p>
-          <div class="mt-4 flex flex-wrap gap-1.5">
-            <span class="verdict-badge allow !px-2 !py-1">ALLOW</span>
-            <span class="verdict-badge warn !px-2 !py-1">WARN</span>
-            <span class="verdict-badge block !px-2 !py-1">BLOCK</span>
-          </div>
-        </li>
-        <li class="card p-6 transition hover:shadow-card-hover">
-          <div class="flex items-center gap-3"><span class="step-num">4</span><h3 class="font-semibold tracking-tight text-slate-900">Seal</h3></div>
-          <p class="mt-3 text-sm leading-6 text-slate-600">The decision is hashed into a SHA-256 chain and signed with Ed25519. Anyone can verify it later without trusting us — or the agent.</p>
-          <div class="mt-4 flex gap-1.5"><span class="chip">SHA-256</span><span class="chip">Ed25519</span><a href="/verifier" class="chip !text-slate-800 hover:bg-slate-200">verify →</a></div>
-        </li>
-      </ol>
-    </section>
-
-    <!-- ════════════════════════════════════════════════════════════════════
-         PILLARS · what makes it different
-         ════════════════════════════════════════════════════════════════════ -->
-    <section class="border-y border-slate-200/70 bg-white/60">
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
-        <div class="grid gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
-          <div class="lg:sticky lg:top-28">
-            <span class="eyebrow">Why execution-layer</span>
-            <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Prompt filters read words. We read consequences.</h2>
-            <p class="mt-4 text-base leading-7 text-slate-600">A jailbroken model can phrase anything politely. It cannot, however, make <span class="chip">cat …/../../etc/shadow</span> look like a weather lookup once the command is actually simulated.</p>
-            <div class="mt-8 flex flex-wrap gap-3">
-              <a href="/security" class="btn-secondary">Security model</a>
-              <a href="/benchmark" class="btn-secondary">Benchmarks</a>
-            </div>
-          </div>
-
-          <div class="grid gap-4 sm:grid-cols-2">
-            <article class="card p-6">
-              <div class="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
-              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Sub-millisecond, deterministic</h3>
-              <p class="mt-2 text-sm leading-6 text-slate-600">Static capability analysis first, causal simulation only when needed. Same input, same verdict, every time.</p>
-              <div class="mt-4 chip">p50 0.31 ms · p99 1.2 ms</div>
-            </article>
-            <article class="card p-6">
-              <div class="grid h-9 w-9 place-items-center rounded-lg bg-sky-50 text-sky-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
-              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Cryptographic audit ledger</h3>
-              <p class="mt-2 text-sm leading-6 text-slate-600">Every verdict is chained and signed. Compliance teams get a tamper-evident record of what agents tried — and what was stopped.</p>
-              <div class="mt-4 flex gap-1.5"><span class="chip">proof_hash</span><span class="chip">signature</span></div>
-            </article>
-            <article class="card p-6">
-              <div class="grid h-9 w-9 place-items-center rounded-lg bg-violet-50 text-violet-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
-              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Intent-aware, not rule-bound</h3>
-              <p class="mt-2 text-sm leading-6 text-slate-600">The same <span class="chip">curl</span> is fine for a weather agent and hostile for a file-indexing agent. Verdicts are relative to the declared goal&#8212;which is cryptographically signed by your trusted host application, never the untrusted agent.</p>
-            </article>
-            <article class="card p-6">
-              <div class="grid h-9 w-9 place-items-center rounded-lg bg-amber-50 text-amber-600"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div>
-              <h3 class="mt-4 font-semibold tracking-tight text-slate-900">Framework-agnostic SDK</h3>
-              <p class="mt-2 text-sm leading-6 text-slate-600">Python and TypeScript SDKs, a REST API, and a human-override endpoint for WARN verdicts. Works with LangChain, AutoGen, CrewAI or plain scripts.</p>
-              <div class="mt-4 flex gap-1.5"><span class="chip">/v1/check</span><span class="chip">/v1/override</span></div>
-            </article>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ════════════════════════════════════════════════════════════════════
-         INTEGRATION · three lines
-         ════════════════════════════════════════════════════════════════════ -->
-    <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
-      <div class="grid gap-10 lg:grid-cols-2 lg:items-center">
-        <div>
-          <span class="eyebrow">Integration</span>
-          <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance">Wrap the agent's executor. Ship.</h2>
-          <p class="mt-4 text-base leading-7 text-slate-600">Call <span class="chip">check()</span> before you execute. Honour the verdict. That's the entire integration — the engine does the rest.</p>
-          <ul class="mt-6 space-y-3 text-sm text-slate-600">
-            <li class="flex gap-3"><span class="mt-1 h-4 w-4 shrink-0 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center"><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>Verdict returned with confidence, evidence and a signed proof hash.</li>
-            <li class="flex gap-3"><span class="mt-1 h-4 w-4 shrink-0 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center"><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>WARN verdicts can be escalated to a human via <span class="chip">/v1/override</span>.</li>
-            <li class="flex gap-3"><span class="mt-1 h-4 w-4 shrink-0 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center"><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>Public key at <span class="chip">/v1/pubkey</span> for offline verification.</li>
+          <ul class="hero-facts">
+            <li>Linux 5.15 and newer</li>
+            <li>x86_64 &middot; arm64</li>
+            <li>MIT OR Apache-2.0</li>
           </ul>
-          <div class="mt-8 flex flex-wrap gap-3">
-            <a href="/docs" class="btn-primary">Integration guide</a>
-            <a href="/playground" class="btn-secondary">Open the playground</a>
-          </div>
         </div>
 
-        <div class="card overflow-hidden shadow-window">
-          <div class="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
-            <div class="flex items-center gap-1.5"><span class="window-dot bg-slate-300"></span><span class="window-dot bg-slate-300"></span><span class="window-dot bg-slate-300"></span></div>
-            <span class="font-mono text-xs text-slate-500">agent.py</span>
-            <span class="chip">python</span>
+        <figure class="trace" aria-labelledby="trace-caption">
+          <div class="trace-pane">
+            <div class="trace-title"><span>Inside the agent</span><span>strace, abridged</span></div>
+<pre><span class="p">$</span> rk run --profile research-agent -- python3 agent.py
+connect(3, {AF_INET, 203.0.113.7:443}) = <span class="deny">-1 EPERM</span>
+execve("/usr/bin/curl", ...)          = <span class="deny">-1 EPERM</span>
+openat("~/.ssh/id_ed25519", O_RDONLY)  = <span class="deny">-1 EPERM</span>
+connect(3, {AF_INET, 10.20.0.12:443}) = <span class="allow">0</span></pre>
           </div>
-<pre class="overflow-x-auto p-5 font-mono text-[12.5px] leading-6 text-slate-700"><code><span class="text-violet-600">from</span> reality_kernel <span class="text-violet-600">import</span> RealityKernel
+          <div class="boundary">BPF-LSM &middot; cgroup hooks</div>
+          <div class="trace-pane">
+            <div class="trace-title"><span>On the host</span><span>rk audit tail, abridged</span></div>
+<pre><span class="p">$</span> rk audit tail -f --verdict deny
+<span class="p">09:14:02Z</span> <span class="deny">DENY</span>  Open   203.0.113.7:443/tcp    <span class="acc">rule 4</span>
+<span class="p">09:14:02Z</span> <span class="deny">DENY</span>  Launch /usr/bin/curl          <span class="acc">rule 9</span>
+<span class="p">09:14:03Z</span> <span class="deny">DENY</span>  Open   ~/.ssh/id_ed25519      <span class="acc">rule 12</span>
+<span class="p">$</span> rk audit verify
+<span class="allow">VERIFIED</span></pre>
+          </div>
+          <figcaption id="trace-caption" class="visually-hidden">Example session: an agent's denied connect, exec and open calls return EPERM, and the host's audit log records each decision.</figcaption>
+        </figure>
+      </div>
+    </section>
 
-rk = RealityKernel(api_key=<span class="text-emerald-700">"rk_live_…"</span>)
-
-<span class="text-violet-600">def</span> <span class="text-sky-700">run</span>(cmd, goal):
-    v = rk.check(cmd, prime_intent=goal)
-    <span class="text-violet-600">if</span> v.verdict != <span class="text-emerald-700">"ALLOW"</span>:
-        <span class="text-violet-600">raise</span> Blocked(v.evidence, v.proof_hash)
-    <span class="text-violet-600">return</span> subprocess.run(cmd, shell=<span class="text-sky-700">True</span>)
-
-<span class="text-slate-400"># ALLOW  confidence=0.98  latency=0.31ms</span>
-<span class="text-slate-400"># proof_hash=sha256:9f2c…e41a  sig=ed25519:…</span></code></pre>
+    <section class="section" id="why">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="label">Why the kernel</p>
+          <h2>Guardrails in front of an agent can be talked around. The kernel can't.</h2>
+          <p>Prompt filters and tool wrappers sit in front of the agent. A prompt injection, a bug or a child process can step around them. Reality Kernel attaches eBPF programs to the kernel's BPF-LSM and cgroup socket hooks, so the decision is made at the system call, for every process in a governed cgroup, however the request was phrased.</p>
+        </div>
+        <div class="diagram" role="img" aria-label="Diagram: an agent's system calls cross from user space into the kernel, where BPF hooks allow them or return EPERM and record the decision.">
+          <div class="layer">
+            <div class="layer-name">user space</div>
+            <div class="layer-body">
+              <span class="node">agent</span><span class="arrow">&rarr;</span><span class="node">python3</span><span class="arrow">&rarr;</span><span class="node">bash</span><span class="arrow">&rarr;</span><span class="node">curl</span>
+              <span class="arrow">&nbsp;&nbsp;</span>
+              <span class="node">rk-sensor</span><span class="node">rk audit</span><span class="node">/metrics</span>
+            </div>
+          </div>
+          <div class="layer syscall">
+            <div class="layer-name">boundary</div>
+            <div class="layer-body">connect() &middot; sendmsg() &middot; execve() &middot; openat() &middot; unlink() &middot; rename() &middot; bpf() &middot; kill()</div>
+          </div>
+          <div class="layer kernel">
+            <div class="layer-name">kernel</div>
+            <div class="layer-body">
+              <span class="node key">cgroup sock_addr</span><span class="node key">BPF-LSM</span><span class="arrow">&rarr;</span><span class="node">policy maps</span><span class="arrow">&rarr;</span><span class="node">allow</span><span class="node">EPERM</span><span class="arrow">&rarr;</span><span class="node">ring buffer</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-
-  <section class="border-t border-slate-200/80 bg-slate-50 py-12">
-    <div class="mx-auto max-w-4xl px-5 sm:px-8">
-      <div class="flex items-center gap-6 rounded-xl border border-slate-200 bg-white px-8 py-6 shadow-sm">
-        <img src="/founder.jpg" alt="Tabrez Mukadam" class="w-16 h-16 rounded-full object-cover border border-slate-200 shadow shrink-0" />
-        <div>
-          <p class="text-sm leading-6 text-slate-600 italic">"The industry is racing to build autonomous systems, but trying to secure them with language models is mathematically flawed. Agent boundaries must be deterministic, built in Rust, and enforced offline."</p>
-          <p class="mt-2 text-sm font-semibold text-slate-900">Tabrez Mukadam <span class="font-normal text-slate-400 font-mono text-xs">— Founder, Keter Labs</span></p>
+    <section class="section" id="what">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="label">What it enforces</p>
+          <h2>Each capability links to the tests that prove it.</h2>
+          <p>The project keeps a map from every claim to the named tests behind it, and CI checks that those tests passed on every supported kernel. Follow any link to see them.</p>
+        </div>
+        <div class="caps">
+          <article class="cap">
+            <p class="label">Network</p>
+            <p>Denies governed connections over TCP and UDP, IPv4 and IPv6, and closes the usual bypasses: raw and packet sockets, io_uring, TCP Fast Open and NAT64 addresses.</p>
+            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-enforce-eperm" rel="noopener">net-enforce-eperm</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-bypasses" rel="noopener">net-bypasses</a></p>
+          </article>
+          <article class="cap">
+            <p class="label">Exec</p>
+            <p>Allows only listed executables, decided on file identity rather than path, so symlinks, replaced binaries, scripts and memfd tricks do not get around it.</p>
+            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#exec-allowlist" rel="noopener">exec-allowlist</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#exec-identity" rel="noopener">exec-identity</a></p>
+          </article>
+          <article class="cap">
+            <p class="label">Files</p>
+            <p>Protects files per access type: read, write, delete, rename, link, create and setattr, whatever name the file is reached by.</p>
+            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#file-access-types" rel="noopener">file-access-types</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#file-identity" rel="noopener">file-identity</a></p>
+          </article>
+          <article class="cap">
+            <p class="label">Agents and pods</p>
+            <p>Governs an agent started with <code>rk run</code>, or a Kubernetes pod selected by annotation, from its first instruction, along with every process it starts.</p>
+            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#agent-first-instruction" rel="noopener">agent-first-instruction</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#k8s-first-instruction" rel="noopener">k8s-first-instruction</a></p>
+          </article>
+          <article class="cap">
+            <p class="label">Resilience</p>
+            <p>Keeps enforcing while the sensor restarts or upgrades, fails closed if it stays down, and denies governed workloads the means to tamper with it.</p>
+            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#survives-restart" rel="noopener">survives-restart</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#heartbeat-fail-closed" rel="noopener">heartbeat-fail-closed</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#self-protection" rel="noopener">self-protection</a></p>
+          </article>
+          <article class="cap">
+            <p class="label">Audit</p>
+            <p>Records every deny and audit-would-deny as an OCSF record in a hash-chained log signed with Ed25519. <code>rk audit verify</code> detects any edit.</p>
+            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#audit_complete" rel="noopener">audit_complete</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#audit_tamper" rel="noopener">audit_tamper</a></p>
+          </article>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-    <!-- ════════════════════════════════════════════════════════════════════
-         CTA
-         ════════════════════════════════════════════════════════════════════ -->
-    <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-24">
-      <div class="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-slate-900 px-6 py-14 text-center shadow-window sm:px-12">
-        <div aria-hidden="true" class="pointer-events-none absolute inset-0 opacity-[0.12]" style="background-image:linear-gradient(to right,#fff 1px,transparent 1px),linear-gradient(to bottom,#fff 1px,transparent 1px);background-size:40px 40px;"></div>
-        <div class="relative">
-          <span class="eyebrow justify-center !text-slate-400">Open Source Community Release</span>
-          <h2 class="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-white text-balance">Put an in-kernel barrier between your agents and reality.</h2>
-          <p class="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-300">Reality Kernel is 100% free and open source under dual Apache-2.0 / MIT licenses. Install via PyPI or build from source on Linux.</p>
-          <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-            
-            <a href="/demo.html" class="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 active:scale-[0.98]">Try Interactive Demo</a>
+    <section class="section" id="how">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="label">How it works</p>
+          <h2>From policy file to kernel decision</h2>
+        </div>
+        <ol class="steps">
+          <li>
+            <h3>Write a profile</h3>
+            <p>A TOML profile lists the networks, executables and files an agent may use. Start it in <code>audit</code> mode to see what it would deny, then switch to <code>enforce</code>.</p>
+          </li>
+          <li>
+            <h3>Compile and swap</h3>
+            <p>The sensor validates the policy, compiles it into BPF maps and switches to it in one atomic step. <code>rk policy rollback</code> undoes it.</p>
+          </li>
+          <li>
+            <h3>Bind the workload</h3>
+            <p><code>rk run</code> or the Kubernetes NRI plugin places the agent in its own cgroup, bound to the profile before its first instruction.</p>
+          </li>
+          <li>
+            <h3>Decide and record</h3>
+            <p>Each governed system call is allowed or refused with <code>EPERM</code> in the kernel. The decision streams to the audit log, Prometheus metrics and OpenTelemetry traces.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="start">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="label">Quick start</p>
+          <h2>Install, check the host, govern an agent</h2>
+          <p>Packages for Debian, Ubuntu, RHEL and Rocky, a Helm chart for Kubernetes, and static binaries. Releases are signed with Sigstore and carry SLSA provenance and an SBOM.</p>
+        </div>
+        <div class="split">
+          <div class="code">
+            <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
+<pre><span class="c"># install the package from the latest release</span>
+sudo dpkg -i reality-kernel_&lt;version&gt;-1_amd64.deb
+<span class="c"># check kernel features; it explains any gap</span>
+rk doctor
+<span class="c"># define a profile, then reload</span>
+sudoedit /etc/rk/policy.toml
+sudo systemctl reload rk-sensor
+<span class="c"># run an agent under it, and watch the decisions</span>
+rk run --profile research-agent -- python3 agent.py
+rk audit tail -f</pre>
           </div>
+          <div class="code">
+            <div class="code-head"><span>/etc/rk/policy.toml</span><button class="copy" type="button">Copy</button></div>
+<pre><span class="k">[profiles.research-agent]</span>
+mode = <span class="s">"enforce"</span>
+network.default = <span class="s">"deny"</span>
+
+<span class="k">[[profiles.research-agent.network.allow]]</span>
+cidr = <span class="s">"10.20.0.0/16"</span>
+ports = [<span class="s">"443"</span>]
+proto = [<span class="s">"tcp"</span>]
+
+<span class="k">[profiles.research-agent.exec]</span>
+allow = [<span class="s">"/usr/bin/python3"</span>, <span class="s">"/usr/bin/git"</span>]
+
+<span class="k">[[profiles.research-agent.files.deny]]</span>
+path = <span class="s">"/home/agent/.ssh"</span>
+subtree = true
+access = [<span class="s">"all"</span>]</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="tested">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="label">Tested where it runs</p>
+          <h2>Every acceptance test runs on real kernels</h2>
+          <p>Kernel behaviour differs between versions, so the integration suites run as root in a virtual machine for each supported kernel instead of against mocks.</p>
+        </div>
+        <ul class="kernels" aria-label="Kernels tested in CI">
+          <li><strong>5.15</strong><span>LTS &middot; minimum</span></li>
+          <li><strong>6.1</strong><span>LTS</span></li>
+          <li><strong>6.6</strong><span>LTS</span></li>
+          <li><strong>6.12</strong><span>LTS</span></li>
+          <li><strong>6.18</strong><span>stable</span></li>
+        </ul>
+        <ul class="checks">
+          <li>Kernel suites run on x86_64; arm64 builds and runs the unit tests in CI.</li>
+          <li>The same policy test cases run against the userspace evaluator and the kernel, so the two cannot drift apart.</li>
+          <li>Packages are installed, upgraded and removed on Ubuntu 24.04 and Rocky Linux 9, with a probe checking that enforcement never pauses.</li>
+          <li>A Kubernetes cluster runs the Helm chart and the NRI plugin.</li>
+        </ul>
+        <p class="actions after-list"><a class="btn" href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md" rel="noopener">See the evidence for every claim</a></p>
+      </div>
+    </section>
+
+    <section class="closing">
+      <div class="wrap">
+        <p class="label">Get involved</p>
+        <h2>Put the kernel between your agents and the host.</h2>
+        <p class="lede">Reality Kernel is developed in the open. Read the threat model, try it on a test host, and open an issue or a pull request.</p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/Keter-Lab/reality-kernel" rel="noopener">GitHub repository</a>
+          <a class="btn" href="/docs">Documentation</a>
+          <a class="btn" href="/security">Security model</a>
         </div>
       </div>
     </section>
   </main>
 
-
-  
-  <!-- @rk:footer-light -->
-  <footer class="border-t border-slate-200/80 bg-white">
-    <div class="mx-auto grid max-w-7xl gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-      <div>
-        <div class="flex items-center gap-3">
-          <span class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 shadow-sm"><img src="/logo.png" alt="Reality Kernel" class="h-[26px] w-[26px] rounded-full object-cover" /></span>
-          <span class="leading-none">
-            <span class="block text-[13px] font-bold tracking-[0.12em] text-slate-900">REALITY KERNEL</span>
-            <span class="mt-1 block font-mono text-[10px] uppercase tracking-[0.16em] text-slate-600">Keter Labs &bull; Cryptographic Security Division</span>
-          </span>
+  <!-- @rk:footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div>
+          <a href="/" class="brand"><img src="/logo.png" alt="" width="30" height="30" /><span class="brand-text"><strong>Reality Kernel</strong><span>by Keter Labs</span></span></a>
+          <p>Open-source, kernel-level enforcement for AI agents on Linux: network, exec and file policy decided in eBPF, with a signed audit log.</p>
         </div>
-        <p class="mt-5 max-w-sm text-sm leading-6 text-slate-700">Execution-layer security and a cryptographic audit ledger for autonomous AI agents. Deterministic boundaries. Signed verdicts. Verifiable history.</p>
+        <nav aria-label="Project">
+          <h2>Project</h2>
+          <ul>
+            <li><a href="https://github.com/Keter-Lab/reality-kernel" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/Keter-Lab/reality-kernel/releases" rel="noopener">Releases</a></li>
+            <li><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/CHANGELOG.md" rel="noopener">Changelog</a></li>
+            <li><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/CONTRIBUTING.md" rel="noopener">Contributing</a></li>
+          </ul>
+        </nav>
+        <nav aria-label="Documentation">
+          <h2>Documentation</h2>
+          <ul>
+            <li><a href="/docs">All documentation</a></li>
+            <li><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/install.md" rel="noopener">Install</a></li>
+            <li><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/policy.md" rel="noopener">Policy reference</a></li>
+            <li><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md" rel="noopener">Evidence</a></li>
+          </ul>
+        </nav>
+        <nav aria-label="Trust">
+          <h2>Trust</h2>
+          <ul>
+            <li><a href="/security">Security</a></li>
+            <li><a href="/about">About</a></li>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/cookies">Cookies</a></li>
+          </ul>
+        </nav>
       </div>
-      <div>
-        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-800 font-bold">Product</h5>
-        <ul class="mt-4 space-y-2.5 text-sm">
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/playground">Playground</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/verifier">Verifier</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/blog">Research</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="https://github.com/Keter-Lab/reality-kernel" target="_blank" rel="noopener">GitHub Repository</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/benchmark">Benchmark</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/security">Security &amp; threat model</a></li>
-        </ul>
-      </div>
-      <div>
-        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-800 font-bold">Developers</h5>
-        <ul class="mt-4 space-y-2.5 text-sm">
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/integration">Integration guide</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/sdk">SDK reference</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/integration#api">API reference</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/login#request">Request sandbox</a></li>
-        </ul>
-      </div>
-      <div>
-        <h5 class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-800 font-bold">Trust</h5>
-        <ul class="mt-4 space-y-2.5 text-sm">
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/about">About</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/privacy">Privacy policy</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/terms">Terms &amp; conditions</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/cookies">Cookie policy</a></li>
-          <li><a class="text-slate-700 hover:text-slate-900 font-medium" href="/faq">FAQ</a></li>
-        </ul>
-      </div>
-    </div>
-    <div class="border-t border-slate-200/80">
-      <div class="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-5 font-mono text-[11px] text-slate-600 font-medium sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <span>&copy; 2026 Reality Kernel &bull; All rights reserved</span>
-        <span class="rk-footer-social">
-          <a href="mailto:contact@realitykernel.dev" aria-label="Email Reality Kernel" title="Email">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2 8 5 8-5"></path></svg>
-          </a>
-          <a href="https://github.com/Keter-Lab" target="_blank" rel="noopener" aria-label="Reality Kernel on GitHub (opens in a new window)" title="GitHub (opens in a new window)">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path></svg>
-          </a>
-          <a href="https://www.linkedin.com/company/keter-labs/" target="_blank" rel="noopener" aria-label="Reality Kernel on LinkedIn (opens in a new window)" title="LinkedIn (opens in a new window)">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.94 8.5A1.56 1.56 0 1 1 6.93 5.4a1.56 1.56 0 0 1 .01 3.1zM5.5 9.75h2.88V19H5.5V9.75zm5.07 0h2.76v1.26h.04c.38-.72 1.33-1.48 2.74-1.48 2.93 0 3.47 1.93 3.47 4.45V19h-2.88v-4.44c0-1.06-.02-2.42-1.47-2.42-1.47 0-1.69 1.15-1.69 2.34V19h-2.88V9.75z"></path></svg>
-          </a>
+      <div class="footer-bottom">
+        <span>&copy; 2026 Keter Labs &middot; Code licensed MIT OR Apache-2.0</span>
+        <span class="social">
+          <a href="mailto:contact@realitykernel.dev" aria-label="Email contact@realitykernel.dev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.75A1.75 1.75 0 0 1 4.75 5h14.5A1.75 1.75 0 0 1 21 6.75v10.5A1.75 1.75 0 0 1 19.25 19H4.75A1.75 1.75 0 0 1 3 17.25V6.75zm1.8.35v.2L12 12.1l7.2-4.8v-.2a.3.3 0 0 0-.3-.3H5.1a.3.3 0 0 0-.3.3zm14.4 2.36-6.7 4.47a.9.9 0 0 1-1 0L4.8 9.46v7.79c0 .17.13.3.3.3h13.8a.3.3 0 0 0 .3-.3V9.46z"/></svg></a>
+          <a href="https://github.com/Keter-Lab/reality-kernel" rel="noopener" aria-label="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg></a>
+          <a href="https://www.linkedin.com/company/keter-labs/" rel="noopener" aria-label="Keter Labs on LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.94 8.5A1.56 1.56 0 1 1 6.93 5.4a1.56 1.56 0 0 1 .01 3.1zM5.5 9.75h2.88V19H5.5V9.75zm5.07 0h2.76v1.26h.04c.38-.72 1.33-1.48 2.74-1.48 2.93 0 3.47 1.93 3.47 4.45V19h-2.88v-4.44c0-1.06-.02-2.42-1.47-2.42-1.47 0-1.69 1.15-1.69 2.34V19h-2.88V9.75z"/></svg></a>
         </span>
       </div>
     </div>
   </footer>
-  <!-- @rk:/footer-light -->
-
-  <script src="/app.js"></script>
-  <script src="/landing.js"></script>
+  <!-- @rk:/footer -->
 </body>
 </html>
-
-

@@ -146,7 +146,7 @@ jobs:
             name="reality-kernel-$VERSION-linux-$arch"
             mkdir -p "$name"
             cp "bin-$arch"/* deploy/systemd/rk-sensor.service deploy/packaging/policy.toml \
-              docs/install.md docs/audit.md LICENSE LICENSE-APACHE LICENSE-MIT "$name"/
+              docs/install.md docs/audit.md LICENSE LICENSE-APACHE LICENSE-MIT LICENSE-GPL-2.0 "$name"/
             tar -czf "dist/$name.tar.gz" "$name"
           done
           ls -l dist
@@ -252,6 +252,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+      packages: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -298,6 +299,8 @@ jobs:
           PROVENANCE: ${{ steps.provenance.outputs.bundle-path }}
         run: |
           set -euo pipefail
+          # A new ghcr.io package is private until the maintainer publishes it.
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           identity='^https://github\.com/Keter-Lab/reality-kernel/\.github/workflows/release\.yml@refs/tags/v.*$'
           issuer=https://token.actions.githubusercontent.com
           for f in $(awk '{print $2}' dist/SHA256SUMS); do

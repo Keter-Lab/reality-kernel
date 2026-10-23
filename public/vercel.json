@@ -1,80 +1,91 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [
-    {
-      "source": "/docs",
-      "destination": "/integration.html"
-    },
-    {
-      "source": "/integrate",
-      "destination": "/integration.html"
-    },
-    {
-      "source": "/integration",
-      "destination": "/integration.html"
-    },
-    {
-      "source": "/sdk",
-      "destination": "/sdk.html"
-    },
-    {
-      "source": "/security",
-      "destination": "/security.html"
-    },
-    {
-      "source": "/pricing",
-      "destination": "/pricing.html"
-    },
-    {
-      "source": "/playground",
-      "destination": "/playground.html"
-    },
-    {
-      "source": "/verifier",
-      "destination": "/verifier.html"
-    },
-    {
-      "source": "/faq",
-      "destination": "/faq.html"
-    },
+  "redirects": [
     {
       "source": "/login",
-      "destination": "/login.html"
+      "destination": "/",
+      "permanent": true
     },
     {
       "source": "/dashboard",
-      "destination": "/dashboard.html"
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/pricing",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/playground",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/demo",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/faq",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/landing",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/blog",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/research",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/integration",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/integrate",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/sdk",
+      "destination": "/docs",
+      "permanent": true
     },
     {
       "source": "/benchmark",
-      "destination": "/benchmark.html"
+      "destination": "/docs",
+      "permanent": true
     },
     {
-      "source": "/about",
-      "destination": "/about.html"
-    },
-    {
-      "source": "/privacy",
-      "destination": "/privacy.html"
-    },
-    {
-      "source": "/terms",
-      "destination": "/terms.html"
-    },
-    {
-      "source": "/cookies",
-      "destination": "/cookies.html"
+      "source": "/verifier",
+      "destination": "/docs",
+      "permanent": true
     },
     {
       "source": "/cookie-policy",
-      "destination": "/cookies.html"
+      "destination": "/cookies",
+      "permanent": true
     }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://vitals.vercel-insights.com; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+        },
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
@@ -84,20 +95,25 @@
           "value": "DENY"
         },
         {
-          "key": "X-XSS-Protection",
-          "value": "1; mode=block"
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
         },
         {
           "key": "Strict-Transport-Security",
-          "value": "max-age=31536000; includeSubDomains; preload"
-        },
+          "value": "max-age=31536000; includeSubDomains"
+        }
+      ]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
         {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://vitals.vercel-insights.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
         }
       ]
     }

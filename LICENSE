@@ -1,6 +1,22 @@
-Reality Kernel is dual-licensed under both:
+Reality Kernel is open-source software.
 
-1. Apache License, Version 2.0 (LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0)
-2. MIT License (LICENSE-MIT or http://opensource.org/licenses/MIT)
+Userspace code (everything outside rk-bpf/) is dual-licensed under either of
 
-You may choose either license at your option.
+  1. the Apache License, Version 2.0 (LICENSE-APACHE), or
+  2. the MIT License (LICENSE-MIT),
+
+at your option. SPDX-License-Identifier: MIT OR Apache-2.0
+
+The BPF programs in rk-bpf/ are dual-licensed under either of
+
+  1. the GNU General Public License, version 2 only (LICENSE-GPL-2.0), or
+  2. the MIT License (LICENSE-MIT),
+
+at your option. SPDX-License-Identifier: GPL-2.0-only OR MIT
+See docs/decisions/0012-bpf-licensing.md for why.
+
+The website's fonts (public/fonts/) are IBM Plex, licensed under the SIL Open
+Font License 1.1 (public/fonts/OFL.txt).
+
+Unless you explicitly state otherwise, any contribution you submit for
+inclusion is licensed as above, without any additional terms or conditions.

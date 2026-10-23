@@ -123,6 +123,12 @@ jobs:
           go test -race ./...
           CGO_ENABLED=0 go build -trimpath -o rk-nri .
 
+      # Known vulnerabilities reachable from rk-nri, the standard library
+      # included (docs/design/phase-12.md §4.3). govulncheck is pinned in go.mod.
+      - name: govulncheck
+        working-directory: rk-nri
+        run: go tool govulncheck ./...
+
       # Last, so a formatting nit never hides test results.
       - name: gofmt
         if: always()

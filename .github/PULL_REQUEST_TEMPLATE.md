@@ -18,7 +18,7 @@
 - [ ] CLI (`rk-cli/`)
 - [ ] Kubernetes (`rk-nri/`, `deploy/helm/`)
 - [ ] Packaging and release (`deploy/`, `.github/`)
-- [ ] Python SDK (`sdk/`)
+- [ ] Website (`public/`)
 
 ## Testing
 

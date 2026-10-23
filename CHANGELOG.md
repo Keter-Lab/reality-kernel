@@ -4,8 +4,7 @@ Notable changes to the sensor, kernel programs, CLI, NRI plugin, Helm chart
 and container image. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/) as described in
-[docs/releases.md](docs/releases.md). The Python SDK is versioned separately
-(0.7.x) and is not covered here.
+[docs/releases.md](docs/releases.md).
 
 ## [Unreleased]
 
@@ -58,8 +57,21 @@ listed in [docs/evidence.md](docs/evidence.md).
   policy, governance, release policy and an evidence page generated from
   the traceability map (phase 11).
 
+### Removed
+
+- The earlier hosted product: the hosted API, the `realitykernel` Python SDK
+  (archived on PyPI, every release yanked) and the application-level analysis
+  engine. The hosted service is shut down; there is no migration path within
+  this project ([ADR-0016](docs/decisions/0016-retire-the-hosted-product.md),
+  phase 12).
+
 ### Security
 
+- `rk-nri` builds with Go 1.27.3 (the standard library of the previous
+  toolchain, 1.25.0, had known vulnerabilities), and CI runs `govulncheck` on
+  every push (phase 12).
+- The release workflow can verify its own container image before the first
+  release makes the package public (phase 12).
 - The NRI plugin uses `google.golang.org/grpc` v1.84.0, which fixes the five
   advisories reported by Dependabot on 2026-10-22.
 

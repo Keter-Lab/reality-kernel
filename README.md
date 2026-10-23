@@ -55,28 +55,96 @@ supported kernel, in every CI run ([how this is checked](docs/testing.md)).
 
 ## How it works
 
-```
- rk run / Kubernetes ──► rk-sensor ──► cgroup per agent, bound to a profile
- policy.toml ──────────► compiled to BPF maps, swapped atomically
+A governed workload makes a system call. An eBPF program attached to the
+kernel decides it against the compiled policy, before the action happens, and
+the decision streams to the audit log. The verdict never waits for userspace.
 
- governed syscall ─► BPF-LSM / cgroup hook ─► allow or EPERM   (in the kernel)
-                              └─► ring buffer ─► audit log · metrics · traces
+```mermaid
+flowchart LR
+    subgraph user["User space"]
+        agent["Agent process<br/>and its children"]
+        sensor["rk-sensor"]
+    end
+    subgraph kernel["Linux kernel"]
+        hooks["BPF-LSM and<br/>cgroup sock_addr hooks"]
+        maps[("Policy maps")]
+        ring[["Ring buffer"]]
+    end
+    agent -- "connect · execve · openat · unlink · ..." --> hooks
+    maps --> hooks
+    hooks -- "allow, or -1 EPERM" --> agent
+    hooks --> ring --> sensor
+    sensor --> audit["Signed OCSF audit log"]
+    sensor --> metrics["Prometheus metrics"]
+    sensor --> traces["OpenTelemetry traces"]
+```
+
+A workload becomes governed when it is placed in a cgroup bound to a profile:
+
+```mermaid
+flowchart LR
+    policy["policy.toml"] -- "validate, compile,<br/>swap atomically" --> maps[("Policy maps")]
+    run["rk run --profile P"] --> agentd["rk-agentd"]
+    nri["Kubernetes pod<br/>(annotation)"] --> plugin["rk-nri plugin"] --> agentd
+    agentd -- "cgroup created and bound<br/>before the first instruction" --> cgroup["rk.slice/&lt;agent&gt;"]
+    cgroup -. "looked up per syscall" .-> maps
 ```
 
 Kernel programs are C with libbpf CO-RE, loaded by a Rust sensor that pins
-them so they outlive it. Details: [architecture](docs/architecture.md),
-[decisions](docs/decisions/README.md), [design notes](docs/design/).
+them so they keep enforcing when it restarts. Details:
+[architecture](docs/architecture.md), [decisions](docs/decisions/README.md),
+[design notes](docs/design/).
+
+## Example
+
+A profile that lets a research agent reach one internal network over HTTPS,
+run Python and git, and never touch its SSH keys:
+
+```toml
+[profiles.research-agent]
+mode = "enforce"               # start with "audit" to see what would be denied
+network.default = "deny"
+
+[[profiles.research-agent.network.allow]]
+cidr = "10.20.0.0/16"
+ports = ["443"]
+proto = ["tcp"]
+
+[profiles.research-agent.exec]
+allow = ["/usr/bin/python3", "/usr/bin/git"]
+
+[[profiles.research-agent.files.deny]]
+path = "/home/agent/.ssh"
+subtree = true
+access = ["all"]
+```
+
+What the agent sees, and what the host records:
+
+```console
+$ rk run --profile research-agent -- python3 agent.py
+  # inside the agent: connect(... 203.0.113.7:443 ...) = -1 EPERM
+
+$ rk audit tail --verdict deny --session s-81
+2026-10-23T09:14:02.118Z DENY   Open 203.0.113.7:443/tcp  rule 4 (research-agent) gen 3  pid 4312 /usr/bin/python3  session s-81
+
+$ rk audit verify --pubkey /var/lib/rk/audit.key.pub
+VERIFIED
+```
+
+The full policy language is in the [policy reference](docs/policy.md), and the
+record format in [docs/audit.md](docs/audit.md).
 
 ## Quick start
 
-On a host with kernel 5.15 or newer ([supported kernels](docs/kernel-matrix.md)):
+On a host with kernel 5.15 or newer:
 
 ```sh
 sudo dpkg -i reality-kernel_<version>-1_amd64.deb   # or: sudo rpm -Uvh reality-kernel-<version>-1.x86_64.rpm
 rk doctor                                          # checks the kernel features, says how to fix gaps
 sudoedit /etc/rk/policy.toml                       # define a profile (docs/policy.md)
 sudo systemctl reload rk-sensor
-rk run --profile agent -- python my_agent.py       # governed from its first instruction
+rk run --profile research-agent -- python3 agent.py  # governed from its first instruction
 rk audit tail -f                                   # what it decided, as it happens
 ```
 
@@ -85,7 +153,22 @@ runs the sensor as a DaemonSet with the NRI plugin. Full guide:
 [docs/install.md](docs/install.md).
 
 Releases are signed with Sigstore and carry SLSA provenance and an SBOM;
-[how to verify one](docs/releases.md).
+[how to verify one](docs/releases.md#verifying-a-release).
+
+## Supported kernels
+
+| Kernel | Enforcement tested in CI |
+|---|---|
+| 5.15 LTS (minimum) | network, exec, files, self-protection |
+| 6.1 LTS | network, exec, files, self-protection |
+| 6.6 LTS | network, exec, files, self-protection |
+| 6.12 LTS | network, exec, files, self-protection |
+| 6.18 | network, exec, files, self-protection |
+
+Exec, file and self-protection rules need BPF LSM (`lsm=...,bpf`); without it
+only network rules are enforced, and `rk doctor` says so. The kernel suites run
+on x86_64; arm64 is built and unit-tested. Details:
+[docs/kernel-matrix.md](docs/kernel-matrix.md).
 
 ## Documentation
 
@@ -98,13 +181,7 @@ Releases are signed with Sigstore and carry SLSA provenance and an SBOM;
 | [Threat model](docs/threat-model.md) | what it protects against, and what it does not |
 | [Hardening](docs/hardening.md) | host settings that matter |
 | [Testing](docs/testing.md) and [evidence](docs/evidence.md) | how every claim is tested |
-| [Releases](docs/releases.md) | versioning, support window, verifying artifacts |
-
-## Python SDK
-
-The `realitykernel` package on PyPI (`sdk/`) is the earlier, application-level
-guard API. It is maintained on a best-effort basis while the analysis engine is
-consolidated; see [SECURITY.md](SECURITY.md) for what is supported.
+| [Releases](docs/releases.md) and [changelog](CHANGELOG.md) | versioning, support window, verifying artifacts |
 
 ## Contributing and security
 
@@ -113,8 +190,12 @@ signed off under the [DCO](https://developercertificate.org/)),
 [GOVERNANCE.md](GOVERNANCE.md). Report vulnerabilities privately as described in
 [SECURITY.md](SECURITY.md).
 
+Reality Kernel began as a hosted API service; that product, its SDK and its
+analysis engine are retired ([ADR-0016](docs/decisions/0016-retire-the-hosted-product.md)).
+
 ## License
 
 Userspace code is dual-licensed under [Apache-2.0](LICENSE-APACHE) or
 [MIT](LICENSE-MIT), at your option. The BPF programs in `rk-bpf/` are dual
-GPL-2.0-only or MIT ([ADR-0012](docs/decisions/0012-bpf-licensing.md)).
+[GPL-2.0-only](LICENSE-GPL-2.0) or MIT
+([ADR-0012](docs/decisions/0012-bpf-licensing.md)). See [LICENSE](LICENSE).

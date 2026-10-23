@@ -512,3 +512,37 @@ Every commit in a pull request is signed off by its author under the DCO; bot co
 - `test_signed_off_commits_pass` (Python test)
 - `test_missing_or_foreign_sign_off_fails` (Python test)
 - `test_bot_commits_are_exempt` (Python test)
+
+## Phase 12
+
+### retired_product_removed
+
+The repository holds only the open-source project: the hosted API, its backend crates, the analysis engine and the SDK are gone, and the workspace has only the product crates
+
+- `test_retired_product_is_gone` (Python test)
+
+### release_complete
+
+The release builds every binary the Helm chart runs, and the release job can verify its own image while the package is still private
+
+- `test_release_builds_every_chart_binary` (Python test)
+- `test_release_job_logs_in_before_verifying` (Python test)
+- `release` (CI job)
+
+### go_vulnerabilities
+
+rk-nri builds with a pinned, current Go toolchain, and CI fails on any known vulnerability reachable from it, the standard library included
+
+- `test_go_vulnerabilities_are_checked` (Python test)
+- `go` (CI job)
+
+### site_honest
+
+The website has no broken links, nothing of the retired product, no performance number or superlative, and no inline script or style, so it runs under a strict Content-Security-Policy
+
+- `test_site_links_resolve` (Python test)
+- `test_site_has_no_retired_product` (Python test)
+- `test_site_claims_rules` (Python test)
+- `test_site_fits_the_content_security_policy` (Python test)
+- `test_site_partials_current` (Python test)
+- `test_site_config_and_sitemap` (Python test)

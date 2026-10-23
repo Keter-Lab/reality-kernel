@@ -1,6 +1,8 @@
 # Design note: Phase 11 — enterprise repository standards
 
 Status: **ACCEPTED** (2026-10-23). All six decisions in §8 approved as recommended; decision 4: yes, sign-off with consent.
+Later change: [Phase 12](phase-12.md) retired the hosted API, the Python SDK and the analysis engine, so the
+best-effort SDK and API support in §3 and decision 1 no longer apply.
 Branch: `phase-11-standards` (from `main` at 258cd37)
 Plan reference: RealityKernel_Engineering_Plan.pdf, Phase 11 ("The
 repository meets the expectations of enterprise security reviewers").

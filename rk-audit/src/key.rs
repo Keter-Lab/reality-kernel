@@ -2,7 +2,7 @@
 //!
 //! A dedicated Ed25519 key, generated on first start from the kernel RNG and
 //! stored as its 32-byte seed, readable by root only. It is not derived from
-//! any configured secret, unlike the legacy `rk-signing` signer.
+//! any configured secret.
 
 use std::fs;
 use std::io::Write as _;
