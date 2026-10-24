@@ -7,6 +7,29 @@ request needs, and how decisions are made. Everyone taking part follows the
 **Security issues:** please do not open a public issue. See
 [SECURITY.md](SECURITY.md).
 
+## Your first contribution
+
+New here? Welcome. A good way in:
+
+1. **Pick an issue** labelled
+   [`good first issue`](https://github.com/Keter-Lab/reality-kernel/issues?q=is%3Aopen+label%3A%22good+first+issue%22).
+   Each one names the files to change and the test to add, and needs no
+   root, kernel or VM: `cargo test` or `pytest` on a Linux machine (or WSL)
+   is enough. Comment on it so nobody else picks it up.
+2. **Ask early.** Questions go in the issue or in
+   [Discussions](https://github.com/Keter-Lab/reality-kernel/discussions);
+   there are no silly ones. Expect an answer within a few days.
+3. **Open a pull request** early, even unfinished (mark it as a draft).
+   CI runs everything, including the kernel suites in VMs, so you can see
+   results without a kernel setup of your own.
+4. **Sign off your commits** (`git commit -s`, see [Sign-off](#sign-off)).
+
+All open work is on the public
+[project board](https://github.com/orgs/Keter-Lab/projects/1).
+`help wanted` issues are larger and say what background helps. Larger work
+starts with a short plan in the issue. Interested in Google Summer of Code?
+See [docs/gsoc.md](docs/gsoc.md).
+
 ## Building
 
 Prerequisites: a stable Rust toolchain, clang/LLVM and libbpf headers (BPF
