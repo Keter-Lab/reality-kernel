@@ -1005,7 +1005,12 @@ fn adoption_round_trip(checks: &mut Vec<TestCheck>, sensor: &Path) {
     let setup = || -> Result<()> {
         // The agent runs unprivileged; make the path traversable whatever
         // the harness's umask.
-        for d in [adopt.clone(), home.clone(), format!("{home}/.aws"), format!("{home}/.ssh")] {
+        for d in [
+            adopt.clone(),
+            home.clone(),
+            format!("{home}/.aws"),
+            format!("{home}/.ssh"),
+        ] {
             fs::create_dir_all(&d)?;
             fs::set_permissions(&d, fs::Permissions::from_mode(0o755))?;
         }
