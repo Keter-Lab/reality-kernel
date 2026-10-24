@@ -80,6 +80,35 @@ jobs:
       - name: cargo test
         run: .github/scripts/run-logged.sh "cargo test (${{ matrix.arch }})" cargo test --workspace
 
+  # docs/design/phase-15.md: the declared minimum Rust version
+  # (workspace rust-version) is proven, not assumed. Builds every crate and
+  # test target on exactly that toolchain with the committed Cargo.lock.
+  msrv:
+    name: Minimum Rust version (1.89)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install libclang (bindgen)
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.89"
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      # Fails if the toolchain here and rust-version in Cargo.toml disagree.
+      - name: toolchain matches rust-version
+        run: |
+          declared=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          actual=$(rustc --version | cut -d' ' -f2 | cut -d. -f1,2)
+          echo "declared $declared, toolchain $actual"
+          test "$declared" = "$actual"
+
+      - name: cargo check (all targets, locked)
+        run: .github/scripts/run-logged.sh msrv cargo check --workspace --all-targets --locked
+
   python:
     name: Python tests
     runs-on: ubuntu-24.04
