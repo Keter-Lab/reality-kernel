@@ -196,8 +196,8 @@ Contributions are welcome: start with a
 and [CONTRIBUTING.md](CONTRIBUTING.md#your-first-contribution) (commits are
 signed off under the [DCO](https://developercertificate.org/)),
 [GOVERNANCE.md](GOVERNANCE.md). Open work is on the
-[project board](https://github.com/orgs/Keter-Lab/projects/1); Google Summer
-of Code ideas are in [docs/gsoc.md](docs/gsoc.md). Report vulnerabilities privately as described in
+[project board](https://github.com/orgs/Keter-Lab/projects/1), and larger
+project ideas are in [docs/gsoc.md](docs/gsoc.md). Report vulnerabilities privately as described in
 [SECURITY.md](SECURITY.md).
 
 Reality Kernel began as a hosted API service; that product, its SDK and its
