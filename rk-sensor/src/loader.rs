@@ -281,7 +281,10 @@ mod tests {
         assert_eq!(lsm_hook("rk_exec_check"), Some("bprm_check_security"));
         assert_eq!(lsm_hook("rk_net_tun_create"), Some("tun_dev_create"));
         assert_eq!(lsm_hook("rk_net_tun_open"), Some("tun_dev_open"));
-        assert_eq!(lsm_hook("rk_net_tun_attach_queue"), Some("tun_dev_attach_queue"));
+        assert_eq!(
+            lsm_hook("rk_net_tun_attach_queue"),
+            Some("tun_dev_attach_queue")
+        );
         assert_eq!(lsm_hook("rk_file_open"), Some("file_open"));
         assert_eq!(lsm_hook("rk_file_unlink"), Some("inode_unlink"));
         assert_eq!(lsm_hook("rk_file_rmdir"), Some("inode_rmdir"));

@@ -723,7 +723,10 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         .and_then(|()| tun::create_persistent("rktun1", tun::NOBODY))
         .and_then(|()| tun::detached_queue("rktun2"))
         .map_err(|e| format!("TUN setup ({}): {e}", tun::NODE));
-    let tun_queue = tun_setup.as_ref().ok().map(|(_, queue)| queue.as_raw_fd().to_string());
+    let tun_queue = tun_setup
+        .as_ref()
+        .ok()
+        .map(|(_, queue)| queue.as_raw_fd().to_string());
     let tun_ready = || -> Result<String> {
         match (&tun_setup, &tun_queue) {
             (Ok(_), Some(fd)) => Ok(fd.clone()),
@@ -734,16 +737,29 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
     run_test(checks, "tun_attach_owned_ungoverned", || {
         tun_ready()?;
-        spawn_child("/sys/fs/cgroup/ungoverned", "tun", &["attach", "rktun1", "ok", "nobody"])?;
-        Ok("outside governance, uid 65534 with no capabilities attaches to rktun1, which it owns".into())
+        spawn_child(
+            "/sys/fs/cgroup/ungoverned",
+            "tun",
+            &["attach", "rktun1", "ok", "nobody"],
+        )?;
+        Ok(
+            "outside governance, uid 65534 with no capabilities attaches to rktun1, which it owns"
+                .into(),
+        )
     });
 
     run_test(checks, "tun_create_denied", || {
         tun_ready()?;
-        let cg = engine.cgroup_id("rk.slice/enforce").context("enforce cgroup not bound")?;
+        let cg = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("enforce cgroup not bound")?;
         drain_ringbuf(&mut ring)?;
         let before = get_counter(&ebpf, tun_counter(rk_verdict::RK_VERDICT_DENY))?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tun", &["create", "rktun0", "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tun",
+            &["create", "rktun0", "eperm"],
+        )?;
         let ev = poll_tun_event(&mut ring, Duration::from_secs(2), |e| {
             e.cgroup_id == cg && e.op == rk_tun_op::RK_TUN_CREATE
         })?;
@@ -753,13 +769,21 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             ev.verdict
         );
         let after = get_counter(&ebpf, tun_counter(rk_verdict::RK_VERDICT_DENY))?;
-        anyhow::ensure!(after > before, "tun deny counter did not move ({before} -> {after})");
-        Ok("root with CAP_NET_ADMIN cannot create rktun0 (EPERM); deny event and counter recorded".into())
+        anyhow::ensure!(
+            after > before,
+            "tun deny counter did not move ({before} -> {after})"
+        );
+        Ok(
+            "root with CAP_NET_ADMIN cannot create rktun0 (EPERM); deny event and counter recorded"
+                .into(),
+        )
     });
 
     run_test(checks, "tun_attach_owned_denied", || {
         tun_ready()?;
-        let cg = engine.cgroup_id("rk.slice/enforce").context("enforce cgroup not bound")?;
+        let cg = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("enforce cgroup not bound")?;
         drain_ringbuf(&mut ring)?;
         spawn_child(
             "/sys/fs/cgroup/rk.slice/enforce",
@@ -781,9 +805,15 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
     run_test(checks, "tun_attach_queue_denied", || {
         let fd = tun_ready()?;
-        let cg = engine.cgroup_id("rk.slice/enforce").context("enforce cgroup not bound")?;
+        let cg = engine
+            .cgroup_id("rk.slice/enforce")
+            .context("enforce cgroup not bound")?;
         drain_ringbuf(&mut ring)?;
-        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tun", &["attach_queue", fd.as_str(), "eperm"])?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tun",
+            &["attach_queue", fd.as_str(), "eperm"],
+        )?;
         let ev = poll_tun_event(&mut ring, Duration::from_secs(2), |e| {
             e.cgroup_id == cg && e.op == rk_tun_op::RK_TUN_ATTACH_QUEUE
         })?;
@@ -797,13 +827,21 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
 
     run_test(checks, "tun_audit_would_deny", || {
         let fd = tun_ready()?;
-        let cg = engine.cgroup_id("rk.slice/audit").context("audit cgroup not bound")?;
+        let cg = engine
+            .cgroup_id("rk.slice/audit")
+            .context("audit cgroup not bound")?;
         let audit = "/sys/fs/cgroup/rk.slice/audit";
         let would_deny = rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY as u8;
         for (args, op) in [
             (["create", "rktun0", "ok", ""], rk_tun_op::RK_TUN_CREATE),
-            (["attach", "rktun1", "ok", "nobody"], rk_tun_op::RK_TUN_ATTACH),
-            (["attach_queue", fd.as_str(), "ok", ""], rk_tun_op::RK_TUN_ATTACH_QUEUE),
+            (
+                ["attach", "rktun1", "ok", "nobody"],
+                rk_tun_op::RK_TUN_ATTACH,
+            ),
+            (
+                ["attach_queue", fd.as_str(), "ok", ""],
+                rk_tun_op::RK_TUN_ATTACH_QUEUE,
+            ),
         ] {
             drain_ringbuf(&mut ring)?;
             let args: Vec<&str> = args.into_iter().filter(|a| !a.is_empty()).collect();
@@ -826,7 +864,10 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         let rawok = "/sys/fs/cgroup/rk.slice/rawok";
         spawn_child(rawok, "tun", &["create", "rktun0", "ok"])?;
         spawn_child(rawok, "tun", &["attach", "rktun1", "ok", "nobody"])?;
-        Ok("with network.deny_raw_sockets = false, create and owned attach succeed in ENFORCE".into())
+        Ok(
+            "with network.deny_raw_sockets = false, create and owned attach succeed in ENFORCE"
+                .into(),
+        )
     });
 
     // Clean up: drop the multi-queue interface, then the persistent one.
@@ -2461,7 +2502,9 @@ fn drain_ringbuf(rb: &mut RingBuf<MapData>) -> Result<()> {
 
 /// Index of the TUN/TAP decision counter for `verdict` (`enum rk_verdict`).
 fn tun_counter(verdict: u32) -> u32 {
-    rk_counter::RK_CNT_DECISION_BASE + rk_ebpf_common::rk_hook::RK_HOOK_TUN * rk_ebpf_common::RK_VERDICTS + verdict
+    rk_counter::RK_CNT_DECISION_BASE
+        + rk_ebpf_common::rk_hook::RK_HOOK_TUN * rk_ebpf_common::RK_VERDICTS
+        + verdict
 }
 
 #[derive(Debug, Clone)]

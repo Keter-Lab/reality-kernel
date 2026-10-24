@@ -132,7 +132,11 @@ pub fn attach_queue(fd: RawFd) -> io::Result<()> {
 }
 
 pub fn detach_queue(fd: &OwnedFd) -> io::Result<()> {
-    ioctl_ifreq(fd.as_raw_fd(), TUNSETQUEUE, &mut ifreq("", IFF_DETACH_QUEUE))
+    ioctl_ifreq(
+        fd.as_raw_fd(),
+        TUNSETQUEUE,
+        &mut ifreq("", IFF_DETACH_QUEUE),
+    )
 }
 
 /// Creates a persistent single-queue interface owned by `owner`. Nothing stays
