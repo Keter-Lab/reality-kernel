@@ -58,6 +58,7 @@ pub fn run_child(args: &[String]) -> i32 {
         "guard_ptrace" => handle_guard_ptrace(rest),
         "guard_pins" => handle_guard_pins(),
         "gap_probe" => handle_gap_probe(rest),
+        "tun" => handle_tun(rest),
         other => {
             eprintln!("[child] unknown workload: {other}");
             203
@@ -254,6 +255,48 @@ fn handle_packet_socket() -> i32 {
         }
     }
     0
+}
+
+/// One TUN/TAP attempt (docs/design/phase-16.md):
+/// `tun <create|attach> <ifname> <ok|eperm> [nobody]` or
+/// `tun attach_queue <inherited fd> <ok|eperm> [nobody]`.
+/// `nobody` drops to uid/gid 65534 and every capability first.
+fn handle_tun(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        eprintln!("[child] tun: expected <op> <target> <ok|eperm> [nobody]");
+        return 1;
+    }
+    let (op, target, expected) = (args[0].as_str(), args[1].as_str(), args[2].as_str());
+    if args.get(3).map(String::as_str) == Some("nobody") {
+        if let Err(e) = crate::tun::become_nobody() {
+            eprintln!("[child] tun: dropping to nobody failed: {e}");
+            return 2;
+        }
+    }
+    let result = match op {
+        "create" | "attach" => {
+            crate::tun::open().and_then(|fd| crate::tun::set_iff(&fd, target, crate::tun::TUN))
+        }
+        "attach_queue" => match target.parse() {
+            Ok(fd) => crate::tun::attach_queue(fd),
+            Err(e) => {
+                eprintln!("[child] tun: bad fd {target}: {e}");
+                return 3;
+            }
+        },
+        other => {
+            eprintln!("[child] tun: unknown op {other}");
+            return 4;
+        }
+    };
+    match (expected, &result) {
+        ("ok", Ok(())) => 0,
+        ("eperm", Err(e)) if e.raw_os_error() == Some(libc::EPERM) => 0,
+        _ => {
+            eprintln!("[child] tun {op} {target}: got {result:?}, expected {expected}");
+            5
+        }
+    }
 }
 
 fn handle_tcp_fastopen(args: &[String]) -> i32 {

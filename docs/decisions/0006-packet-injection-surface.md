@@ -41,3 +41,10 @@ cleared and `no_new_privs` set (Phase 5). A governed workload that keeps
 `CAP_NET_ADMIN`, such as a privileged pod or a statically bound service, is not
 covered. The threat model lists this as a residual risk; closing it is planned
 hardening work and will be recorded in a new ADR.
+
+## Status note (2026-10-24)
+
+Superseded for TUN/TAP by [ADR-0017](0017-tun-tap-containment.md), which
+uses the kernel's TUN LSM hooks instead of `file_open`/`file_ioctl`. It also
+corrects the premise above: attaching to an existing persistent interface
+owned by the caller's user or group needs no capability at all.

@@ -60,7 +60,7 @@ it. It exists only for program types whose `bpf_prog_ops` define a
 | Program | Type | `test_run` | How it is tested instead |
 |---|---|---|---|
 | `rk_net_connect4/6`, `rk_net_sendmsg4/6` | `cgroup/sock_addr` | none (`cg_sock_addr_prog_ops`) | real connects in the VM verdict and conformance suites |
-| `rk_exec_check`, `rk_file_open`, `rk_net_socket_create`, guard hooks | `lsm` | none (`lsm_prog_ops`) | real exec, open and socket calls in the VMs |
+| `rk_exec_check`, `rk_file_open`, `rk_net_socket_create`, `rk_net_tun_*`, guard hooks | `lsm` | none (`lsm_prog_ops`) | real exec, open, socket and TUN/TAP calls in the VMs |
 | `rk_exec_record` | `tp_btf` (raw tracepoint) | only fentry/fexit/fmod_ret have one in `tracing_prog_ops` | exec events checked end to end in the VMs |
 
 Every enforcement hook is therefore tested by real operations in real

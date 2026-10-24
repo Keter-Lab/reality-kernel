@@ -97,6 +97,7 @@ the kernel's boot-time stamp), `device.hostname` and `severity_id`.
 | connect | 4001 Network Activity | 1 Open |
 | unconnected UDP sendmsg | 4001 | 6 Traffic |
 | raw or packet socket | 4001 | 99 "Socket Create" |
+| TUN/TAP create / attach / queue re-attach | 4001 | 99 "TUN/TAP Create" / "TUN/TAP Attach" / "TUN/TAP Attach Queue" (`unmapped.rk.tun_op`) |
 | exec | 1007 Process Activity | 1 Launch |
 | file open / unlink / rename / link / create / setattr | 1001 File System Activity | 14 / 4 / 5 / 1 / 1 / 6 |
 | self-protection | 1007 | 99 "Tamper" (`severity_id` 4 High) |

@@ -21,3 +21,4 @@ plan is recorded here before code lands.
 | [0014](0014-ocsf-hash-chained-audit-log.md) | OCSF audit records in a hash-chained, signed log | Accepted |
 | [0015](0015-make-before-break-upgrades.md) | Upgrades replace the BPF object make-before-break | Accepted |
 | [0016](0016-retire-the-hosted-product.md) | Retire the hosted API, the SDK and the analysis engine | Accepted |
+| [0017](0017-tun-tap-containment.md) | TUN/TAP containment through the kernel's TUN LSM hooks | Accepted |

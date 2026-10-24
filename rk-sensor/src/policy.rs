@@ -44,8 +44,14 @@ pub const SOCK_ADDR_PROGRAMS: [&str; 4] = [
     "rk_net_sendmsg6",
 ];
 
-/// Host-wide LSM programs.
-pub const LSM_PROGRAMS: [&str; 1] = ["rk_net_socket_create"];
+/// Host-wide network LSM programs: raw and packet sockets, and TUN/TAP
+/// (docs/design/phase-16.md).
+pub const LSM_PROGRAMS: [&str; 4] = [
+    "rk_net_socket_create",
+    "rk_net_tun_create",
+    "rk_net_tun_open",
+    "rk_net_tun_attach_queue",
+];
 
 /// Minimum time between retiring a slot and rewriting it.
 pub const SLOT_GRACE: Duration = Duration::from_secs(1);
@@ -481,7 +487,7 @@ pub fn attach_sock_addr(
     Ok(attached)
 }
 
-/// Attaches the network LSM programs (raw-socket denial) host-wide, once.
+/// Attaches the network LSM programs (raw sockets, TUN/TAP) host-wide, once.
 pub fn attach_network_lsm(ebpf: &mut Ebpf, links: Option<&Path>) -> Result<Vec<String>> {
     LSM_PROGRAMS
         .iter()
@@ -799,7 +805,8 @@ impl PolicyEngine {
                      would not be enforced. Boot with `lsm=...,bpf`, or make the profile \
                      network-only: remove `[exec]`, set `files.include = []` with no \
                      `files.deny` rules, and set `network.deny_raw_sockets = false` (then drop \
-                     CAP_NET_RAW from the workloads, since raw sockets bypass connect rules)",
+                     CAP_NET_RAW from the workloads and give them no TUN/TAP device, since raw \
+                     sockets and TUN/TAP bypass connect rules)",
                     p.name
                 );
             }

@@ -424,3 +424,13 @@ phase = "12"
 id = "site_honest"
 text = "The website has no broken links, nothing of the retired product, no performance number or superlative, and no inline script or style, so it runs under a strict Content-Security-Policy"
 tests = ["py:test_site_links_resolve", "py:test_site_has_no_retired_product", "py:test_site_claims_rules", "py:test_site_fits_the_content_security_policy", "py:test_site_partials_current", "py:test_site_config_and_sitemap"]
+
+# ---- Phase 16: TUN/TAP containment ----------------------------------------
+
+[[criterion]]
+phase = "16"
+id = "tun-containment"
+text = "ENFORCE: a governed process cannot create a TUN/TAP interface, attach to one (even one its own user owns, with no capability), or re-attach a detached queue; AUDIT records each as audit_would_deny; ungoverned processes and profiles with deny_raw_sockets = false are unaffected"
+tests = ["vm:tun_attach_owned_ungoverned", "vm:tun_create_denied", "vm:tun_attach_owned_denied",
+         "vm:tun_attach_queue_denied", "vm:tun_audit_would_deny", "vm:tun_allowed_without_flag",
+         "unit:decodes_tun", "unit:tun_operations_are_named"]

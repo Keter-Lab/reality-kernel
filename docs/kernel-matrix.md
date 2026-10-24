@@ -7,7 +7,7 @@ artifact.
 
 | Kernel | Arch | BPF objects load (verifier) | Selftest | Notes |
 |---|---|---|---|---|
-| 5.15 LTS | x86_64 | CI | CI | Minimum supported kernel for enforcement. Built from source in CI (see below) |
+| 5.15 LTS | x86_64 | CI | CI | Minimum supported kernel for enforcement |
 | 6.1 LTS | x86_64 | CI | CI | |
 | 6.6 LTS | x86_64 | CI | CI | |
 | 6.12 LTS | x86_64 | CI | CI | |
@@ -57,7 +57,8 @@ job's upgrade suite, and must report no failure.
 
 Kernels come from the [LVH] image set (`quay.io/lvh-images/kernel-images`),
 built with `CONFIG_BPF_LSM`, `CONFIG_DEBUG_INFO_BTF` and `CONFIG_CGROUP_BPF`.
-They are pinned by digest in `kernel.yml`. To refresh:
+They are pinned by digest in `kernel.yml`, and every kernel is rebuilt from
+source with the image's config (see "Built from source" below). To refresh:
 
 ```sh
 curl -s "https://quay.io/api/v1/repository/lvh-images/kernel-images/tag/?specificTag=6.12-main" \
@@ -65,7 +66,9 @@ curl -s "https://quay.io/api/v1/repository/lvh-images/kernel-images/tag/?specifi
 ```
 
 Update the digest in `kernel.yml` in its own pull request, so a behaviour change
-can be traced to a kernel change.
+can be traced to a kernel change. Update `source`, `source_url` and
+`source_sha256` with it: the build fails if the image's config names a
+different kernel version.
 
 ## Kernel features reported by the selftest
 
@@ -90,10 +93,15 @@ on every supported kernel.
 [vmtest]: https://github.com/danobi/vmtest
 [LVH]: https://github.com/cilium/little-vm-helper
 
-## 5.15: built from source
+## Built from source
 
-The LVH 5.15 image is built without `CONFIG_VIRTIO_CONSOLE`, which vmtest needs
-to talk to the guest. CI rebuilds the same source (`linux-5.15.222`, verified
-against kernel.org's SHA-256) from LVH's own config with that one option added,
-and caches the resulting `bzImage`. Everything that matters to Reality Kernel
-(BPF, BTF, BPF-LSM, cgroup BPF) is identical to the LVH image.
+No LVH image enables `CONFIG_TUN`, which the TUN/TAP tests need
+(docs/design/phase-16.md §4), and the 5.15 image also lacks
+`CONFIG_VIRTIO_CONSOLE`, which vmtest needs to talk to the guest. CI therefore
+rebuilds each kernel from the same version's source (verified against the
+SHA-256 in kernel.org's `sha256sums.asc`) with the image's own config plus
+those two options, and caches the resulting `bzImage` per version and config.
+The build fails if the config names a different version, or if
+`olddefconfig` drops any option the tests rely on (`TUN`, `VIRTIO_CONSOLE`,
+`BPF_LSM`, `DEBUG_INFO_BTF`, `CGROUP_BPF`, `SECURITY_NETWORK`). Everything
+else that matters to Reality Kernel is identical to the LVH image.

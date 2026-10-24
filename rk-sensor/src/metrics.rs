@@ -20,7 +20,7 @@ use axum::routing::get;
 use axum::Router;
 
 /// Hook classes, indexed like `enum rk_hook`.
-pub const HOOKS: [&str; 8] = [
+pub const HOOKS: [&str; 9] = [
     "connect4",
     "connect6",
     "sendmsg4",
@@ -29,7 +29,9 @@ pub const HOOKS: [&str; 8] = [
     "exec",
     "file",
     "guard",
+    "tun",
 ];
+const _: () = assert!(HOOKS.len() == rk_ebpf_common::rk_hook::RK_HOOK_MAX as usize);
 
 /// Verdicts, indexed like `enum rk_verdict`.
 pub const VERDICTS: [&str; 3] = ["allow", "deny", "audit_would_deny"];

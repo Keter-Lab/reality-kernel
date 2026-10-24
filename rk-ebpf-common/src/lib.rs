@@ -73,6 +73,10 @@ const _: () = {
     assert!(offset_of!(rk_payload_sock, type_) == 4);
     assert!(offset_of!(rk_payload_sock, protocol) == 8);
 
+    // Phase 16 (docs/design/phase-16.md).
+    assert!(size_of::<rk_payload_tun>() == 8);
+    assert!(offset_of!(rk_payload_tun, op) == 0);
+
     // Policy maps.
     assert!(size_of::<rk_binding>() == 8);
     assert!(size_of::<rk_profile>() == 16);
@@ -119,13 +123,14 @@ mod tests {
         assert_eq!(RK_SCRATCH_PAYLOAD_MAX, 2048);
         assert_eq!(rk_event_type::RK_EV_SENDMSG, 9);
         assert_eq!(rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY, 2);
-        assert_eq!(rk_counter::RK_CNT_MAX, 26);
+        assert_eq!(rk_counter::RK_CNT_MAX, 29);
         assert_eq!(rk_counter::RK_CNT_DECISION_BASE, 2);
         assert_eq!(
             rk_counter::RK_CNT_MAX,
             rk_counter::RK_CNT_DECISION_BASE + rk_hook::RK_HOOK_MAX * RK_VERDICTS
         );
         assert_eq!(rk_hook::RK_HOOK_GUARD, 7);
+        assert_eq!(rk_hook::RK_HOOK_TUN, 8);
         assert_eq!(rk_event_type::RK_EV_SOCK_CREATE, 10);
         assert_eq!(RK_MAX_PROFILES, 1024);
         assert_eq!(RK_RULE_HEARTBEAT, u32::MAX);
@@ -138,6 +143,8 @@ mod tests {
         assert_eq!(rk_profile_flag::RK_PROFILE_EXEC_DENY_DEFAULT, 2);
         assert_eq!(rk_exec_flag::RK_EXEC_DECISION, 8);
         assert_eq!(rk_event_type::RK_EV_FILE_DENY, 11);
+        assert_eq!(rk_event_type::RK_EV_TUN, 12);
+        assert_eq!(rk_tun_op::RK_TUN_ATTACH_QUEUE, 3);
         assert_eq!(rk_file_access::RK_FILE_ALL, 511);
         assert_eq!(RK_FILE_MAX_DEPTH, 32);
     }

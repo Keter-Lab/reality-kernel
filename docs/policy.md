@@ -52,7 +52,7 @@ never need rewriting when the policy changes.
 | `default` | `"allow"` \| `"deny"` | `"deny"` | Verdict when no rule matches |
 | `include` | list of names | `["cloud-metadata"]` | Built-in deny lists. Remove only explicitly (`include = []`) |
 | `nat64_equivalence` | bool | `true` | Also deny the `64:ff9b::/96` form of every IPv4 deny rule |
-| `deny_raw_sockets` | bool | `true` | Deny raw (inet) and packet sockets, which would bypass every network hook |
+| `deny_raw_sockets` | bool | `true` | Deny the packet-injection surfaces that would bypass every network hook: raw (inet) and packet sockets, and creating or attaching to TUN/TAP devices (Phase 16). The name predates TUN/TAP and is kept for compatibility |
 | `allow`, `deny` | list of rules | `[]` | See below |
 
 Rule fields:
@@ -194,7 +194,7 @@ plugin also reads.
 
 ## Kernels without BPF LSM
 
-Exec rules, file rules and raw-socket denial run in BPF-LSM programs. Where
+Exec rules, file rules and raw-socket and TUN/TAP denial run in BPF-LSM programs. Where
 `bpf` isn't in `/sys/kernel/security/lsm`, those programs would load but never
 run, so `rk-sensor` refuses any profile that uses them, instead of reporting
 protection that doesn't exist. `rk status` shows `bpf_lsm: inactive`. Either
@@ -208,8 +208,9 @@ network.deny_raw_sockets = false   # acknowledges raw sockets are not blocked
 include = []                       # and no [exec] section
 ```
 
-Raw sockets bypass connect rules, so also drop `CAP_NET_RAW` from such
-workloads.
+Raw sockets and TUN/TAP devices bypass connect rules, so also drop
+`CAP_NET_RAW` from such workloads and give their users no persistent TUN/TAP
+device.
 
 ## Rolling out a profile
 
