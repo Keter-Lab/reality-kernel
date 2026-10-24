@@ -222,20 +222,19 @@ connect(3, {AF_INET, 10.20.0.12:443}) = <span class="allow">0</span></pre>
         <div class="section-head">
           <p class="sigil">quick start</p>
           <h2>Install. Check the host. <em>Govern an agent.</em></h2>
-          <p>Packages for Debian, Ubuntu, RHEL and Rocky, a Helm chart for Kubernetes, and static binaries. Releases are signed with Sigstore and carry SLSA provenance and an SBOM.</p>
+          <p>Packages for Debian, Ubuntu, RHEL and Rocky, a Helm chart for Kubernetes, and static binaries. Releases are signed with Sigstore and carry SLSA provenance and an SBOM. Using a coding agent? Point it at the <a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/agents.md" rel="noopener">setup runbook</a>.</p>
         </div>
         <div class="split">
           <div class="code">
             <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
-<pre><span class="c"># install the package from the latest release</span>
-sudo dpkg -i reality-kernel_&lt;version&gt;-1_amd64.deb
-<span class="c"># check kernel features; it explains any gap</span>
-rk doctor
-<span class="c"># define a profile, then reload</span>
-sudoedit /etc/rk/policy.toml
-sudo systemctl reload rk-sensor
-<span class="c"># run an agent under it, and watch the decisions</span>
-rk run --profile research-agent -- python3 agent.py
+<pre><span class="c"># install the latest release; verifies checksum and signature</span>
+curl -fsSL https://realitykernel.dev/install.sh | sh
+<span class="c"># a starter profile in AUDIT: records everything, blocks nothing</span>
+sudo rk init
+<span class="c"># run the agent, then turn what it did into an ENFORCE profile</span>
+rk run --profile agent -- python3 agent.py
+sudo rk policy suggest --profile agent --out agent.toml
+<span class="c"># review it, apply it, and watch the decisions</span>
 rk audit tail -f</pre>
           </div>
           <div class="code">

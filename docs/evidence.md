@@ -561,3 +561,22 @@ ENFORCE: a governed process cannot create a TUN/TAP interface, attach to one (ev
 - `tun_allowed_without_flag` (VM suite, every kernel)
 - `decodes_tun` (Rust test)
 - `tun_operations_are_named` (Rust test)
+
+## Release v0.2.0
+
+### adoption
+
+One command installs a verified release (a tampered package is refused); rk init writes a starter AUDIT profile that fits the host and never replaces a policy in use; rk policy suggest turns a verified audit log into an ENFORCE profile under which the learned connections and executables work, everything unobserved is denied, and secret files stay denied
+
+- `adoption_round_trip` (VM suite, every kernel)
+- `pkg_fresh_install_enforces` (package test, every distribution)
+- `pkg_init_suggest` (package test, every distribution)
+- `test_install_script_refuses_a_tampered_package` (Python test)
+- `test_install_script_checks_before_it_installs` (Python test)
+- `test_install_script_pins_the_release_identity` (Python test)
+- `starter_with_bpf_lsm_learns_network_exec_and_secrets` (Rust test)
+- `starter_without_bpf_lsm_is_network_only` (Rust test)
+- `a_policy_in_use_is_never_replaced` (Rust test)
+- `suggests_an_enforce_profile_from_would_denies` (Rust test)
+- `a_log_that_does_not_verify_is_refused` (Rust test)
+- `no_records_is_an_error_not_an_empty_allow_list` (Rust test)

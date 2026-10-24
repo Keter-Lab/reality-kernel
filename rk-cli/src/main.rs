@@ -10,6 +10,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 mod doctor;
+mod init;
+mod suggest;
+mod toml_out;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -53,6 +56,25 @@ enum Commands {
         /// Emit machine-readable JSON output
         #[arg(long)]
         json: bool,
+    },
+    /// Write and apply a starter policy in AUDIT that fits this host
+    /// (docs/agents.md)
+    Init {
+        /// Policy file to write
+        #[arg(long, default_value = "/etc/rk/policy.toml")]
+        policy: PathBuf,
+        /// User the agent runs as (default: $SUDO_USER, else root)
+        #[arg(long)]
+        user: Option<String>,
+        /// Home directory to look for secret files in (default: the user's)
+        #[arg(long)]
+        home: Option<PathBuf>,
+        /// Print the starter policy and change nothing
+        #[arg(long)]
+        print: bool,
+        /// Replace a policy that already defines profiles (a backup is kept)
+        #[arg(long)]
+        force: bool,
     },
     /// Read and verify the tamper-evident audit log (docs/audit.md)
     Audit {
@@ -116,6 +138,34 @@ enum PolicyCommands {
     },
     /// Re-apply the previous policy
     Rollback,
+    /// Suggest an ENFORCE profile from what the audit log shows the profile's
+    /// agents did. Prints a complete policy; applies nothing
+    Suggest {
+        /// Profile to suggest rules for
+        #[arg(long)]
+        profile: String,
+        /// Policy file holding the profile
+        #[arg(long, default_value = "/etc/rk/policy.toml")]
+        policy: PathBuf,
+        /// Audit log directory
+        #[arg(long, default_value = rk_audit::DEFAULT_DIR)]
+        dir: PathBuf,
+        /// Require this signing key (default: /var/lib/rk/audit.key.pub if present)
+        #[arg(long)]
+        pubkey: Option<String>,
+        /// Use a log that does not verify (the output says so)
+        #[arg(long)]
+        no_verify: bool,
+        /// Only records from the last 30s, 15m, 2h, 1d, ...
+        #[arg(long)]
+        since: Option<String>,
+        /// Also look for executables in this directory (and four levels below)
+        #[arg(long)]
+        search: Vec<PathBuf>,
+        /// Write the suggestion here instead of stdout
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -146,6 +196,25 @@ fn main() -> ExitCode {
             Err(err) => {
                 eprintln!("doctor error: {err:#}");
                 ExitCode::from(1)
+            }
+        },
+        Commands::Init {
+            policy,
+            user,
+            home,
+            print,
+            force,
+        } => match init::run(&init::Options {
+            policy,
+            user,
+            home,
+            print,
+            force,
+        }) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("rk init: {e:#}");
+                ExitCode::FAILURE
             }
         },
         Commands::Audit {
@@ -285,18 +354,18 @@ fn run_audit_tail(
     }
 }
 
-fn run_audit_verify(dir: &Path, pubkey: Option<&str>, json: bool) -> Result<bool> {
-    let pinned = match pubkey {
-        Some(p) => {
-            let text = if Path::new(p).is_file() {
-                fs::read_to_string(p).with_context(|| format!("read {p}"))?
-            } else {
-                p.to_string()
-            };
-            Some(rk_audit::key::parse_public_key(&text)?)
-        }
-        None => None,
+/// An audit public key given as hex, or as a file holding it.
+pub(crate) fn read_public_key(p: &str) -> Result<[u8; 32]> {
+    let text = if Path::new(p).is_file() {
+        fs::read_to_string(p).with_context(|| format!("read {p}"))?
+    } else {
+        p.to_string()
     };
+    rk_audit::key::parse_public_key(&text)
+}
+
+fn run_audit_verify(dir: &Path, pubkey: Option<&str>, json: bool) -> Result<bool> {
+    let pinned = pubkey.map(read_public_key).transpose()?;
     let r = rk_audit::chain::verify_dir(dir, pinned)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&r)?);
@@ -357,6 +426,29 @@ fn run_agent(profile: &str, session: Option<&str>, cmd: &[String]) -> ExitCode {
 }
 
 fn run_policy(command: PolicyCommands) -> Result<()> {
+    // Reads the policy file and the audit log; needs no daemon.
+    if let PolicyCommands::Suggest {
+        profile,
+        policy,
+        dir,
+        pubkey,
+        no_verify,
+        since,
+        search,
+        out,
+    } = command
+    {
+        return suggest::run(&suggest::Options {
+            profile,
+            policy,
+            dir,
+            pubkey,
+            no_verify,
+            since,
+            search,
+            out,
+        });
+    }
     let client = Client::connect(None)
         .context("failed to connect to rk-sensor daemon (is rk-sensor running?)")?;
 
@@ -414,6 +506,7 @@ fn run_policy(command: PolicyCommands) -> Result<()> {
                 rep.generation, rep.profiles, rep.bindings
             );
         }
+        PolicyCommands::Suggest { .. } => unreachable!("handled before connecting"),
     }
     Ok(())
 }

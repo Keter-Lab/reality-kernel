@@ -25,7 +25,20 @@ are refused. Supported kernels: [kernel-matrix.md](kernel-matrix.md).
 
 ## 2. Install
 
-Packages are attached to each [release](https://github.com/Keter-Lab/reality-kernel/releases),
+The installer picks the deb or rpm for this host, checks it against the
+release's `SHA256SUMS` and, when [cosign](https://docs.sigstore.dev/cosign/system_config/installation/)
+is installed, checks its signature against this repository's release
+workflow ([releases.md](releases.md)). A failed check stops the install.
+
+```sh
+curl -fsSL https://realitykernel.dev/install.sh | sh
+sh install.sh --version 0.2.0       # a given release
+sh install.sh --from DIR --dry-run  # local files: verify only
+```
+
+Then `sudo rk init` writes a starter policy in AUDIT and
+[docs/agents.md](agents.md) walks through the rest. By hand:
+packages are attached to each [release](https://github.com/Keter-Lab/reality-kernel/releases),
 with `SHA256SUMS`:
 
 ```sh

@@ -1,0 +1,18 @@
+# Reality Kernel
+
+> Kernel-level enforcement for AI agents on Linux: network, exec and file policy decided in eBPF (BPF-LSM and cgroup hooks) before the action happens, with a signed, tamper-evident audit log. Open source (MIT OR Apache-2.0).
+
+Setting it up for a user? Follow the runbook, step by step, and ask the human before switching anything to enforce.
+
+## Docs
+
+- [Setup runbook for coding agents](https://github.com/Keter-Lab/reality-kernel/blob/main/docs/agents.md): install, `rk init`, run in AUDIT, `rk policy suggest`, enforce
+- [Install](https://github.com/Keter-Lab/reality-kernel/blob/main/docs/install.md): packages, verification, Kubernetes
+- [Policy reference](https://github.com/Keter-Lab/reality-kernel/blob/main/docs/policy.md): profiles, network, exec, files
+- [Threat model](https://github.com/Keter-Lab/reality-kernel/blob/main/docs/threat-model.md): what it protects against, and what it does not
+- [Evidence](https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md): the tests behind every claim
+
+## Optional
+
+- [Audit log](https://github.com/Keter-Lab/reality-kernel/blob/main/docs/audit.md)
+- [Roadmap](https://github.com/Keter-Lab/reality-kernel/blob/main/ROADMAP.md)

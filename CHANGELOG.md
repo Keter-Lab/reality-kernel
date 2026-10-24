@@ -10,6 +10,12 @@ and container image. The format follows
 
 ### Added
 
+- Adoption path (docs/design/adoption.md): `install.sh` (one command;
+  verifies the checksum, and the Sigstore signature when cosign is present),
+  `rk init` (a starter profile in AUDIT that fits the host),
+  `rk policy suggest` (an ENFORCE profile from the audit log, never applied
+  automatically), and docs/agents.md, a runbook coding agents can follow.
+- ROADMAP.md and a root THREAT_MODEL.md pointer.
 - TUN/TAP containment: governed processes can no longer create a TUN/TAP
   interface, attach to an existing one (including one their own user owns,
   which needs no capability) or re-attach a detached queue. It follows

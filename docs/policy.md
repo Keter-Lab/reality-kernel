@@ -217,6 +217,9 @@ device.
 `mode` has no default: a profile states whether it enforces. The recommended
 rollout (ADR-0011):
 
+`rk init` and `rk policy suggest` automate steps 1 to 3
+([agents.md](agents.md)); by hand:
+
 1. Write the profile with `mode = "audit"` and bind it. Nothing is blocked.
 2. Watch what it would deny: `rk audit tail --verdict audit`, or
    `rk_rule_hits_total{verdict="audit_would_deny"}` in the metrics.

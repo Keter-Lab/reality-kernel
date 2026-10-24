@@ -1235,8 +1235,10 @@ dependencies = [
  "clap",
  "rk-agentd",
  "rk-audit",
+ "rk-policy",
  "serde",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

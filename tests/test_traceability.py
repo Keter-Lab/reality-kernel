@@ -156,3 +156,10 @@ def test_repository_index_is_complete():
     """The real tests/traceability.toml passes the static check."""
     _, failures = tr.check_static(pathlib.Path(__file__).resolve().parents[1])
     assert failures == []
+
+
+def test_releases_sort_after_phases():
+    phases = ["v0.10.0", "16", "v0.2.0", "5b", "2", "v0.3.0"]
+    assert sorted(phases, key=tr.phase_key) == ["2", "5b", "16", "v0.2.0", "v0.3.0", "v0.10.0"]
+    assert tr.phase_title("v0.2.0") == "Release v0.2.0"
+    assert tr.phase_title("5b") == "Phase 5b"
