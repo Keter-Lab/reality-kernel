@@ -37,7 +37,7 @@ supported kernel, in every CI run ([how this is checked](docs/testing.md)).
 
 <!-- claims:begin -->
 - Denies governed network connections in the kernel with `EPERM`, over TCP and UDP, IPv4 and IPv6. [evidence](docs/evidence.md#net-enforce-eperm)
-- Closes the usual bypasses: raw and packet sockets, io_uring, TCP Fast Open and NAT64 addresses. [evidence](docs/evidence.md#net-bypasses)
+- Closes the usual bypasses: raw and packet sockets, TUN/TAP devices, io_uring, TCP Fast Open and NAT64 addresses. [evidence](docs/evidence.md#net-bypasses) · [evidence](docs/evidence.md#tun-containment)
 - Allows only listed executables, decided on file identity rather than path, so symlinks, replaced binaries, scripts and memfd tricks do not get around it. [evidence](docs/evidence.md#exec-allowlist) · [evidence](docs/evidence.md#exec-identity)
 - Protects files per access type (read, write, delete, rename, link, create, setattr), whatever name the file is reached by. [evidence](docs/evidence.md#file-access-types) · [evidence](docs/evidence.md#file-identity)
 - Governs an agent launched with `rk run` from its first instruction, and every process it starts. [evidence](docs/evidence.md#agent-first-instruction) · [evidence](docs/evidence.md#agent-children)

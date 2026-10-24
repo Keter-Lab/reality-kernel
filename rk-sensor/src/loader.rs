@@ -164,6 +164,9 @@ fn lsm_hook(program: &str) -> Option<&'static str> {
     match program {
         "rk_test_lsm_open" => Some("file_open"),
         "rk_net_socket_create" => Some("socket_create"),
+        "rk_net_tun_create" => Some("tun_dev_create"),
+        "rk_net_tun_open" => Some("tun_dev_open"),
+        "rk_net_tun_attach_queue" => Some("tun_dev_attach_queue"),
         "rk_exec_check" => Some("bprm_check_security"),
         "rk_file_open" => Some("file_open"),
         "rk_file_unlink" => Some("inode_unlink"),
@@ -276,6 +279,9 @@ mod tests {
         assert_eq!(lsm_hook("rk_test_lsm_open"), Some("file_open"));
         assert_eq!(lsm_hook("rk_unknown"), None);
         assert_eq!(lsm_hook("rk_exec_check"), Some("bprm_check_security"));
+        assert_eq!(lsm_hook("rk_net_tun_create"), Some("tun_dev_create"));
+        assert_eq!(lsm_hook("rk_net_tun_open"), Some("tun_dev_open"));
+        assert_eq!(lsm_hook("rk_net_tun_attach_queue"), Some("tun_dev_attach_queue"));
         assert_eq!(lsm_hook("rk_file_open"), Some("file_open"));
         assert_eq!(lsm_hook("rk_file_unlink"), Some("inode_unlink"));
         assert_eq!(lsm_hook("rk_file_rmdir"), Some("inode_rmdir"));

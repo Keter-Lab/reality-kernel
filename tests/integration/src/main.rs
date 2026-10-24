@@ -16,6 +16,7 @@ mod conformance;
 mod observability;
 #[cfg(target_os = "linux")]
 mod resilience;
+mod tun;
 #[cfg(target_os = "linux")]
 mod upgrade;
 mod workloads;
@@ -23,6 +24,7 @@ mod workloads;
 use std::collections::HashSet;
 use std::fs;
 use std::net::{TcpListener, UdpSocket};
+use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::process::{Child, Command, Output, Stdio};
 use std::thread;
@@ -31,7 +33,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use aya::maps::{MapData, PerCpuArray, RingBuf};
 use aya::Btf;
-use rk_ebpf_common::{rk_counter, rk_exec_flag, rk_verdict};
+use rk_ebpf_common::{rk_counter, rk_exec_flag, rk_tun_op, rk_verdict};
 use rk_sensor::decoder::Payload;
 use serde::{Deserialize, Serialize};
 
@@ -230,6 +232,12 @@ network.default = "allow"
 exec.default = "allow"
 exec.allow_unlinked = true
 
+# Phase 16: packet-injection surfaces (raw sockets, TUN/TAP) allowed.
+[profiles.rawok-profile]
+mode = "enforce"
+network.default = "allow"
+network.deny_raw_sockets = false
+
 [[bindings]]
 cgroup = "rk.slice/enforce"
 profile = "enforce-profile"
@@ -241,6 +249,10 @@ profile = "audit-profile"
 [[bindings]]
 cgroup = "rk.slice/unlinked"
 profile = "unlinked-profile"
+
+[[bindings]]
+cgroup = "rk.slice/rawok"
+profile = "rawok-profile"
 "#;
 
 const POLICY_B: &str = r#"
@@ -396,6 +408,12 @@ network.default = "allow"
 exec.default = "allow"
 exec.allow_unlinked = true
 
+# Phase 16: packet-injection surfaces (raw sockets, TUN/TAP) allowed.
+[profiles.rawok-profile]
+mode = "enforce"
+network.default = "allow"
+network.deny_raw_sockets = false
+
 [[bindings]]
 cgroup = "rk.slice/enforce"
 profile = "enforce-profile"
@@ -407,6 +425,10 @@ profile = "audit-profile"
 [[bindings]]
 cgroup = "rk.slice/unlinked"
 profile = "unlinked-profile"
+
+[[bindings]]
+cgroup = "rk.slice/rawok"
+profile = "rawok-profile"
 "#;
 
 fn main() {
@@ -692,6 +714,126 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         spawn_child("/sys/fs/cgroup/rk.slice/enforce", "packet_socket", &[])?;
         Ok("AF_PACKET raw socket denied with EPERM".into())
     });
+
+    // Phase 16: TUN/TAP (docs/design/phase-16.md). Interfaces: rktun0 is
+    // created and dropped by single attempts; rktun1 is persistent and owned
+    // by nobody, so nobody may attach without any capability; rktun2 is
+    // multi-queue, with one detached queue the children inherit.
+    let tun_setup = tun::make_node()
+        .and_then(|()| tun::create_persistent("rktun1", tun::NOBODY))
+        .and_then(|()| tun::detached_queue("rktun2"))
+        .map_err(|e| format!("TUN setup ({}): {e}", tun::NODE));
+    let tun_queue = tun_setup.as_ref().ok().map(|(_, queue)| queue.as_raw_fd().to_string());
+    let tun_ready = || -> Result<String> {
+        match (&tun_setup, &tun_queue) {
+            (Ok(_), Some(fd)) => Ok(fd.clone()),
+            (Err(e), _) => anyhow::bail!("{e}"),
+            (Ok(_), None) => anyhow::bail!("TUN setup left no queue descriptor"),
+        }
+    };
+
+    run_test(checks, "tun_attach_owned_ungoverned", || {
+        tun_ready()?;
+        spawn_child("/sys/fs/cgroup/ungoverned", "tun", &["attach", "rktun1", "ok", "nobody"])?;
+        Ok("outside governance, uid 65534 with no capabilities attaches to rktun1, which it owns".into())
+    });
+
+    run_test(checks, "tun_create_denied", || {
+        tun_ready()?;
+        let cg = engine.cgroup_id("rk.slice/enforce").context("enforce cgroup not bound")?;
+        drain_ringbuf(&mut ring)?;
+        let before = get_counter(&ebpf, tun_counter(rk_verdict::RK_VERDICT_DENY))?;
+        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tun", &["create", "rktun0", "eperm"])?;
+        let ev = poll_tun_event(&mut ring, Duration::from_secs(2), |e| {
+            e.cgroup_id == cg && e.op == rk_tun_op::RK_TUN_CREATE
+        })?;
+        anyhow::ensure!(
+            ev.verdict == rk_verdict::RK_VERDICT_DENY as u8,
+            "create event verdict {} (expected deny)",
+            ev.verdict
+        );
+        let after = get_counter(&ebpf, tun_counter(rk_verdict::RK_VERDICT_DENY))?;
+        anyhow::ensure!(after > before, "tun deny counter did not move ({before} -> {after})");
+        Ok("root with CAP_NET_ADMIN cannot create rktun0 (EPERM); deny event and counter recorded".into())
+    });
+
+    run_test(checks, "tun_attach_owned_denied", || {
+        tun_ready()?;
+        let cg = engine.cgroup_id("rk.slice/enforce").context("enforce cgroup not bound")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "tun",
+            &["attach", "rktun1", "eperm", "nobody"],
+        )?;
+        let ev = poll_tun_event(&mut ring, Duration::from_secs(2), |e| {
+            e.cgroup_id == cg && e.op == rk_tun_op::RK_TUN_ATTACH
+        })?;
+        anyhow::ensure!(
+            ev.verdict == rk_verdict::RK_VERDICT_DENY as u8 && ev.uid == tun::NOBODY,
+            "attach event verdict {} uid {} (expected deny by {})",
+            ev.verdict,
+            ev.uid,
+            tun::NOBODY
+        );
+        Ok("governed uid 65534 with no capabilities cannot attach to rktun1, which it owns (EPERM)".into())
+    });
+
+    run_test(checks, "tun_attach_queue_denied", || {
+        let fd = tun_ready()?;
+        let cg = engine.cgroup_id("rk.slice/enforce").context("enforce cgroup not bound")?;
+        drain_ringbuf(&mut ring)?;
+        spawn_child("/sys/fs/cgroup/rk.slice/enforce", "tun", &["attach_queue", fd.as_str(), "eperm"])?;
+        let ev = poll_tun_event(&mut ring, Duration::from_secs(2), |e| {
+            e.cgroup_id == cg && e.op == rk_tun_op::RK_TUN_ATTACH_QUEUE
+        })?;
+        anyhow::ensure!(
+            ev.verdict == rk_verdict::RK_VERDICT_DENY as u8,
+            "attach_queue event verdict {} (expected deny)",
+            ev.verdict
+        );
+        Ok("an inherited, detached rktun2 queue cannot be re-attached (EPERM)".into())
+    });
+
+    run_test(checks, "tun_audit_would_deny", || {
+        let fd = tun_ready()?;
+        let cg = engine.cgroup_id("rk.slice/audit").context("audit cgroup not bound")?;
+        let audit = "/sys/fs/cgroup/rk.slice/audit";
+        let would_deny = rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY as u8;
+        for (args, op) in [
+            (["create", "rktun0", "ok", ""], rk_tun_op::RK_TUN_CREATE),
+            (["attach", "rktun1", "ok", "nobody"], rk_tun_op::RK_TUN_ATTACH),
+            (["attach_queue", fd.as_str(), "ok", ""], rk_tun_op::RK_TUN_ATTACH_QUEUE),
+        ] {
+            drain_ringbuf(&mut ring)?;
+            let args: Vec<&str> = args.into_iter().filter(|a| !a.is_empty()).collect();
+            spawn_child(audit, "tun", &args)?;
+            let ev = poll_tun_event(&mut ring, Duration::from_secs(2), |e| {
+                e.cgroup_id == cg && e.op == op
+            })?;
+            anyhow::ensure!(
+                ev.verdict == would_deny,
+                "{} event verdict {} (expected audit_would_deny)",
+                args[0],
+                ev.verdict
+            );
+        }
+        Ok("create, owned attach and queue re-attach succeed in AUDIT, each recorded as audit_would_deny".into())
+    });
+
+    run_test(checks, "tun_allowed_without_flag", || {
+        tun_ready()?;
+        let rawok = "/sys/fs/cgroup/rk.slice/rawok";
+        spawn_child(rawok, "tun", &["create", "rktun0", "ok"])?;
+        spawn_child(rawok, "tun", &["attach", "rktun1", "ok", "nobody"])?;
+        Ok("with network.deny_raw_sockets = false, create and owned attach succeed in ENFORCE".into())
+    });
+
+    // Clean up: drop the multi-queue interface, then the persistent one.
+    drop(tun_setup);
+    if let Err(e) = tun::remove_persistent("rktun1") {
+        progress!("TUN cleanup: removing rktun1 failed: {e}");
+    }
 
     run_test(checks, "net_tcp_fastopen_denied", || {
         spawn_child(
@@ -2317,6 +2459,58 @@ fn drain_ringbuf(rb: &mut RingBuf<MapData>) -> Result<()> {
     Ok(())
 }
 
+/// Index of the TUN/TAP decision counter for `verdict` (`enum rk_verdict`).
+fn tun_counter(verdict: u32) -> u32 {
+    rk_counter::RK_CNT_DECISION_BASE + rk_ebpf_common::rk_hook::RK_HOOK_TUN * rk_ebpf_common::RK_VERDICTS + verdict
+}
+
+#[derive(Debug, Clone)]
+struct CapturedTunEvent {
+    verdict: u8,
+    cgroup_id: u64,
+    uid: u32,
+    op: u32,
+}
+
+#[cfg(target_os = "linux")]
+fn poll_tun_event<F>(
+    rb: &mut RingBuf<MapData>,
+    timeout: Duration,
+    predicate: F,
+) -> Result<CapturedTunEvent>
+where
+    F: Fn(&CapturedTunEvent) -> bool,
+{
+    let start = Instant::now();
+    let mut records = 0u64;
+    while start.elapsed() < timeout {
+        while let Some(item) = rb.next() {
+            records += 1;
+            if start.elapsed() > DRAIN_DEADLINE {
+                anyhow::bail!("timed out after {records} records while waiting for a TUN event");
+            }
+            if let Ok(ev) = rk_sensor::decoder::decode(item.as_ref()) {
+                if let Payload::Tun { body } = ev.payload {
+                    let cap = CapturedTunEvent {
+                        verdict: ev.hdr.verdict,
+                        cgroup_id: ev.hdr.cgroup_id,
+                        uid: ev.hdr.uid,
+                        op: body.op,
+                    };
+                    if predicate(&cap) {
+                        return Ok(cap);
+                    }
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    anyhow::bail!(
+        "timeout waiting for a matching TUN event after {:.2}s ({records} records seen)",
+        timeout.as_secs_f32()
+    );
+}
+
 #[derive(Debug, Clone)]
 struct CapturedExecEvent {
     verdict: u8,
@@ -2706,6 +2900,7 @@ fn setup_environment() {
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/enforce");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/audit");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/unlinked");
+    let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/rawok");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/ungoverned-sibling");
     let _ = fs::create_dir_all("/sys/fs/cgroup/ungoverned");
 

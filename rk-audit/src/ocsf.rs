@@ -67,6 +67,9 @@ pub enum Activity<'a> {
         sock_type: u32,
         protocol: u32,
     },
+    /// A TUN/TAP create or attach. `op` is `enum rk_tun_op`
+    /// (docs/design/phase-16.md).
+    Tun { op: u32 },
     /// An exec decision, or (`committed`) the record of an allowed exec.
     Exec {
         path: Option<&'a str>,
@@ -156,6 +159,7 @@ fn classify(a: &Activity<'_>) -> Class {
         Activity::Connect { sendmsg: false, .. } => (NETWORK, 1, "Open"),
         Activity::Connect { sendmsg: true, .. } => (NETWORK, 6, "Traffic"),
         Activity::SocketCreate { .. } => (NETWORK, 99, "Socket Create"),
+        Activity::Tun { op } => (NETWORK, 99, tun_op(*op).1),
         Activity::Exec { .. } => (PROCESS, 1, "Launch"),
         Activity::Tamper { .. } => (PROCESS, 99, "Tamper"),
         Activity::File { hook, .. } => {
@@ -224,6 +228,16 @@ fn severity(verdict: Verdict, a: &Activity<'_>) -> (u8, &'static str) {
         (_, Activity::Tamper { .. }) => (4, "High"),
         (Verdict::Deny, _) => (3, "Medium"),
         (Verdict::AuditWouldDeny, _) => (2, "Low"),
+    }
+}
+
+/// Short name and OCSF activity name of an `enum rk_tun_op` value.
+fn tun_op(op: u32) -> (&'static str, &'static str) {
+    match op {
+        1 => ("create", "TUN/TAP Create"),
+        2 => ("attach", "TUN/TAP Attach"),
+        3 => ("attach_queue", "TUN/TAP Attach Queue"),
+        _ => ("unknown", "TUN/TAP"),
     }
 }
 
@@ -327,6 +341,9 @@ pub fn decision(d: &Decision<'_>) -> Value {
                 "socket".into(),
                 json!({ "family": family, "type": sock_type, "protocol": protocol }),
             );
+        }
+        Activity::Tun { op } => {
+            rk.insert("tun_op".into(), json!(tun_op(*op).0));
         }
         Activity::Exec {
             path,
@@ -456,6 +473,23 @@ mod tests {
             (Some(1), Some(15))
         );
         assert_eq!(rk_fields(&audit).unwrap()["verdict"], "audit_would_deny");
+    }
+
+    #[test]
+    fn tun_operations_are_named() {
+        for (op, short, activity) in [
+            (1, "create", "TUN/TAP Create"),
+            (2, "attach", "TUN/TAP Attach"),
+            (3, "attach_queue", "TUN/TAP Attach Queue"),
+            (9, "unknown", "TUN/TAP"),
+        ] {
+            let r = decision(&sample(Activity::Tun { op }, Verdict::Deny));
+            assert_eq!(r["class_uid"], 4001);
+            assert_eq!(r["activity_id"], 99);
+            assert_eq!(r["activity_name"], activity);
+            assert_eq!(r["action"], "Denied");
+            assert_eq!(rk_fields(&r).unwrap()["tun_op"], short);
+        }
     }
 
     #[test]

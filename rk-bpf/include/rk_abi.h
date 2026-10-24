@@ -31,7 +31,8 @@ enum rk_hook {
     RK_HOOK_EXEC        = 5,
     RK_HOOK_FILE        = 6,
     RK_HOOK_GUARD       = 7,
-    RK_HOOK_MAX         = 8,
+    RK_HOOK_TUN         = 8, /* docs/design/phase-16.md */
+    RK_HOOK_MAX         = 9,
 };
 
 /*
@@ -45,7 +46,7 @@ enum rk_counter {
     RK_CNT_RINGBUF_DROP  = 0, /* bpf_ringbuf_output failed; event lost, verdict unaffected */
     RK_CNT_SCRATCH_MISS  = 1, /* per-CPU scratch lookup failed */
     RK_CNT_DECISION_BASE = 2,
-    RK_CNT_MAX           = 26, /* RK_CNT_DECISION_BASE + RK_HOOK_MAX * RK_VERDICTS */
+    RK_CNT_MAX           = 29, /* RK_CNT_DECISION_BASE + RK_HOOK_MAX * RK_VERDICTS */
 };
 
 enum rk_event_type {
@@ -61,6 +62,7 @@ enum rk_event_type {
     RK_EV_SENDMSG     = 9,
     RK_EV_SOCK_CREATE = 10,
     RK_EV_FILE_DENY   = 11,
+    RK_EV_TUN         = 12,
 };
 
 enum rk_verdict {
@@ -141,6 +143,19 @@ struct rk_payload_sock {
     __u32 type;           /* offset  4: SOCK_* (flags already masked) */
     __u32 protocol;       /* offset  8 */
     __u32 _pad2;          /* offset 12 */
+};
+
+/* Operations on a TUN/TAP device, one per TUN LSM hook (docs/design/phase-16.md). */
+enum rk_tun_op {
+    RK_TUN_CREATE       = 1, /* tun_dev_create: TUNSETIFF, new interface */
+    RK_TUN_ATTACH       = 2, /* tun_dev_open: TUNSETIFF, existing interface */
+    RK_TUN_ATTACH_QUEUE = 3, /* tun_dev_attach_queue: TUNSETQUEUE, IFF_ATTACH_QUEUE */
+};
+
+/* RK_EV_TUN Payload (8 bytes). The hooks receive no interface name. */
+struct rk_payload_tun {
+    __u32 op;             /* offset  0: enum rk_tun_op */
+    __u32 _pad;           /* offset  4 */
 };
 
 /*
@@ -381,6 +396,7 @@ _Static_assert(sizeof(struct rk_file_rule) == 16, "file_rule size");
 _Static_assert(sizeof(struct rk_payload_file_deny) == 32, "payload_file_deny size");
 _Static_assert(__builtin_offsetof(struct rk_payload_file_deny, str_count) == 24, "file_deny str_count");
 _Static_assert(sizeof(struct rk_payload_sock) == 16, "payload_sock size");
+_Static_assert(sizeof(struct rk_payload_tun) == 8, "payload_tun size");
 _Static_assert(sizeof(struct rk_binding) == 8, "binding size");
 _Static_assert(sizeof(struct rk_profile) == 16, "profile size");
 _Static_assert(__builtin_offsetof(struct rk_profile, policy_gen) == 8, "profile policy_gen");

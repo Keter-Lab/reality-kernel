@@ -546,3 +546,18 @@ The website has no broken links, nothing of the retired product, no performance 
 - `test_site_fits_the_content_security_policy` (Python test)
 - `test_site_partials_current` (Python test)
 - `test_site_config_and_sitemap` (Python test)
+
+## Phase 16
+
+### tun-containment
+
+ENFORCE: a governed process cannot create a TUN/TAP interface, attach to one (even one its own user owns, with no capability), or re-attach a detached queue; AUDIT records each as audit_would_deny; ungoverned processes and profiles with deny_raw_sockets = false are unaffected
+
+- `tun_attach_owned_ungoverned` (VM suite, every kernel)
+- `tun_create_denied` (VM suite, every kernel)
+- `tun_attach_owned_denied` (VM suite, every kernel)
+- `tun_attach_queue_denied` (VM suite, every kernel)
+- `tun_audit_would_deny` (VM suite, every kernel)
+- `tun_allowed_without_flag` (VM suite, every kernel)
+- `decodes_tun` (Rust test)
+- `tun_operations_are_named` (Rust test)

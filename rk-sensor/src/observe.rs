@@ -310,6 +310,9 @@ enum OwnedActivity {
         sock_type: u32,
         protocol: u32,
     },
+    Tun {
+        op: u32,
+    },
     Exec {
         path: Option<String>,
         argv: Option<String>,
@@ -350,6 +353,7 @@ impl OwnedActivity {
                 sock_type: body.type_,
                 protocol: body.protocol,
             },
+            Payload::Tun { body } => Self::Tun { op: body.op },
             Payload::Exec { body, strings } => {
                 let committed = body.flags & rk_exec_flag::RK_EXEC_DECISION == 0;
                 let mut it = *strings;
@@ -411,6 +415,7 @@ impl OwnedActivity {
                 sock_type: *sock_type,
                 protocol: *protocol,
             },
+            Self::Tun { op } => Activity::Tun { op: *op },
             Self::Exec {
                 path,
                 argv,

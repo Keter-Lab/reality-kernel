@@ -24,6 +24,7 @@ fuzz_target!(|data: &[u8]| {
             }
             Payload::Net { .. }
             | Payload::Sock { .. }
+            | Payload::Tun { .. }
             | Payload::Tamper { .. }
             | Payload::Raw { .. } => {}
         }

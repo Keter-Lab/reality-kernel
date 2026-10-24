@@ -21,6 +21,7 @@ cover (docs/design/phase-6.md).
 | Kernel lockdown (`lockdown=integrity`) | Stops root from loading unsigned modules or writing kernel memory, which would bypass any BPF-based control |
 | BPF capabilities only for `rk-sensor` | The packaged unit grants exactly `CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SETUID CAP_SETGID CAP_KILL CAP_DAC_READ_SEARCH` (docs/install.md). Anything else holding CAP_BPF or CAP_SYS_ADMIN can load programs or manipulate maps. Governed workloads should run without them; agents started by `rk run` always do |
 | Drop CAP_NET_RAW from workloads that don't need it | Raw sockets bypass connect rules. They are denied for governed profiles with BPF LSM; without it, dropping the capability is the only control |
+| Don't give agent users persistent TUN/TAP devices (`ip tuntap add ... user`) | Traffic through a TUN/TAP device bypasses connect rules, and attaching to one owned by your user needs no capability. Governed profiles with BPF LSM deny it; without it, nothing does |
 | Mount bpffs only in the host mount namespace; never into workload containers | A workload that can see the pins can try to remove them. The guard denies this to governed tasks, but ungoverned privileged containers are not covered |
 | Keep `/sys/fs/bpf/rk` at mode 0700, root | `rk-sensor` sets this; don't relax it |
 

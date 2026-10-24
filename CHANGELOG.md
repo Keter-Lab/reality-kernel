@@ -8,7 +8,19 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- TUN/TAP containment: governed processes can no longer create a TUN/TAP
+  interface, attach to an existing one (including one their own user owns,
+  which needs no capability) or re-attach a detached queue. It follows
+  `network.deny_raw_sockets`, so no policy change is needed. The CI kernel
+  matrix now builds every kernel with `CONFIG_TUN` to prove it
+  (phase 16, ADR-0017).
+
 ### Changed
+
+- The minimum Rust version is 1.89, checked in CI on exactly that toolchain
+  (phase 15).
 
 - Dependencies: `lru` 0.19, `containerd/nri` 0.12.3 and current GitHub Actions
   (phase 13).

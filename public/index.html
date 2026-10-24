@@ -157,8 +157,8 @@ connect(3, {AF_INET, 10.20.0.12:443}) = <span class="allow">0</span></pre>
         <div class="caps">
           <article class="cap reveal">
             <p class="label">// net</p>
-            <p>Denies governed connections over TCP and UDP, IPv4 and IPv6, and closes the usual bypasses: raw and packet sockets, io_uring, TCP Fast Open and NAT64 addresses.</p>
-            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-enforce-eperm" rel="noopener">net-enforce-eperm</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-bypasses" rel="noopener">net-bypasses</a></p>
+            <p>Denies governed connections over TCP and UDP, IPv4 and IPv6, and closes the usual bypasses: raw and packet sockets, TUN/TAP devices, io_uring, TCP Fast Open and NAT64 addresses.</p>
+            <p class="evidence"><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-enforce-eperm" rel="noopener">net-enforce-eperm</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#net-bypasses" rel="noopener">net-bypasses</a><a href="https://github.com/Keter-Lab/reality-kernel/blob/main/docs/evidence.md#tun-containment" rel="noopener">tun-containment</a></p>
           </article>
           <article class="cap reveal">
             <p class="label">// exec</p>

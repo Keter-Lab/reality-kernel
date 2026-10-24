@@ -160,17 +160,22 @@ jobs:
     name: Verifier + selftest (Linux ${{ matrix.kernel }})
     needs: sensor
     runs-on: ubuntu-24.04
-    # Covers a cold 5.15 kernel build (~20 min). A hang inside the VM is cut
-    # off much earlier by the `timeout` around vmtest.
-    timeout-minutes: 45
+    # Covers a cold kernel build (~20 min for 5.15, longer for 6.18) on a cache
+    # miss. A hang inside the VM is cut off much earlier by the `timeout`
+    # around vmtest.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
         # LVH kernel images (quay.io/lvh-images/kernel-images), pinned by digest.
         # Refresh procedure: docs/kernel-matrix.md.
+        # Each kernel is rebuilt from the same version's source with the image's
+        # own config plus the options the tests need (cached): CONFIG_TUN, which
+        # no LVH image enables (docs/design/phase-16.md §4), and
+        # CONFIG_VIRTIO_CONSOLE, which vmtest needs and the 5.15 image lacks.
+        # `source` must match the image's kernel version; tarball hashes are
+        # kernel.org's sha256sums.asc.
         include:
-          # The LVH 5.15 image lacks CONFIG_VIRTIO_CONSOLE, which vmtest needs, so the
-          # same source is rebuilt from LVH's config with that option (cached).
           - kernel: "5.15"
             digest: sha256:d7ecc651bcdec5bda7477d32d2ba583dde1ed75db31f56dd78997b3c743a27b3
             source: "5.15.222"
@@ -178,12 +183,24 @@ jobs:
             source_sha256: 4d6ec07679bd008524391cb67597106018646c6378b3953c23ec69b9259cdf84
           - kernel: "6.1"
             digest: sha256:9e883377d6112141d1508f5090a5329c94be2bca1a4016964eddf9df3c549d09
+            source: "6.1.189"
+            source_url: https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.1.189.tar.xz
+            source_sha256: 3ec834a2fefc9a08aac62f993525d7acd10163db6f01d63b4549cbff3f5c9439
           - kernel: "6.6"
             digest: sha256:6a95b95c69f22dac5cb6fe81556e399c860aff38dcf8d8ff66cac18cabedab27
+            source: "6.6.158"
+            source_url: https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.158.tar.xz
+            source_sha256: 9eb33173b0e04e898d431587c78c47ee6e19e3fdf2ea007323de82af14bb2a4f
           - kernel: "6.12"
             digest: sha256:c4bcdbcc3d5e9c5094ba806f2661b2e9c870233df1bf77ff2aa5d4f6cbf6a374
+            source: "6.12.112"
+            source_url: https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.112.tar.xz
+            source_sha256: 164dc9d1f6c93c61a15e1f071c48379b467f2b17c469cce7223471968208ed03
           - kernel: "6.18"
             digest: sha256:8f08ba5cd89ce8d2796413d243e81b4b5db60db22d3c3bd62160641e04e98365
+            source: "6.18.56"
+            source_url: https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.56.tar.xz
+            source_sha256: 4633bbda2ab95eaf2a7af4041236451d6759c72e6946265531af4b3aacefbf89
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -236,9 +253,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: kernel-build/bzImage
-          key: kernel-${{ matrix.source }}-${{ matrix.digest }}-virtio-console-v1
+          key: kernel-${{ matrix.source }}-${{ matrix.digest }}-virtio-console-tun-v1
 
-      - name: Build kernel ${{ matrix.source }} (LVH config + CONFIG_VIRTIO_CONSOLE)
+      - name: Build kernel ${{ matrix.source }} (LVH config + CONFIG_VIRTIO_CONSOLE, CONFIG_TUN)
         if: matrix.source && steps.kernel-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
@@ -248,9 +265,15 @@ jobs:
           tar -xf linux.tar.xz
           cd "linux-${{ matrix.source }}"
           cp ../kernel/config-* .config
-          scripts/config --enable VIRTIO_CONSOLE
+          # The image's config must describe this source, or olddefconfig
+          # would silently build a different kernel.
+          grep -qF "Linux/x86 ${{ matrix.source }} Kernel Configuration" .config
+          scripts/config --enable VIRTIO_CONSOLE --enable TUN
           make olddefconfig
-          grep -q '^CONFIG_VIRTIO_CONSOLE=y' .config
+          # Fail if olddefconfig dropped anything the tests rely on.
+          for opt in VIRTIO_CONSOLE TUN BPF_LSM DEBUG_INFO_BTF CGROUP_BPF SECURITY_NETWORK; do
+            grep -q "^CONFIG_${opt}=y" .config || { echo "::error::CONFIG_${opt} is not =y after olddefconfig"; exit 1; }
+          done
           ../.github/scripts/run-logged.sh "kernel build" make -j"$(nproc)" bzImage
           mkdir -p ../kernel-build
           cp arch/x86/boot/bzImage ../kernel-build/bzImage

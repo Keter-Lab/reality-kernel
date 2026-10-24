@@ -47,6 +47,7 @@ with the agent's privileges.
 |---|---|---|
 | Connect to a denied address, over TCP, UDP, IPv4 or IPv6 | cgroup `sock_addr` hooks deny in the kernel | [net-enforce-eperm](evidence.md#net-enforce-eperm) |
 | Bypass the connect hooks: raw and packet sockets, io_uring, TCP Fast Open, NAT64 | Each path is hooked or denied | [net-bypasses](evidence.md#net-bypasses) |
+| Tunnel traffic through a TUN/TAP device: create one (needs `CAP_NET_ADMIN`), or attach to a persistent one the agent's user owns (needs no capability) | Create, attach and queue re-attach are denied in the TUN LSM hooks ([ADR-0017](decisions/0017-tun-tap-containment.md)) | [tun-containment](evidence.md#tun-containment) |
 | Run an unlisted program, through symlinks, replaced binaries, scripts or memfd | Exec decided on file identity (device, inode) | [exec-allowlist](evidence.md#exec-allowlist), [exec-identity](evidence.md#exec-identity) |
 | Read or modify a protected file under another name | File decisions on inode identity, per access type, subtrees fail closed | [file-identity](evidence.md#file-identity), [file-access-types](evidence.md#file-access-types), [file-subtree](evidence.md#file-subtree) |
 | Escape governance by forking or leaving the cgroup | cgroup v2 inheritance; agents cannot write their cgroup | [agent-children](evidence.md#agent-children), [agent-unprivileged](evidence.md#agent-unprivileged) |
@@ -97,5 +98,5 @@ Policy reloads are atomic: [net-atomic-reload](evidence.md#net-atomic-reload).
 |---|---|
 | Truncation of the newest audit batches by host root | The chain head is exported in the metrics and the OTLP stream ships records off host |
 | Theft of the audit signing key by host root | Out of scope (§5); a hardware-backed key is future work |
-| A governed workload holding `CAP_NET_ADMIN` creates a TUN/TAP interface | Not hooked yet ([ADR-0006](decisions/0006-packet-injection-surface.md#status-note-2026-10-23)). Agents launched with `rk run` have no capabilities; do not grant `CAP_NET_ADMIN` to governed pods. A device rule is planned |
+| A TUN/TAP queue descriptor attached before a process became governed, and handed to it by an ungoverned process | Reads and writes on an attached descriptor reach no TUN hook ([ADR-0017](decisions/0017-tun-tap-containment.md)). It needs a cooperating ungoverned process; re-attaching a detached queue is denied |
 | A single maintainer reviews every change | CI is the reviewer of record: every criterion's tests must pass on every kernel before merge; GOVERNANCE.md requires two reviewers for kernel code once there are two maintainers |

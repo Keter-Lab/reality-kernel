@@ -224,3 +224,69 @@ int BPF_PROG(rk_net_socket_create, int family, int type, int protocol, int kern,
         return -RK_EPERM;
     return 0;
 }
+
+/*
+ * TUN/TAP (docs/design/phase-16.md, ADR-0017). Traffic written to a TUN/TAP
+ * device never reaches the sock_addr hooks, so it is a packet-injection
+ * surface like raw sockets and follows the same profile flag. The driver
+ * calls these LSM hooks after its own permission checks: creating an
+ * interface needs CAP_NET_ADMIN, but attaching to a persistent one owned by
+ * the caller's user or group needs no capability at all.
+ */
+static __always_inline int rk_net_tun(__u32 op)
+{
+    struct rk_payload_tun *body;
+    struct rk_scratch_msg *msg;
+    struct rk_gov g = {};
+    __u8 action;
+
+    if (!rk_governance(&g))
+        return 0;
+
+    action = (g.flags & RK_PROFILE_DENY_RAW_SOCKETS) ? RK_ACTION_DENY : RK_ACTION_ALLOW;
+    rk_count_decision(RK_HOOK_TUN, &g, action);
+
+    msg = rk_scratch();
+    if (msg) {
+        rk_fill_hdr(&msg->hdr, g.cgroup_id, g.policy_gen, RK_EV_TUN, rk_reported_verdict(&g, action),
+                    rk_rule(&g, action, 0));
+        rk_fill_task(&msg->hdr);
+        body = (struct rk_payload_tun *)msg->payload;
+        body->op = op;
+        body->_pad = 0;
+        msg->payload_len = sizeof(*body);
+        rk_emit(msg);
+    }
+
+    /* Same verifier-range barrier as rk_net_socket_create. */
+    int deny = rk_enforced_deny(&g, action);
+
+    barrier_var(deny);
+    if (deny)
+        return -RK_EPERM;
+    return 0;
+}
+
+SEC("lsm/tun_dev_create")
+int BPF_PROG(rk_net_tun_create, int ret)
+{
+    if (ret)
+        return ret;
+    return rk_net_tun(RK_TUN_CREATE);
+}
+
+SEC("lsm/tun_dev_open")
+int BPF_PROG(rk_net_tun_open, void *security, int ret)
+{
+    if (ret)
+        return ret;
+    return rk_net_tun(RK_TUN_ATTACH);
+}
+
+SEC("lsm/tun_dev_attach_queue")
+int BPF_PROG(rk_net_tun_attach_queue, void *security, int ret)
+{
+    if (ret)
+        return ret;
+    return rk_net_tun(RK_TUN_ATTACH_QUEUE);
+}

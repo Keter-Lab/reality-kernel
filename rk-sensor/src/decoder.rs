@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use rk_ebpf_common::{
     rk_event_type, rk_hdr, rk_payload_exec, rk_payload_file, rk_payload_file_deny, rk_payload_net,
-    rk_payload_sock, rk_payload_tamper, rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN,
+    rk_payload_sock, rk_payload_tamper, rk_payload_tun, rk_verdict, RK_ABI_VERSION, RK_ENVELOPE_LEN,
     RK_SCRATCH_PAYLOAD_MAX,
 };
 
@@ -124,6 +124,10 @@ pub enum Payload<'a> {
     /// A governed raw or packet `socket()` call.
     Sock {
         body: rk_payload_sock,
+    },
+    /// A governed TUN/TAP create or attach (op: `enum rk_tun_op`).
+    Tun {
+        body: rk_payload_tun,
     },
     /// A file access denied (or audit-would-deny) by file policy.
     FileDeny {
@@ -290,6 +294,13 @@ pub fn decode(bytes: &[u8]) -> Result<Event<'_>, DecodeError> {
                 return Err(DecodeError::TrailingBytes(tail.len()));
             }
             Payload::Sock { body }
+        }
+        rk_event_type::RK_EV_TUN => {
+            let (body, tail) = read_body::<rk_payload_tun>(payload)?;
+            if !tail.is_empty() {
+                return Err(DecodeError::TrailingBytes(tail.len()));
+            }
+            Payload::Tun { body }
         }
         rk_event_type::RK_EV_TAMPER => {
             let (body, tail) = read_body::<rk_payload_tamper>(payload)?;
@@ -463,6 +474,25 @@ pub(crate) mod tests {
         long.push(0);
         let rec = record(&hdr(rk_event_type::RK_EV_SOCK_CREATE, 0), &long);
         assert_eq!(decode(&rec), Err(DecodeError::TrailingBytes(1)));
+    }
+
+    #[test]
+    fn decodes_tun() {
+        let body = rk_payload_tun {
+            op: rk_ebpf_common::rk_tun_op::RK_TUN_ATTACH,
+            ..Zeroable::zeroed()
+        };
+        let rec = record(
+            &hdr(rk_event_type::RK_EV_TUN, rk_verdict::RK_VERDICT_DENY),
+            bytemuck::bytes_of(&body),
+        );
+        assert_eq!(decode(&rec).unwrap().payload, Payload::Tun { body });
+        let mut long = bytemuck::bytes_of(&body).to_vec();
+        long.push(0);
+        let rec = record(&hdr(rk_event_type::RK_EV_TUN, 0), &long);
+        assert_eq!(decode(&rec), Err(DecodeError::TrailingBytes(1)));
+        let rec = record(&hdr(rk_event_type::RK_EV_TUN, 0), &[0; 4]);
+        assert!(matches!(decode(&rec), Err(DecodeError::BodyTooShort { .. })));
     }
 
     #[test]
