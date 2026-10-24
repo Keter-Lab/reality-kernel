@@ -183,6 +183,7 @@ on x86_64; arm64 is built and unit-tested. Details:
 | [Policy reference](docs/policy.md) | profiles, network, exec, files, bindings, rollout |
 | [Audit log](docs/audit.md) | format, verification, OCSF fields |
 | [Architecture](docs/architecture.md) and [ADRs](docs/decisions/README.md) | how it is built and why |
+| [Containment scorecard](docs/scorecard.md) | what a misbehaving agent tries, what is contained, what is not yet |
 | [Threat model](docs/threat-model.md) | what it protects against, and what it does not |
 | [Roadmap](ROADMAP.md) | what comes next, by release |
 | [Hardening](docs/hardening.md) | host settings that matter |
