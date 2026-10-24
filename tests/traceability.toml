@@ -434,3 +434,16 @@ text = "ENFORCE: a governed process cannot create a TUN/TAP interface, attach to
 tests = ["vm:tun_attach_owned_ungoverned", "vm:tun_create_denied", "vm:tun_attach_owned_denied",
          "vm:tun_attach_queue_denied", "vm:tun_audit_would_deny", "vm:tun_allowed_without_flag",
          "unit:decodes_tun", "unit:tun_operations_are_named"]
+
+# ---- Release v0.2.0: adoption (docs/design/adoption.md) ---------------------
+
+[[criterion]]
+phase = "v0.2.0"
+id = "adoption"
+text = "One command installs a verified release (a tampered package is refused); rk init writes a starter AUDIT profile that fits the host and never replaces a policy in use; rk policy suggest turns a verified audit log into an ENFORCE profile under which the learned connections and executables work, everything unobserved is denied, and secret files stay denied"
+tests = ["vm:adoption_round_trip", "pkg:pkg_fresh_install_enforces", "pkg:pkg_init_suggest",
+         "py:test_install_script_refuses_a_tampered_package", "py:test_install_script_checks_before_it_installs",
+         "py:test_install_script_pins_the_release_identity",
+         "unit:starter_with_bpf_lsm_learns_network_exec_and_secrets", "unit:starter_without_bpf_lsm_is_network_only",
+         "unit:a_policy_in_use_is_never_replaced", "unit:suggests_an_enforce_profile_from_would_denies",
+         "unit:a_log_that_does_not_verify_is_refused", "unit:no_records_is_an_error_not_an_empty_allow_list"]

@@ -96,7 +96,18 @@ KIND_WHERE = {
 
 
 def phase_key(phase):
-    return (int(re.match(r"\d+", phase).group()), phase)
+    """Engineering-plan phases ("2", "5b") in order, then releases ("v0.2.0")."""
+    m = re.match(r"\d+", phase)
+    if m:
+        return (0, int(m.group()), (), phase)
+    m = re.match(r"v(\d+)\.(\d+)\.(\d+)", phase)
+    if m:
+        return (1, 0, tuple(int(x) for x in m.groups()), phase)
+    return (2, 0, (), phase)
+
+
+def phase_title(phase):
+    return f"Release {phase}" if phase.startswith("v") else f"Phase {phase}"
 
 
 def evidence_page(criteria):
@@ -112,7 +123,7 @@ def evidence_page(criteria):
         "",
     ]
     for phase in sorted({c.get("phase", "?") for c in criteria}, key=phase_key):
-        lines += [f"## Phase {phase}", ""]
+        lines += [f"## {phase_title(phase)}", ""]
         for c in (c for c in criteria if c.get("phase") == phase):
             lines += [f"### {c['id']}", "", c["text"], ""]
             for t in c.get("tests", []):

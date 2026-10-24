@@ -140,13 +140,17 @@ record format in [docs/audit.md](docs/audit.md).
 On a host with kernel 5.15 or newer:
 
 ```sh
-sudo dpkg -i reality-kernel_<version>-1_amd64.deb   # or: sudo rpm -Uvh reality-kernel-<version>-1.x86_64.rpm
-rk doctor                                          # checks the kernel features, says how to fix gaps
-sudoedit /etc/rk/policy.toml                       # define a profile (docs/policy.md)
-sudo systemctl reload rk-sensor
-rk run --profile research-agent -- python3 agent.py  # governed from its first instruction
-rk audit tail -f                                   # what it decided, as it happens
+curl -fsSL https://realitykernel.dev/install.sh | sh   # verifies the checksum, and the signature with cosign
+sudo rk init                                           # a starter profile in AUDIT: records, blocks nothing
+rk run --profile agent -- python3 agent.py             # governed from its first instruction
+sudo rk policy suggest --profile agent --out agent.toml  # an ENFORCE profile from what it did; review it
+rk audit tail -f                                       # what it decided, as it happens
 ```
+
+Or hand the whole setup to your coding agent: [docs/agents.md](docs/agents.md)
+is a runbook it can follow, with a prompt to paste. `rk init` and
+`rk policy suggest` arrive in v0.2.0; with v0.1.0, write the profile by hand
+([docs/policy.md](docs/policy.md)).
 
 Kubernetes: the Helm chart in [`deploy/helm/reality-kernel`](deploy/helm/reality-kernel)
 runs the sensor as a DaemonSet with the NRI plugin. Full guide:
@@ -174,11 +178,13 @@ on x86_64; arm64 is built and unit-tested. Details:
 
 | | |
 |---|---|
+| [Set up with a coding agent](docs/agents.md) | `install.sh`, `rk init`, `rk policy suggest`, step by step |
 | [Install, upgrade, remove](docs/install.md) | packages, systemd, Kubernetes, `rk doctor` |
 | [Policy reference](docs/policy.md) | profiles, network, exec, files, bindings, rollout |
 | [Audit log](docs/audit.md) | format, verification, OCSF fields |
 | [Architecture](docs/architecture.md) and [ADRs](docs/decisions/README.md) | how it is built and why |
 | [Threat model](docs/threat-model.md) | what it protects against, and what it does not |
+| [Roadmap](ROADMAP.md) | what comes next, by release |
 | [Hardening](docs/hardening.md) | host settings that matter |
 | [Testing](docs/testing.md) and [evidence](docs/evidence.md) | how every claim is tested |
 | [Releases](docs/releases.md) and [changelog](CHANGELOG.md) | versioning, support window, verifying artifacts |

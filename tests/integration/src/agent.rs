@@ -126,6 +126,10 @@ pub fn run_probe(args: &[String]) -> i32 {
         ("connect", [addr, expect]) => probe_connect(addr, expect),
         ("paced", [addr, count, pace_us]) => probe_paced(addr, count, pace_us),
         ("hold", [ms]) => probe_hold(ms),
+        ("learn", [addr, bin, secret]) => probe_learn(addr, bin, secret),
+        ("enforced", [addr, bin, secret, unread, denied_addr, denied_bin]) => {
+            probe_enforced(addr, bin, secret, unread, denied_addr, denied_bin)
+        }
         _ => Err(anyhow::anyhow!("unknown probe {mode} {rest:?}")),
     };
     match res {
@@ -301,6 +305,45 @@ fn probe_connect(addr: &str, expect: &str) -> Result<()> {
         },
         other => bail!("unknown expectation {other}"),
     }
+}
+
+/// Adoption round trip, AUDIT: a connect, an exec and a secret read, all
+/// allowed and recorded (docs/design/adoption.md §4).
+fn probe_learn(addr: &str, bin: &str, secret: &str) -> Result<()> {
+    udp_connect(addr).with_context(|| format!("connect {addr}"))?;
+    let st = Command::new(bin).status().with_context(|| format!("exec {bin}"))?;
+    if !st.success() {
+        bail!("{bin} exited {st}");
+    }
+    fs::read(secret).with_context(|| format!("read {secret}"))?;
+    Ok(())
+}
+
+/// Adoption round trip, ENFORCE under the suggested profile: what was
+/// observed still works; the secret it read, a secret it never read, and an
+/// unobserved connect and exec are denied.
+fn probe_enforced(
+    addr: &str,
+    bin: &str,
+    secret: &str,
+    unread: &str,
+    denied_addr: &str,
+    denied_bin: &str,
+) -> Result<()> {
+    udp_connect(addr).with_context(|| format!("connect {addr} (learned)"))?;
+    let st = Command::new(bin)
+        .status()
+        .with_context(|| format!("exec {bin} (learned)"))?;
+    if !st.success() {
+        bail!("{bin} exited {st}");
+    }
+    expect_eperm(&format!("read {secret}"), fs::read(secret).map(|_| ()))?;
+    expect_eperm(&format!("read {unread}"), fs::read(unread).map(|_| ()))?;
+    expect_eperm(&format!("connect {denied_addr}"), udp_connect(denied_addr))?;
+    expect_eperm(
+        &format!("exec {denied_bin}"),
+        Command::new(denied_bin).status().map(|_| ()),
+    )
 }
 
 /// `count` UDP connects, each on a fresh socket so each one is governed.
@@ -552,10 +595,14 @@ struct Daemon {
 
 impl Daemon {
     fn start(sensor: &Path) -> Result<Self> {
+        Self::start_with(sensor, &["--policy", POLICY_FILE])
+    }
+
+    fn start_with(sensor: &Path, args: &[&str]) -> Result<Self> {
         let _ = fs::remove_file(SOCKET);
         let log = File::create(DAEMON_LOG).context("create daemon log")?;
         let child = Command::new(sensor)
-            .args(["--policy", POLICY_FILE])
+            .args(args)
             // Phase 10: per-decision lines are debug level; this suite reads them.
             .env("RUST_LOG", "info,rk_sensor::pipeline=debug")
             .stdin(Stdio::null())
@@ -931,5 +978,94 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
         ))
     });
 
+    drop(daemon);
+    adoption_round_trip(checks, Path::new(sensor));
+}
+
+/// docs/design/adoption.md §4: `rk init`, an agent run in AUDIT,
+/// `rk policy suggest`, then the suggestion applied and enforced. Runs its
+/// own daemon, with the audit log in tmpfs (the default is on the VM's
+/// read-only root).
+fn adoption_round_trip(checks: &mut Vec<TestCheck>, sensor: &Path) {
+    let adopt = format!("{DIR}/adopt");
+    let home = format!("{adopt}/home");
+    let secret = format!("{home}/.aws/credentials");
+    let unread = format!("{home}/.ssh/id_test");
+    let learn_bin = format!("{DIR}/learn_bin");
+    let policy = format!("{adopt}/policy.toml");
+    let suggested = format!("{adopt}/suggested.toml");
+    let audit = format!("{adopt}/audit");
+    // In its own directory: the sensor makes the key's directory 0700.
+    let key = format!("{adopt}/key/audit.key");
+    // Loopback, so learned; and unobserved, in 10.99.0.0/24 (prepare()).
+    let addr = "127.0.0.1:18080";
+
+    let setup = || -> Result<()> {
+        fs::create_dir_all(format!("{home}/.aws"))?;
+        fs::create_dir_all(format!("{home}/.ssh"))?;
+        write_file(&secret, "aws_secret_access_key = test\n", 0o644)?;
+        write_file(&unread, "test key\n", 0o644)?;
+        copy_exe(Path::new("/bin/true"), &learn_bin)?;
+        let starter = rk_ok(&["init", "--print", "--home", &home])?;
+        for want in ["mode = \"audit\"", "[profiles.agent.exec]", ".aws/credentials", ".ssh"] {
+            if !starter.contains(want) {
+                bail!("starter policy lacks {want:?}:\n{starter}");
+            }
+        }
+        write_file(&policy, &starter, 0o644)
+    };
+    if let Err(e) = setup() {
+        checks.push(TestCheck::fail("adoption_round_trip", format!("setup: {e:#}")));
+        return;
+    }
+    let daemon = match Daemon::start_with(
+        sensor,
+        &["--policy", &policy, "--audit-dir", &audit, "--audit-key", &key],
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            checks.push(TestCheck::fail("adoption_round_trip", format!("daemon: {e:#}")));
+            return;
+        }
+    };
+
+    run_test(checks, "adoption_round_trip", || {
+        run_probe_ok(None, &["learn", addr, &learn_bin, &secret])?;
+        // One audit batch interval, so the records are sealed.
+        thread::sleep(Duration::from_secs(3));
+        let pubkey = format!("{key}.pub");
+        rk_ok(&[
+            "policy", "suggest", "--profile", "agent", "--policy", &policy, "--dir", &audit,
+            "--pubkey", &pubkey, "--out", &suggested,
+        ])?;
+        let text = fs::read_to_string(&suggested)?;
+        for want in [
+            "mode = \"enforce\"",
+            "127.0.0.0/8",
+            learn_bin.as_str(),
+            PROBE,
+            "/.aws/credentials: ",
+        ] {
+            if !text.contains(want) {
+                bail!("suggestion lacks {want:?}:\n{text}");
+            }
+        }
+        if text.contains("/.ssh: ") {
+            bail!("suggestion reports a secret the agent never read:\n{text}");
+        }
+        let g0 = generation()?;
+        rk_ok(&["policy", "apply", &suggested])?;
+        if generation()? <= g0 {
+            bail!("the suggestion was not applied");
+        }
+        run_probe_ok(
+            None,
+            &["enforced", addr, &learn_bin, &secret, &unread, DENY_ADDR, DENIED_BIN],
+        )?;
+        Ok(format!(
+            "init (AUDIT) -> agent run -> suggest -> apply (ENFORCE): learned connect and exec work; \
+             the read secret, an unread secret, an unobserved connect ({DENY_ADDR}) and exec are denied"
+        ))
+    });
     drop(daemon);
 }

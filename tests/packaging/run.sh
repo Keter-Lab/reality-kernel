@@ -16,6 +16,8 @@ PROBE="$DIST/rk-integration"
 CG=/sys/fs/cgroup/rk.slice/pkg-test
 DENY=10.99.0.1:80
 KEY=/var/lib/rk/audit.key
+# The published installer (docs/design/adoption.md §3.1), from this checkout.
+INSTALLER="$(cd "$(dirname "$0")/../.." && pwd)/public/install.sh"
 results=()
 
 log() { echo "[rk-pkg] $*" >&2; }
@@ -134,7 +136,22 @@ t_fresh_install() {
     local pkg out code g0
     pkg="$(pkg_file 1)"
     [ -n "$pkg" ] || fail "no release-1 $FORMAT package in $DIST"
-    install_pkg "$pkg" || fail "installing $pkg failed"
+    # Through the installer, as a user would: a release-like directory with
+    # SHA256SUMS. A tampered package must be refused with nothing installed.
+    local stage name
+    stage="$(mktemp -d)"
+    name="$(basename "$pkg")"
+    mkdir -p "$stage/good" "$stage/bad"
+    cp "$pkg" "$stage/good/"
+    (cd "$stage/good" && sha256sum "$name" >SHA256SUMS)
+    cp "$stage/good/$name" "$stage/good/SHA256SUMS" "$stage/bad/"
+    printf 'x' >>"$stage/bad/$name"
+    if out="$(sh "$INSTALLER" --from "$stage/bad" 2>&1)"; then
+        fail "install.sh accepted a tampered package: $out"
+    fi
+    contains "does not match its SHA256SUMS entry" <<<"$out" || fail "tampered package refused for another reason: $out"
+    installed >/dev/null && fail "a tampered package left something installed"
+    sh "$INSTALLER" --from "$stage/good" || fail "install.sh could not install $name"
     wait_ready || fail "service not ready after install"
     mkdir -p "$CG"
     g0="$(generation)"
@@ -158,7 +175,7 @@ t_fresh_install() {
     out="$(rk doctor --json)"
     code=$?
     [ "$code" -eq 0 ] || fail "rk doctor exited $code: $out"
-    echo "installed $(installed); bound-cgroup and agent connects denied; audit log verified; rk doctor ok ($(jq -r '[.checks[] | select(.status == "warn") | .name] | join(",")' <<<"$out") warn)"
+    echo "installed $(installed) with install.sh (a tampered package was refused); bound-cgroup and agent connects denied; audit log verified; rk doctor ok ($(jq -r '[.checks[] | select(.status == "warn") | .name] | join(",")' <<<"$out") warn)"
 }
 
 t_unit_verifies() {
@@ -198,6 +215,40 @@ t_upgrade() {
     echo "upgraded $before -> $(installed): 0 of $tries denied connects got through; audit chain intact"
 }
 
+# docs/design/adoption.md §4 on a host without BPF LSM: rk init writes a
+# network-only starter, never replaces a policy in use without --force, and
+# rk policy suggest turns an agent's AUDIT run into an ENFORCE profile.
+t_init() {
+    local out g0
+    out="$(rk init --print 2>&1)" || fail "rk init --print failed: $out"
+    contains 'deny_raw_sockets = false' <<<"$out" || fail "starter is not network-only without BPF LSM: $out"
+    contains 'profiles.agent.exec' <<<"$out" && fail "starter has exec rules the sensor would refuse: $out"
+    if out="$(rk init 2>&1)"; then
+        fail "rk init replaced the suite's policy without --force"
+    fi
+    contains 'never replaces a policy in use' <<<"$out" || fail "rk init refused for another reason: $out"
+    cp /etc/rk/policy.toml /tmp/rk-suite-policy.toml
+    g0="$(generation)"
+    out="$(rk init --force 2>&1)" || fail "rk init --force failed: $out"
+    wait_generation $((g0 + 1)) || fail "starter policy not applied: $out"
+    ls /etc/rk/policy.toml.bak.* >/dev/null 2>&1 || fail "no backup of the replaced policy"
+    (cd / && rk run --profile agent -- /bin/bash -c 'exec 3<>/dev/udp/127.0.0.1/9') \
+        || fail "the agent's connect failed in AUDIT"
+    sleep 2 # one audit batch interval
+    out="$(rk policy suggest --profile agent 2>/tmp/rk-suggest.err)" \
+        || fail "rk policy suggest failed: $(cat /tmp/rk-suggest.err)"
+    contains 'mode = "enforce"' <<<"$out" || fail "suggestion is not in ENFORCE: $out"
+    contains '127.0.0.0/8' <<<"$out" || fail "suggestion does not allow the agent's connect: $out"
+    printf '%s\n' "$out" >/tmp/rk-suggested.toml
+    rk policy apply --dry-run /tmp/rk-suggested.toml >/dev/null 2>&1 \
+        || fail "the suggestion does not apply: $(rk policy apply --dry-run /tmp/rk-suggested.toml 2>&1 | tail -n 3)"
+    g0="$(generation)"
+    cp /tmp/rk-suite-policy.toml /etc/rk/policy.toml
+    systemctl reload rk-sensor
+    wait_generation $((g0 + 1)) || fail "could not restore the suite's policy"
+    echo "network-only starter; policy in use kept without --force; --force backed it up and applied the starter; suggestion from an AUDIT run allows the agent's connect and applies"
+}
+
 t_uninstall() {
     remove_pkg || fail "removing the package failed"
     systemctl is-active --quiet rk-sensor && fail "service still running"
@@ -217,6 +268,7 @@ mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf
 run_test pkg_fresh_install_enforces t_fresh_install
 run_test pkg_unit_verifies t_unit_verifies
 run_test pkg_upgrade_keeps_enforcement t_upgrade
+run_test pkg_init_suggest t_init
 run_test pkg_uninstall_removes_everything t_uninstall
 
 echo "===RK_PKG_BEGIN==="
