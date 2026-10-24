@@ -1201,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "rk-agentd"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "libc",
@@ -1216,7 +1216,7 @@ dependencies = [
 
 [[package]]
 name = "rk-audit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
@@ -1229,7 +1229,7 @@ dependencies = [
 
 [[package]]
 name = "rk-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1243,7 +1243,7 @@ dependencies = [
 
 [[package]]
 name = "rk-ebpf-common"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bindgen",
  "bytemuck",
@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "rk-integration"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "aya",
@@ -1269,7 +1269,7 @@ dependencies = [
 
 [[package]]
 name = "rk-policy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ipnet",
  "proptest",
@@ -1279,7 +1279,7 @@ dependencies = [
 
 [[package]]
 name = "rk-sensor"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2003,7 +2003,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",

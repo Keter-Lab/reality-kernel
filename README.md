@@ -149,8 +149,8 @@ rk audit tail -f                                       # what it decided, as it 
 
 Or hand the whole setup to your coding agent: [docs/agents.md](docs/agents.md)
 is a runbook it can follow, with a prompt to paste. `rk init` and
-`rk policy suggest` arrive in v0.2.0; with v0.1.0, write the profile by hand
-([docs/policy.md](docs/policy.md)).
+`rk policy suggest` need v0.2.0 or later; with v0.1.0, write the profile by
+hand ([docs/policy.md](docs/policy.md)).
 
 Kubernetes: the Helm chart in [`deploy/helm/reality-kernel`](deploy/helm/reality-kernel)
 runs the sensor as a DaemonSet with the NRI plugin. Full guide:

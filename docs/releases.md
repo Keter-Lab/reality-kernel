@@ -35,7 +35,7 @@ trust in advance: signatures are keyless and bound to this repository's
 release workflow at that tag.
 
 ```sh
-VERSION=0.1.0
+VERSION=0.2.0
 gh release download "v$VERSION" --repo Keter-Lab/reality-kernel
 IDENTITY="https://github.com/Keter-Lab/reality-kernel/.github/workflows/release.yml@refs/tags/v$VERSION"
 ISSUER=https://token.actions.githubusercontent.com
@@ -113,8 +113,8 @@ From 1.0 on, an incompatible change needs a major version.
 
    ```sh
    git switch main && git pull
-   git tag -a v0.1.0 -m "Reality Kernel 0.1.0"
-   git push origin v0.1.0
+   git tag -a v0.2.0 -m "Reality Kernel 0.2.0"
+   git push origin v0.2.0
    ```
 
 3. The Release workflow builds, signs, attests, verifies and drafts the

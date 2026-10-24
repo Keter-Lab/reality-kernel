@@ -104,7 +104,7 @@
         <p>Every release file is signed by the repository's release workflow with Sigstore, and carries SLSA build provenance and an SPDX SBOM. Nothing needs to be trusted in advance.</p>
         <div class="code">
           <div class="code-head"><span>shell</span><button class="copy" type="button">Copy</button></div>
-<pre>VERSION=0.1.0
+<pre>VERSION=0.2.0
 f="reality-kernel_${VERSION}-1_amd64.deb"
 cosign verify-blob --bundle "$f.sigstore.json" \
   --certificate-identity "https://github.com/Keter-Lab/reality-kernel/.github/workflows/release.yml@refs/tags/v$VERSION" \
