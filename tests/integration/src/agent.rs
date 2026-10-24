@@ -1003,8 +1003,12 @@ fn adoption_round_trip(checks: &mut Vec<TestCheck>, sensor: &Path) {
     let addr = "127.0.0.1:18080";
 
     let setup = || -> Result<()> {
-        fs::create_dir_all(format!("{home}/.aws"))?;
-        fs::create_dir_all(format!("{home}/.ssh"))?;
+        // The agent runs unprivileged; make the path traversable whatever
+        // the harness's umask.
+        for d in [adopt.clone(), home.clone(), format!("{home}/.aws"), format!("{home}/.ssh")] {
+            fs::create_dir_all(&d)?;
+            fs::set_permissions(&d, fs::Permissions::from_mode(0o755))?;
+        }
         write_file(&secret, "aws_secret_access_key = test\n", 0o644)?;
         write_file(&unread, "test key\n", 0o644)?;
         copy_exe(Path::new("/bin/true"), &learn_bin)?;

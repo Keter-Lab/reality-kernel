@@ -64,7 +64,7 @@ sudo rk init
 ```
 
 This writes `/etc/rk/policy.toml` with a profile named `agent`, in AUDIT,
-launchable by the user who ran `sudo`, and applies it. With BPF LSM it
+launchable by the user who ran `sudo` (and by root), and applies it. With BPF LSM it
 denies (in AUDIT: records) every connection and exec by default and protects
 the user's secret files (`~/.ssh`, cloud credentials, `.netrc`, …). It
 refuses to replace a policy that already defines profiles; `rk init --print`

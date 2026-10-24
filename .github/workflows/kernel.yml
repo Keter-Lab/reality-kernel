@@ -240,6 +240,14 @@ jobs:
         run: |
           set -euo pipefail
           image="quay.io/lvh-images/kernel-images@${{ matrix.digest }}"
+          # quay.io has had short outages (HTTP 503); the image is pinned by
+          # digest, so retrying is safe.
+          for wait in 15 30 60 120 0; do
+            docker pull --platform linux/amd64 "$image" && break
+            [ "$wait" -gt 0 ] || { echo "::error::could not pull $image"; exit 1; }
+            echo "pull failed; retrying in ${wait}s"
+            sleep "$wait"
+          done
           id=$(docker create --platform linux/amd64 "$image" /bin/true)
           docker cp "$id:/data/kernels/${{ matrix.kernel }}/boot" kernel
           docker rm "$id"

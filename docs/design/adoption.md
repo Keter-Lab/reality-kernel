@@ -73,7 +73,8 @@ uses `set -eu`, and needs root only for the install itself.
 1. Runs the same checks as `rk doctor`; a blocking finding stops it.
 2. Generates the starter policy:
    - profile `agent`, **`mode = "audit"`**, `launchable_by` the invoking
-     user (`SUDO_USER`), else root;
+     user (`SUDO_USER`) and root (root can rewrite the policy anyway, so
+     this adds no reach, and `sudo rk run` works);
    - `network.default = "deny"` and, with BPF-LSM, `exec.default = "deny"`:
      in AUDIT every connection and exec outside the (empty) allow lists is
      recorded as `audit_would_deny`. This is the learning: no new sensor

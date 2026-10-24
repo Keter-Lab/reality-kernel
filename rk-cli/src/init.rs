@@ -47,8 +47,9 @@ pub struct Secret {
 /// Who the starter profile is for, and what the host can enforce.
 #[derive(Debug, Clone)]
 pub struct Starter {
-    /// `launchable_by` principal: `root` or `user:NAME`.
-    pub principal: String,
+    /// `launchable_by`: `user:NAME` for the invoking user, and `root`
+    /// (root can rewrite the policy anyway, so this adds no reach).
+    pub principals: Vec<String>,
     /// BPF LSM active: exec and file rules can be enforced.
     pub lsm: bool,
     pub secrets: Vec<Secret>,
@@ -77,7 +78,10 @@ fn s(v: &str) -> Value {
 pub fn starter_profile(st: &Starter) -> Table {
     let mut profile = Table::new();
     profile.insert("mode".into(), s("audit"));
-    profile.insert("launchable_by".into(), Value::Array(vec![s(&st.principal)]));
+    profile.insert(
+        "launchable_by".into(),
+        Value::Array(st.principals.iter().map(|p| s(p)).collect()),
+    );
 
     let mut network = Table::new();
     network.insert("default".into(), s("deny"));
@@ -234,9 +238,8 @@ pub fn run(opts: &Options) -> Result<()> {
         .clone()
         .or_else(|| std::env::var("SUDO_USER").ok())
         .filter(|u| !u.is_empty() && u != "root");
-    let principal = user
-        .as_ref()
-        .map_or_else(|| "root".to_string(), |u| format!("user:{u}"));
+    let mut principals: Vec<String> = user.iter().map(|u| format!("user:{u}")).collect();
+    principals.push("root".to_string());
     let home = match (&opts.home, &user) {
         (Some(h), _) => h.clone(),
         (None, Some(u)) => {
@@ -246,7 +249,7 @@ pub fn run(opts: &Options) -> Result<()> {
         (None, None) => PathBuf::from("/root"),
     };
     let starter = Starter {
-        principal,
+        principals,
         lsm,
         secrets: if lsm { find_secrets(&home) } else { Vec::new() },
     };
@@ -333,7 +336,7 @@ mod tests {
         fs::create_dir_all(home.join(".aws")).unwrap();
         fs::write(home.join(".aws/credentials"), "x").unwrap();
         let st = Starter {
-            principal: "user:dev".into(),
+            principals: vec!["user:dev".into(), "root".into()],
             lsm: true,
             secrets: find_secrets(&home),
         };
@@ -344,6 +347,7 @@ mod tests {
         let p = &t["profiles"]["agent"];
         assert_eq!(p["mode"].as_str(), Some("audit"));
         assert_eq!(p["launchable_by"][0].as_str(), Some("user:dev"));
+        assert_eq!(p["launchable_by"][1].as_str(), Some("root"));
         assert_eq!(p["network"]["default"].as_str(), Some("deny"));
         assert_eq!(p["exec"]["default"].as_str(), Some("deny"));
         let deny = p["files"]["deny"].as_array().unwrap();
@@ -358,7 +362,7 @@ mod tests {
     #[test]
     fn starter_without_bpf_lsm_is_network_only() {
         let st = Starter {
-            principal: "root".into(),
+            principals: vec!["root".into()],
             lsm: false,
             secrets: Vec::new(),
         };

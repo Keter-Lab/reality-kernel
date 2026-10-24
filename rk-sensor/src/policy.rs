@@ -7,7 +7,7 @@
 //! running decision (which reads the slot once and lasts microseconds) can
 //! observe a slot being rewritten. A failed apply never touches the active slot.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -519,6 +519,9 @@ pub struct ApplyReport {
     pub bindings: usize,
 }
 
+/// How many unbound agent cgroups [`PolicyEngine::audit_context`] still names.
+pub const RETIRED_MAX: usize = 1024;
+
 /// Owns the policy maps of one loaded `rk.bpf.o`.
 pub struct PolicyEngine {
     cgroup_fs: PathBuf,
@@ -535,6 +538,11 @@ pub struct PolicyEngine {
     /// Agent cgroups bound at runtime (`rk run`): cgroup id -> (path, profile
     /// name). Kept across reloads; profile ids are stable (ADR-0005).
     dynamic: BTreeMap<u64, (String, String)>,
+    /// Agent cgroups unbound most recently, oldest first: (cgroup id,
+    /// profile name). An agent's last events can reach the audit log after
+    /// it exited and was unbound; they still name its profile. Capped at
+    /// [`RETIRED_MAX`]; cgroup ids are not reused.
+    retired: VecDeque<(u64, String)>,
     policy: Option<Policy>,
     /// Text of the active and the previous policy, for `rk policy rollback`.
     text: Option<String>,
@@ -625,6 +633,7 @@ impl PolicyEngine {
             bindings: BTreeMap::new(),
             quarantined: BTreeSet::new(),
             dynamic: BTreeMap::new(),
+            retired: VecDeque::new(),
             policy: None,
             text: None,
             previous_text: None,
@@ -831,6 +840,10 @@ impl PolicyEngine {
         for o in &policy.origins {
             ctx.rules
                 .insert(o.id, (o.profile.clone(), o.origin.clone()));
+        }
+        // First, so a current binding of the same id wins.
+        for (cgroup, profile) in &self.retired {
+            ctx.cgroups.insert(*cgroup, profile.clone());
         }
         for (&cgroup, (_, profile)) in &self.bindings {
             if let Some(p) = policy.profile(*profile) {
@@ -1074,9 +1087,10 @@ impl PolicyEngine {
 
     /// Removes an agent binding (after the agent exited).
     pub fn unbind_dynamic(&mut self, ebpf: &mut Ebpf, id: u64) -> Result<()> {
-        if self.dynamic.remove(&id).is_none() {
+        let Some((_, profile)) = self.dynamic.remove(&id) else {
             anyhow::bail!("cgroup {id} is not a runtime agent binding");
-        }
+        };
+        self.retire(id, profile);
         self.bindings.remove(&id);
         self.quarantined.remove(&id);
         let map = ebpf
@@ -1086,6 +1100,13 @@ impl PolicyEngine {
         let _ = bindings.remove(&id);
         self.persist();
         Ok(())
+    }
+
+    fn retire(&mut self, id: u64, profile: String) {
+        self.retired.push_back((id, profile));
+        while self.retired.len() > RETIRED_MAX {
+            self.retired.pop_front();
+        }
     }
 
     /// Runtime agent bindings: cgroup id -> (path, profile name).
@@ -1415,6 +1436,32 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("rk-state-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir.join("engine.json")
+    }
+
+    /// An agent's last events can be logged after it exited and was
+    /// unbound: they still name its profile (docs/design/adoption.md).
+    #[test]
+    fn audit_context_names_recently_unbound_agents() {
+        let mut engine = PolicyEngine::new(PathBuf::from("/nonexistent"));
+        engine.policy = Some(
+            rk_policy::net::parse(
+                "[profiles.agent]\nmode = \"audit\"\n",
+                &mut ProfileIds::default(),
+            )
+            .unwrap(),
+        );
+        engine
+            .dynamic
+            .insert(5, ("rk.slice/agent-5".into(), "agent".into()));
+        engine.retire(4, "agent".into());
+        let ctx = engine.audit_context();
+        assert_eq!(ctx.describe(0, 4).0, Some("agent"));
+        assert_eq!(ctx.describe(0, 5).0, Some("agent"));
+        for i in 0..(RETIRED_MAX as u64 + 10) {
+            engine.retire(100 + i, "other".into());
+        }
+        assert_eq!(engine.retired.len(), RETIRED_MAX);
+        assert_eq!(engine.audit_context().describe(0, 4).0, None);
     }
 
     /// Phase 8 §3.3: what `persist` writes, `load_state` reads back for the
