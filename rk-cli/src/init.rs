@@ -258,7 +258,10 @@ pub fn run(opts: &Options) -> Result<()> {
         return Ok(());
     }
     if effective_uid() != Some(0) {
-        bail!("rk init writes {} and must run as root (sudo rk init)", opts.policy.display());
+        bail!(
+            "rk init writes {} and must run as root (sudo rk init)",
+            opts.policy.display()
+        );
     }
     if defines_profiles(&opts.policy)? {
         if !opts.force {
@@ -282,8 +285,7 @@ pub fn run(opts: &Options) -> Result<()> {
     }
     let tmp = opts.policy.with_extension("toml.rk-init");
     fs::write(&tmp, &text).with_context(|| format!("write {}", tmp.display()))?;
-    fs::rename(&tmp, &opts.policy)
-        .with_context(|| format!("replace {}", opts.policy.display()))?;
+    fs::rename(&tmp, &opts.policy).with_context(|| format!("replace {}", opts.policy.display()))?;
     println!("Wrote {}", opts.policy.display());
     if !lsm {
         println!("BPF LSM is not active: the profile is network-only (see `rk doctor`).");

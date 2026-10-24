@@ -31,8 +31,7 @@ impl Comments {
 /// A key, bare when it can be, quoted otherwise (a profile name may hold `.`).
 pub fn key(k: &str) -> String {
     if !k.is_empty()
-        && k
-            .chars()
+        && k.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         k.to_string()
@@ -74,10 +73,7 @@ fn inline(v: &Value) -> String {
         Value::Float(f) => f.to_string(),
         Value::Boolean(b) => b.to_string(),
         Value::Datetime(d) => d.to_string(),
-        Value::Array(a) => format!(
-            "[{}]",
-            a.iter().map(inline).collect::<Vec<_>>().join(", ")
-        ),
+        Value::Array(a) => format!("[{}]", a.iter().map(inline).collect::<Vec<_>>().join(", ")),
         Value::Table(t) => format!(
             "{{ {} }}",
             t.iter()
@@ -207,7 +203,10 @@ mod tests {
         let out = document(&t, &c);
         let back: Table = toml::from_str(&out).unwrap();
         assert_eq!(back, t, "{out}");
-        assert!(out.contains("# loopback services\n[[profiles.\"a.b\".network.allow]]"), "{out}");
+        assert!(
+            out.contains("# loopback services\n[[profiles.\"a.b\".network.allow]]"),
+            "{out}"
+        );
     }
 
     #[test]

@@ -99,8 +99,8 @@ impl Observed {
             (4001, 1 | 6) => {
                 let ip = str_at(v, "/dst_endpoint/ip").and_then(|s| s.parse::<IpAddr>().ok());
                 let port = u64_at(v, "/dst_endpoint/port").and_then(|p| u16::try_from(p).ok());
-                let proto = u64_at(v, "/connection_info/protocol_num")
-                    .and_then(|p| u8::try_from(p).ok());
+                let proto =
+                    u64_at(v, "/connection_info/protocol_num").and_then(|p| u8::try_from(p).ok());
                 if let (Some(ip), Some(port), Some(proto)) = (ip, port, proto) {
                     let e = self.net.entry((ip, proto)).or_default();
                     e.0.insert(port);
@@ -108,7 +108,10 @@ impl Observed {
                 }
             }
             (4001, _) => {
-                let what = match (v.pointer("/unmapped/rk/socket"), str_at(v, "/unmapped/rk/tun_op")) {
+                let what = match (
+                    v.pointer("/unmapped/rk/socket"),
+                    str_at(v, "/unmapped/rk/tun_op"),
+                ) {
                     (Some(s), _) => format!(
                         "raw or packet socket (family {}, type {})",
                         s["family"], s["type"]
@@ -121,7 +124,8 @@ impl Observed {
             (1007, 1) => {
                 let dev = u64_at(v, "/unmapped/rk/file_dev");
                 let ino = u64_at(v, "/unmapped/rk/file_ino");
-                let name = str_at(v, "/process/file/path").or_else(|| str_at(v, "/process/file/name"));
+                let name =
+                    str_at(v, "/process/file/path").or_else(|| str_at(v, "/process/file/name"));
                 if let (Some(dev), Some(ino)) = (dev, ino) {
                     let e = self.execs.entry((dev, ino)).or_default();
                     e.count += 1;
@@ -131,13 +135,22 @@ impl Observed {
                 }
             }
             (1007, _) => {
-                let hook = v.pointer("/unmapped/rk/tamper_hook").cloned().unwrap_or(Json::Null);
-                *self.other.entry(format!("tampering (hook {hook})")).or_default() += 1;
+                let hook = v
+                    .pointer("/unmapped/rk/tamper_hook")
+                    .cloned()
+                    .unwrap_or(Json::Null);
+                *self
+                    .other
+                    .entry(format!("tampering (hook {hook})"))
+                    .or_default() += 1;
             }
             (1001, _) => {
                 let origin = str_at(v, "/policy/desc").unwrap_or("");
                 // "files.deny[2] /home/dev/.aws/credentials": the rule's path.
-                let path = origin.split_once(' ').map_or(origin, |(_, p)| p).to_string();
+                let path = origin
+                    .split_once(' ')
+                    .map_or(origin, |(_, p)| p)
+                    .to_string();
                 let path = if path.is_empty() {
                     str_at(v, "/file/name").unwrap_or("?").to_string()
                 } else {
@@ -195,7 +208,9 @@ fn identity(path: &Path) -> Option<(u64, u64)> {
 /// `deep` ones, four levels down).
 fn index(dirs: &[PathBuf], deep: &[PathBuf]) -> HashMap<(u64, u64), PathBuf> {
     fn walk(dir: &Path, depth: u32, out: &mut HashMap<(u64, u64), PathBuf>) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for e in entries.flatten() {
             let path = e.path();
             match e.file_type() {
@@ -268,7 +283,11 @@ pub fn locate(
             continue;
         }
         // The path still exists but holds another file now.
-        if let Some(path) = seen.names.iter().find(|n| n.starts_with('/') && Path::new(n).is_file()) {
+        if let Some(path) = seen
+            .names
+            .iter()
+            .find(|n| n.starts_with('/') && Path::new(n).is_file())
+        {
             found.push(Located {
                 path: path.clone(),
                 note: Some("the file at this path changed after the agent ran it; check it".into()),
@@ -447,7 +466,12 @@ pub fn build_profile(
         let mut list: Vec<String> = exec
             .get("allow")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
             .unwrap_or_default();
         let existing = list.len();
         for l in execs {
@@ -467,10 +491,17 @@ pub fn build_profile(
             if c.is_empty() {
                 c.push("learned".to_string());
             }
-            comments.add(&format!("{path_prefix}.exec.allow", path_prefix = path_of(name)), i, c.join("; "));
+            comments.add(
+                &format!("{path_prefix}.exec.allow", path_prefix = path_of(name)),
+                i,
+                c.join("; "),
+            );
         }
         if !list.is_empty() {
-            exec.insert("allow".into(), Value::Array(list.iter().map(|p| s(p)).collect()));
+            exec.insert(
+                "allow".into(),
+                Value::Array(list.iter().map(|p| s(p)).collect()),
+            );
         }
     }
 
@@ -637,7 +668,11 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
         .and_then(Value::as_table)
         .cloned()
         .with_context(|| {
-            format!("profile `{}` is not in {}", opts.profile, opts.policy.display())
+            format!(
+                "profile `{}` is not in {}",
+                opts.profile,
+                opts.policy.display()
+            )
         })?;
 
     let since_ms = match &opts.since {
@@ -656,7 +691,9 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
              (rk run --profile {} -- <command>)",
             opts.profile,
             opts.dir.display(),
-            opts.since.as_ref().map_or(String::new(), |s| format!(" in the last {s}")),
+            opts.since
+                .as_ref()
+                .map_or(String::new(), |s| format!(" in the last {s}")),
             opts.profile
         );
     }
@@ -698,7 +735,11 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
             time(obs.first_ms),
             time(obs.last_ms),
             opts.dir.display(),
-            if verified { "verified" } else { "NOT verified: --no-verify" }
+            if verified {
+                "verified"
+            } else {
+                "NOT verified: --no-verify"
+            }
         ),
         "Review it before applying:".to_string(),
         "  rk policy diff FILE".to_string(),
@@ -721,7 +762,8 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
         .collect();
     text.push('\n');
     text.push_str(&body);
-    crate::init::validate(&text).context("internal error: the suggested policy does not validate")?;
+    crate::init::validate(&text)
+        .context("internal error: the suggested policy does not validate")?;
 
     let summary = format!(
         "{} records: {} destination(s), {} executable(s) ({} not located), {} protected file(s) read",
@@ -762,7 +804,12 @@ mod tests {
         d
     }
 
-    fn record(activity: Activity<'_>, verdict: Verdict, profile: &str, origin: Option<&str>) -> Json {
+    fn record(
+        activity: Activity<'_>,
+        verdict: Verdict,
+        profile: &str,
+        origin: Option<&str>,
+    ) -> Json {
         ocsf::decision(&Decision {
             time_ms: 1_760_000_000_000,
             activity,
@@ -843,7 +890,11 @@ network.default = "allow"
             profile: "agent".into(),
             policy,
             dir: log,
-            pubkey: Some(rk_audit::key::public_path(&key_path).to_string_lossy().into_owned()),
+            pubkey: Some(
+                rk_audit::key::public_path(&key_path)
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
             no_verify: false,
             since: None,
             search: vec![dir.clone()],
@@ -860,9 +911,24 @@ network.default = "allow"
         let m = fs::metadata(&bin).unwrap();
         let bin_path = bin.to_string_lossy().into_owned();
         let records = vec![
-            record(connect("127.0.0.1", 8080, 6), Verdict::AuditWouldDeny, "agent", None),
-            record(connect("127.0.0.1", 8081, 6), Verdict::AuditWouldDeny, "agent", None),
-            record(connect("203.0.113.7", 443, 6), Verdict::AuditWouldDeny, "agent", None),
+            record(
+                connect("127.0.0.1", 8080, 6),
+                Verdict::AuditWouldDeny,
+                "agent",
+                None,
+            ),
+            record(
+                connect("127.0.0.1", 8081, 6),
+                Verdict::AuditWouldDeny,
+                "agent",
+                None,
+            ),
+            record(
+                connect("203.0.113.7", 443, 6),
+                Verdict::AuditWouldDeny,
+                "agent",
+                None,
+            ),
             record(
                 Activity::Exec {
                     path: Some(&bin_path),
@@ -887,10 +953,25 @@ network.default = "allow"
                 "agent",
                 Some("files.deny[0] /home/dev/.aws/credentials"),
             ),
-            record(Activity::Tun { op: 1 }, Verdict::AuditWouldDeny, "agent", None),
+            record(
+                Activity::Tun { op: 1 },
+                Verdict::AuditWouldDeny,
+                "agent",
+                None,
+            ),
             // Not learned: another profile, an allowed and a denied decision.
-            record(connect("198.51.100.1", 22, 6), Verdict::AuditWouldDeny, "other", None),
-            record(connect("198.51.100.2", 22, 6), Verdict::Allow, "agent", None),
+            record(
+                connect("198.51.100.1", 22, 6),
+                Verdict::AuditWouldDeny,
+                "other",
+                None,
+            ),
+            record(
+                connect("198.51.100.2", 22, 6),
+                Verdict::Allow,
+                "agent",
+                None,
+            ),
             record(connect("198.51.100.3", 22, 6), Verdict::Deny, "agent", None),
         ];
         let (_, opts) = setup("full", &records);
@@ -906,22 +987,35 @@ network.default = "allow"
         assert_eq!(p["exec"]["allow"].as_array().unwrap(), &[s(&bin_path)]);
         // The protected file stays denied and is reported.
         assert_eq!(p["files"]["deny"].as_array().unwrap().len(), 1);
-        assert!(text.contains("/home/dev/.aws/credentials: 1 time(s) (read)"), "{text}");
+        assert!(
+            text.contains("/home/dev/.aws/credentials: 1 time(s) (read)"),
+            "{text}"
+        );
         assert!(text.contains("TUN/TAP create: 1 time(s)"), "{text}");
         assert!(text.contains("1 attempt(s) were denied"), "{text}");
         assert!(text.contains("public address"), "{text}");
         // The rest of the file is kept as written, comments included.
-        assert!(text.contains("# another profile, kept as written"), "{text}");
+        assert!(
+            text.contains("# another profile, kept as written"),
+            "{text}"
+        );
         assert_eq!(t["profiles"]["other"]["mode"].as_str(), Some("enforce"));
         assert!(!text.contains("198.51.100"), "{text}");
     }
 
     #[test]
     fn a_log_that_does_not_verify_is_refused() {
-        let records = vec![record(connect("127.0.0.1", 80, 6), Verdict::AuditWouldDeny, "agent", None)];
+        let records = vec![record(
+            connect("127.0.0.1", 80, 6),
+            Verdict::AuditWouldDeny,
+            "agent",
+            None,
+        )];
         let (_, opts) = setup("tampered", &records);
         let seg = rk_audit::chain::segments(&opts.dir).unwrap().remove(0);
-        let text = fs::read_to_string(&seg).unwrap().replace("127.0.0.1", "127.0.0.2");
+        let text = fs::read_to_string(&seg)
+            .unwrap()
+            .replace("127.0.0.1", "127.0.0.2");
         fs::write(&seg, text).unwrap();
         let err = suggest(&opts).unwrap_err().to_string();
         assert!(err.contains("does not verify"), "{err}");

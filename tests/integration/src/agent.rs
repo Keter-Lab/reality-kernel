@@ -311,7 +311,9 @@ fn probe_connect(addr: &str, expect: &str) -> Result<()> {
 /// allowed and recorded (docs/design/adoption.md §4).
 fn probe_learn(addr: &str, bin: &str, secret: &str) -> Result<()> {
     udp_connect(addr).with_context(|| format!("connect {addr}"))?;
-    let st = Command::new(bin).status().with_context(|| format!("exec {bin}"))?;
+    let st = Command::new(bin)
+        .status()
+        .with_context(|| format!("exec {bin}"))?;
     if !st.success() {
         bail!("{bin} exited {st}");
     }
@@ -1007,7 +1009,12 @@ fn adoption_round_trip(checks: &mut Vec<TestCheck>, sensor: &Path) {
         write_file(&unread, "test key\n", 0o644)?;
         copy_exe(Path::new("/bin/true"), &learn_bin)?;
         let starter = rk_ok(&["init", "--print", "--home", &home])?;
-        for want in ["mode = \"audit\"", "[profiles.agent.exec]", ".aws/credentials", ".ssh"] {
+        for want in [
+            "mode = \"audit\"",
+            "[profiles.agent.exec]",
+            ".aws/credentials",
+            ".ssh",
+        ] {
             if !starter.contains(want) {
                 bail!("starter policy lacks {want:?}:\n{starter}");
             }
@@ -1015,16 +1022,29 @@ fn adoption_round_trip(checks: &mut Vec<TestCheck>, sensor: &Path) {
         write_file(&policy, &starter, 0o644)
     };
     if let Err(e) = setup() {
-        checks.push(TestCheck::fail("adoption_round_trip", format!("setup: {e:#}")));
+        checks.push(TestCheck::fail(
+            "adoption_round_trip",
+            format!("setup: {e:#}"),
+        ));
         return;
     }
     let daemon = match Daemon::start_with(
         sensor,
-        &["--policy", &policy, "--audit-dir", &audit, "--audit-key", &key],
+        &[
+            "--policy",
+            &policy,
+            "--audit-dir",
+            &audit,
+            "--audit-key",
+            &key,
+        ],
     ) {
         Ok(d) => d,
         Err(e) => {
-            checks.push(TestCheck::fail("adoption_round_trip", format!("daemon: {e:#}")));
+            checks.push(TestCheck::fail(
+                "adoption_round_trip",
+                format!("daemon: {e:#}"),
+            ));
             return;
         }
     };
@@ -1035,8 +1055,18 @@ fn adoption_round_trip(checks: &mut Vec<TestCheck>, sensor: &Path) {
         thread::sleep(Duration::from_secs(3));
         let pubkey = format!("{key}.pub");
         rk_ok(&[
-            "policy", "suggest", "--profile", "agent", "--policy", &policy, "--dir", &audit,
-            "--pubkey", &pubkey, "--out", &suggested,
+            "policy",
+            "suggest",
+            "--profile",
+            "agent",
+            "--policy",
+            &policy,
+            "--dir",
+            &audit,
+            "--pubkey",
+            &pubkey,
+            "--out",
+            &suggested,
         ])?;
         let text = fs::read_to_string(&suggested)?;
         for want in [
@@ -1060,7 +1090,9 @@ fn adoption_round_trip(checks: &mut Vec<TestCheck>, sensor: &Path) {
         }
         run_probe_ok(
             None,
-            &["enforced", addr, &learn_bin, &secret, &unread, DENY_ADDR, DENIED_BIN],
+            &[
+                "enforced", addr, &learn_bin, &secret, &unread, DENY_ADDR, DENIED_BIN,
+            ],
         )?;
         Ok(format!(
             "init (AUDIT) -> agent run -> suggest -> apply (ENFORCE): learned connect and exec work; \
