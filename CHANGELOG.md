@@ -8,6 +8,8 @@ and container image. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-24
+
 ### Added
 
 - Adoption path (docs/design/adoption.md): `install.sh` (one command;
@@ -27,9 +29,16 @@ and container image. The format follows
 
 - The minimum Rust version is 1.89, checked in CI on exactly that toolchain
   (phase 15).
+- Dependencies: `ed25519-dalek` 3, `sha2` 0.11, `reqwest` 0.13, `lru` 0.19,
+  `containerd/nri` 0.12.3 and current GitHub Actions (phase 13, Dependabot).
+- The website: rebuilt around the Warden, with an enforce/audit mode switch
+  (phase 14).
 
-- Dependencies: `lru` 0.19, `containerd/nri` 0.12.3 and current GitHub Actions
-  (phase 13).
+### Fixed
+
+- Audit records of an `rk run` agent that exits quickly keep its profile
+  name; before, its last records could be written after the agent was
+  unbound and name no profile.
 
 ## [0.1.0] - 2026-10-23
 
@@ -98,5 +107,6 @@ listed in [docs/evidence.md](docs/evidence.md).
 - The NRI plugin uses `google.golang.org/grpc` v1.84.0, which fixes the five
   advisories reported by Dependabot on 2026-10-22.
 
-[Unreleased]: https://github.com/Keter-Lab/reality-kernel/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Keter-Lab/reality-kernel/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Keter-Lab/reality-kernel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Keter-Lab/reality-kernel/releases/tag/v0.1.0
