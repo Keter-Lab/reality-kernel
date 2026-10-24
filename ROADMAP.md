@@ -4,7 +4,9 @@ Reality Kernel ships in versioned milestones. Each feature gets a design
 note in [docs/design](docs/design) before code, and is claimed only once its
 tests pass on every supported kernel ([docs/evidence.md](docs/evidence.md)).
 Plans change with what users run into; open an issue if something here
-matters to you, or if something missing does.
+matters to you, or if something missing does. The same plan, with the open
+issues for each milestone, is on the public
+[project board](https://github.com/orgs/Keter-Lab/projects/1).
 
 The engineering plan that rebuilt the project as kernel enforcement is
 complete as of v0.1.0 (design notes `phase-*`).

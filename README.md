@@ -191,9 +191,13 @@ on x86_64; arm64 is built and unit-tested. Details:
 
 ## Contributing and security
 
-Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) (commits are
+Contributions are welcome: start with a
+[good first issue](https://github.com/Keter-Lab/reality-kernel/issues?q=is%3Aopen+label%3A%22good+first+issue%22)
+and [CONTRIBUTING.md](CONTRIBUTING.md#your-first-contribution) (commits are
 signed off under the [DCO](https://developercertificate.org/)),
-[GOVERNANCE.md](GOVERNANCE.md). Report vulnerabilities privately as described in
+[GOVERNANCE.md](GOVERNANCE.md). Open work is on the
+[project board](https://github.com/orgs/Keter-Lab/projects/1); Google Summer
+of Code ideas are in [docs/gsoc.md](docs/gsoc.md). Report vulnerabilities privately as described in
 [SECURITY.md](SECURITY.md).
 
 Reality Kernel began as a hosted API service; that product, its SDK and its
