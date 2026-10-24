@@ -1,4 +1,9 @@
-# Google Summer of Code: project ideas
+# Project ideas
+
+Larger projects for contributors, open to anyone at any time. Each is sized
+and scoped the way mentoring programmes such as Google Summer of Code expect
+(hours, difficulty, skills, outcome), so they can also be proposed there if
+Reality Kernel takes part in one.
 
 Reality Kernel enforces policy for AI agents inside the Linux kernel: network,
 exec and file rules decided in eBPF (BPF-LSM and cgroup hooks) before the
@@ -11,7 +16,7 @@ and say hello in [Discussions](https://github.com/Keter-Lab/reality-kernel/discu
 What is planned and what is open is on the public
 [project board](https://github.com/orgs/Keter-Lab/projects/1) and in
 [ROADMAP.md](../ROADMAP.md).
-A merged first contribution is the best start to a proposal. You do not need
+A merged first contribution is the best way to start a larger project. You do not need
 a kernel VM locally: CI runs the kernel suites on every pull request.
 
 Each project follows the project's usual path: a design note in

@@ -27,8 +27,8 @@ New here? Welcome. A good way in:
 All open work is on the public
 [project board](https://github.com/orgs/Keter-Lab/projects/1).
 `help wanted` issues are larger and say what background helps. Larger work
-starts with a short plan in the issue. Interested in Google Summer of Code?
-See [docs/gsoc.md](docs/gsoc.md).
+starts with a short plan in the issue. Looking for something bigger? See the
+[project ideas](docs/gsoc.md).
 
 ## Building
 
