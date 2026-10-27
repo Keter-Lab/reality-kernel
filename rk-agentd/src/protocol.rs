@@ -229,10 +229,12 @@ pub fn recv_message(sock: RawFd, buf: &mut [u8]) -> Result<(usize, Vec<OwnedFd>)
         if res < 0 {
             return Err(std::io::Error::last_os_error()).context("recvmsg failed");
         }
-        if res == 0 {
-            return Ok((0, Vec::new()));
-        }
 
+        // Collect any SCM_RIGHTS descriptors into OwnedFds *before* inspecting
+        // `res`. The kernel installs passed descriptors into our table during
+        // recvmsg, even on a zero-length datagram; returning early on res == 0
+        // without wrapping them would leak one set per message and let any local
+        // peer exhaust the daemon's descriptor table (denial of service).
         let mut received_fds = Vec::new();
         let mut cmsg = libc::CMSG_FIRSTHDR(&msg);
         while !cmsg.is_null() {
@@ -394,6 +396,35 @@ mod tests {
         for (resp, json) in cases {
             assert_eq!(serde_json::to_string(&resp).unwrap(), json);
         }
+    }
+
+    /// A zero-length datagram carrying a descriptor must still have that
+    /// descriptor collected (and therefore closed on drop), not leaked. This is
+    /// the control-plane descriptor-exhaustion DoS regression test.
+    #[test]
+    fn zero_length_datagram_with_fds_is_not_leaked() {
+        let mut sv = [0; 2];
+        let rc =
+            unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0, sv.as_mut_ptr()) };
+        assert_eq!(rc, 0);
+        let sender = unsafe { OwnedFd::from_raw_fd(sv[0]) };
+        let receiver = unsafe { OwnedFd::from_raw_fd(sv[1]) };
+
+        let mut pipefd = [0; 2];
+        assert_eq!(unsafe { libc::pipe(pipefd.as_mut_ptr()) }, 0);
+        let pipe_r = unsafe { OwnedFd::from_raw_fd(pipefd[0]) };
+        let pipe_w = unsafe { OwnedFd::from_raw_fd(pipefd[1]) };
+
+        // Zero-length payload, one attached descriptor: recvmsg returns 0 but the
+        // kernel has already installed the descriptor in our table.
+        send_message(sender.as_raw_fd(), &[], &[pipe_r.as_raw_fd()]).unwrap();
+
+        let mut buf = vec![0u8; 64];
+        let (n, fds) = recv_message(receiver.as_raw_fd(), &mut buf).unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(fds.len(), 1, "passed descriptor must be collected, not leaked");
+        // `fds` dropping here closes the received descriptor.
+        drop(pipe_w);
     }
 
     #[test]

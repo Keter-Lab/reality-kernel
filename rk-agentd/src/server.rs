@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::fs;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,6 +24,41 @@ use crate::protocol::{
     MAX_MESSAGE_SIZE,
 };
 use crate::registry::{ActiveAgent, AgentRegistry};
+
+/// What the blocking receive stage hands back: the connection (moved through the
+/// blocking task and returned), the peer credentials, and the decoded request
+/// with any passed descriptors (`None` if the peer sent nothing).
+type ReceivedConnection = (OwnedFd, PeerCred, Option<(Request, Vec<OwnedFd>)>);
+
+/// Maximum time the daemon waits for a client to send its request before the
+/// connection is dropped. Legitimate clients send immediately after connecting;
+/// this only bounds idle or slow-loris connections so they cannot pin a handler
+/// indefinitely.
+const RECV_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Maximum number of connections that may be mid-receive simultaneously. Beyond
+/// this, new connections are shed until an in-flight receive completes. This
+/// bounds the blocking-pool threads and descriptors a local flood can tie up; it
+/// does not limit long-lived agents, whose waiters run as separate tasks.
+const MAX_CONCURRENT_RECEIVES: usize = 128;
+
+/// Bounds any single blocking `recvmsg` on `fd` with `SO_RCVTIMEO`. Best-effort:
+/// a failure only forgoes the timeout, so it is not treated as fatal.
+fn set_recv_timeout(fd: RawFd, timeout: Duration) {
+    let tv = libc::timeval {
+        tv_sec: timeout.as_secs() as libc::time_t,
+        tv_usec: 0,
+    };
+    unsafe {
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_RCVTIMEO,
+            &tv as *const _ as *const libc::c_void,
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        );
+    }
+}
 
 /// Trait implemented by `rk-sensor` daemon to drive policy operations.
 pub trait PolicyHandler: Send + Sync {
@@ -207,6 +242,9 @@ pub async fn run_server(
     // parks the new task in that worker's LIFO slot, which other workers
     // cannot steal: every request used to wait for the poll timeout (~500 ms,
     // half of rk-nri's budget per NRI call).
+    // Cap how many connections may be mid-receive at once (see the accept loop).
+    let recv_slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_RECEIVES));
+
     let rt = tokio::runtime::Handle::current();
     let accept_loop = tokio::task::spawn_blocking(move || -> Result<()> {
         let raw_listener = listener.as_raw_fd();
@@ -241,11 +279,30 @@ pub async fn run_server(
             }
 
             let client = unsafe { OwnedFd::from_raw_fd(client_fd) };
+
+            // Bound the initial blocking receive so a slow or idle client cannot
+            // pin a handler indefinitely (control-plane DoS).
+            set_recv_timeout(client.as_raw_fd(), RECV_TIMEOUT);
+
+            // Shed load: cap how many connections may be mid-receive at once, so a
+            // flood of idle connections cannot exhaust the blocking pool or the
+            // descriptor table. The permit is held only while the connection is
+            // handled up to its response, not for a long-lived Run (whose waiter
+            // runs as a separate task once the permit has already dropped).
+            let permit = match recv_slots.clone().try_acquire_owned() {
+                Ok(p) => p,
+                Err(_) => {
+                    warn!("agentd receive slots exhausted; shedding a connection");
+                    continue;
+                }
+            };
+
             let handler_clone = handler.clone();
             let registry_clone = registry.clone();
             let config_clone = Arc::new(config.clone());
 
             rt.spawn(async move {
+                let _permit = permit;
                 if let Err(e) =
                     handle_connection(client, handler_clone, registry_clone, config_clone).await
                 {
@@ -263,11 +320,23 @@ async fn handle_connection(
     registry: Arc<AgentRegistry>,
     config: Arc<ServerConfig>,
 ) -> Result<()> {
-    let cred = get_peer_cred(client.as_raw_fd())?;
+    // Read the peer credentials and the request on the blocking pool (bounded by
+    // SO_RCVTIMEO), so a slow or idle client blocks a short-lived blocking-pool
+    // thread rather than an async runtime worker.
+    let (client, cred, received) = tokio::task::spawn_blocking(
+        move || -> Result<ReceivedConnection> {
+            let cred = get_peer_cred(client.as_raw_fd())?;
+            let mut buf = vec![0u8; MAX_MESSAGE_SIZE];
+            let received = recv_request(client.as_raw_fd(), &mut buf)?;
+            Ok((client, cred, received))
+        },
+    )
+    .await
+    .context("agentd receive task panicked")??;
+
     debug!(?cred, "accepted client connection");
 
-    let mut buf = vec![0u8; MAX_MESSAGE_SIZE];
-    let (req, fds) = match recv_request(client.as_raw_fd(), &mut buf)? {
+    let (req, fds) = match received {
         Some(pair) => pair,
         None => return Ok(()),
     };
@@ -335,6 +404,14 @@ async fn handle_connection(
             }
         }
         Request::Diff { policy_text } => {
+            if let Err(e) = check_policy_admin(&cred) {
+                return send_response(
+                    client.as_raw_fd(),
+                    &Response::Error {
+                        message: e.to_string(),
+                    },
+                );
+            }
             let handler_lock = handler.lock().await;
             match handler_lock.diff(&policy_text) {
                 Ok(diff) => send_response(client.as_raw_fd(), &Response::DiffSuccess { diff }),
@@ -367,6 +444,14 @@ async fn handle_connection(
             }
         }
         Request::Status => {
+            if let Err(e) = check_policy_admin(&cred) {
+                return send_response(
+                    client.as_raw_fd(),
+                    &Response::Error {
+                        message: e.to_string(),
+                    },
+                );
+            }
             let handler_lock = handler.lock().await;
             let mut status = registry.build_status(
                 true,
