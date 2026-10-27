@@ -323,16 +323,15 @@ async fn handle_connection(
     // Read the peer credentials and the request on the blocking pool (bounded by
     // SO_RCVTIMEO), so a slow or idle client blocks a short-lived blocking-pool
     // thread rather than an async runtime worker.
-    let (client, cred, received) = tokio::task::spawn_blocking(
-        move || -> Result<ReceivedConnection> {
+    let (client, cred, received) =
+        tokio::task::spawn_blocking(move || -> Result<ReceivedConnection> {
             let cred = get_peer_cred(client.as_raw_fd())?;
             let mut buf = vec![0u8; MAX_MESSAGE_SIZE];
             let received = recv_request(client.as_raw_fd(), &mut buf)?;
             Ok((client, cred, received))
-        },
-    )
-    .await
-    .context("agentd receive task panicked")??;
+        })
+        .await
+        .context("agentd receive task panicked")??;
 
     debug!(?cred, "accepted client connection");
 

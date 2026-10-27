@@ -422,7 +422,11 @@ mod tests {
         let mut buf = vec![0u8; 64];
         let (n, fds) = recv_message(receiver.as_raw_fd(), &mut buf).unwrap();
         assert_eq!(n, 0);
-        assert_eq!(fds.len(), 1, "passed descriptor must be collected, not leaked");
+        assert_eq!(
+            fds.len(),
+            1,
+            "passed descriptor must be collected, not leaked"
+        );
         // `fds` dropping here closes the received descriptor.
         drop(pipe_w);
     }
