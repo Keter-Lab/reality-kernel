@@ -64,6 +64,13 @@ Raw/packet sockets, io_uring, TCP Fast Open and NAT64 can't bypass the rules
 - `net_tcp_fastopen_denied` (VM suite, every kernel)
 - `net_nat64_equivalence` (VM suite, every kernel)
 
+### net-unobserved-transports
+
+With deny_raw_sockets, no inet socket whose traffic the egress hooks cannot see (ICMP ping, UDP-Lite, SCTP, DCCP, MPTCP, SOCK_SEQPACKET) can be created; TCP and UDP sockets, protocol 0 included, still can
+
+- `net_unobserved_transports_denied` (VM suite, every kernel)
+- `net_unobserved_transports_allowed_without_flag` (VM suite, every kernel)
+
 ### net-compiler
 
 The compiled kernel lookup always agrees with the reference evaluator
@@ -154,6 +161,30 @@ Subtree rules apply; excessive nesting fails closed
 
 - `file_subtree_rule_applies` (VM suite, every kernel)
 - `file_deep_nesting_fails_closed` (VM suite, every kernel)
+
+### file-create-every-name
+
+Every syscall that adds a name to a directory (create, mkdir, rename, link, symlink, mknod) needs that directory's create right, directly or through a subtree rule
+
+- `file_create_in_protected_dir_denied` (VM suite, every kernel)
+- `file_rename_into_protected_dir_denied` (VM suite, every kernel)
+- `file_link_into_protected_dir_denied` (VM suite, every kernel)
+- `file_symlink_into_protected_dir_denied` (VM suite, every kernel)
+- `file_mknod_into_protected_dir_denied` (VM suite, every kernel)
+- `file_rename_into_protected_subtree_denied` (VM suite, every kernel)
+- `file_rename_within_unprotected_dir_allowed` (VM suite, every kernel)
+
+### file-identity-superblock
+
+File and exec rules, and the executables rk policy suggest learns, resolve to the superblock device the hooks compare (mountinfo), not stat's st_dev, which differs on btrfs subvolumes and snapshots
+
+- `identity_parses_mountinfo_lines` (Rust test)
+- `identity_parses_fdinfo_mnt_id` (Rust test)
+- `identity_mount_table_indexes_by_id` (Rust test)
+- `identity_resolves_a_live_path_and_keeps_the_inode` (Rust test)
+- `suggest_identity_parses_mountinfo_and_fdinfo` (Rust test)
+- `suggest_identity_resolves_a_live_file` (Rust test)
+- `exec_allowlist_on_btrfs_is_refused` (Rust test)
 
 ### file-protect-allowlist
 
@@ -330,11 +361,15 @@ Zero event loss at a defined sustained rate; loss beyond it counted and reported
 
 ### traceability
 
-Every acceptance criterion maps to named tests that exist and passed on every kernel
+Every acceptance criterion maps to named tests that exist, would run (no #[ignore]d or non-test Rust fn, no skipped Python test, no disabled or emptied CI job), and passed on every kernel
 
 - `test_repository_index_is_complete` (Python test)
 - `test_reports_flag_missing_kernel` (Python test)
 - `traceability` (CI job)
+- `test_static_flags_an_ignored_or_non_test_rust_fn` (Python test)
+- `test_static_flags_a_skipped_python_test` (Python test)
+- `test_static_flags_an_emptied_ci_job` (Python test)
+- `test_static_flags_a_disabled_ci_job` (Python test)
 
 ### conformance
 
@@ -379,7 +414,7 @@ Every enforced or audit-would-deny decision appears in the audit log with its ru
 
 ### audit_tamper
 
-Tampering with a stored audit batch is detected by verification
+Tampering with a stored audit batch is detected by verification; so are an emptied log, removed oldest segments, a change of signing key, and (given a recorded chain head) removed newest batches; startup recovery never signs records the writer did not write, and the published public key is never rewritten; rk audit tail escapes terminal control characters a governed process put in a record
 
 - `audit_tamper_detected` (VM suite, every kernel)
 - `audit_verify_detects_modified_record` (Rust test)
@@ -388,7 +423,18 @@ Tampering with a stored audit batch is detected by verification
 - `audit_verify_detects_inserted_batch` (Rust test)
 - `audit_verify_detects_bad_signature_and_pinned_key` (Rust test)
 - `deleting_the_middle_segment_is_detected` (Rust test)
-- `reopening_continues_the_chain_and_seals_leftovers` (Rust test)
+- `reopening_continues_the_chain_and_sets_leftovers_aside` (Rust test)
+- `recovery_does_not_sign_appended_records` (Rust test)
+- `empty_audit_dir_fails_verification` (Rust test)
+- `signing_key_change_fails_unless_both_keys_are_pinned` (Rust test)
+- `expected_head_must_be_on_the_chain` (Rust test)
+- `published_public_key_is_never_rewritten` (Rust test)
+- `tail_escapes_terminal_control_sequences` (Rust test)
+- `tail_json_escapes_terminal_control_sequences` (Rust test)
+- `recovery_never_trusts_appended_control_lines` (Rust test)
+- `a_log_of_headers_alone_does_not_verify` (Rust test)
+- `a_failed_verification_reports_no_head` (Rust test)
+- `trailer_fields_cannot_be_edited` (Rust test)
 
 ### ocsf_schema
 
@@ -580,3 +626,14 @@ One command installs a verified release (a tampered package is refused); rk init
 - `suggests_an_enforce_profile_from_would_denies` (Rust test)
 - `a_log_that_does_not_verify_is_refused` (Rust test)
 - `no_records_is_an_error_not_an_empty_allow_list` (Rust test)
+
+### cli-cannot-be-steered
+
+rk init and rk policy suggest --out, run as root, never write through a symbolic link planted at the policy, staging, backup or output path; suggest keeps the observed port ranges (at most eight per address, the rest reported) instead of widening them, and never learns an executable whose file was replaced after it ran
+
+- `root_writes_never_follow_a_planted_symlink` (Rust test)
+- `replace_overwrites_a_regular_file_atomically` (Rust test)
+- `backup_never_follows_a_planted_symlink` (Rust test)
+- `out_never_writes_through_a_planted_symlink` (Rust test)
+- `observed_port_ranges_are_never_widened` (Rust test)
+- `a_replaced_executable_is_not_learned` (Rust test)

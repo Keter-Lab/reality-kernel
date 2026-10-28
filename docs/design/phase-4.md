@@ -45,9 +45,11 @@ All hooks are BPF-LSM programs, so they decide on resolved kernel objects.
 |---|---|---|
 | `rk_file_open` | `file_open` | read, write, exec (from `f_mode`), truncate (`O_TRUNC`) |
 | `rk_file_unlink` | `inode_unlink` | delete |
-| `rk_file_rename` | `inode_rename` | rename (source) and replace or delete (an existing target) |
-| `rk_file_link` | `inode_link` | link (a new name for a protected file) |
+| `rk_file_rename` | `inode_rename` | rename (source), replace or delete (an existing target), and create in the destination directory |
+| `rk_file_link` | `inode_link` | link (a new name for a protected file) and create in the destination directory |
 | `rk_file_create` | `inode_create`, `inode_mkdir` | create inside a protected directory |
+| `rk_file_symlink` | `inode_symlink` | create inside a protected directory (a new symlink) |
+| `rk_file_mknod` | `inode_mknod` | create inside a protected directory (device, FIFO or socket node, including `bind(2)` of an `AF_UNIX` socket to a path) |
 | `rk_file_setattr_*` | `inode_setattr` | truncate (`ATTR_SIZE`, which covers `truncate(2)` and `ftruncate(2)` on every kernel without needing `CONFIG_SECURITY_PATH`) and set-attributes (mode, owner, times) |
 
 `inode_setattr` gained an `idmap` argument in **6.9** (verified against

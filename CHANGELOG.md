@@ -8,8 +8,98 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- File and exec rules now resolve to the superblock device the kernel hooks
+  compare (read from `/proc/self/mountinfo`) instead of `stat`'s `st_dev`.
+  On btrfs subvolumes and snapshots the two differ, so every file rule, every
+  exec allow-list entry and the built-in credentials list silently never
+  matched there. A rule path whose mount cannot be found now fails the apply;
+  a path on another filesystem whose `stat` device differs (for example
+  overlayfs) is logged as a warning. `rk policy suggest` matches the
+  executables it learns the same way, so it finds them on btrfs too. Exec
+  allowlists on btrfs are refused at apply time: inode numbers repeat across
+  subvolumes, so an entry would also allow another subvolume's file.
+- `network.deny_raw_sockets` (on by default) now also denies every inet
+  socket the connect and send hooks cannot see: ICMP ping, UDP-Lite, SCTP,
+  DCCP, MPTCP, `SOCK_SEQPACKET` and any non-TCP stream or non-UDP datagram
+  socket. Before, such sockets reached a denied destination with no verdict
+  and no event. Plain TCP and UDP sockets (protocol 0 included) are
+  unaffected. docs/policy.md now says that `proto = ["other"]` matches
+  almost nothing.
+- The `create` right of a protected directory is now checked for every way
+  of adding a name to it: the destination of `rename(2)` and `link(2)`, and
+  `symlink(2)` and `mknod(2)` (new `rk_file_symlink` and `rk_file_mknod`
+  programs on `inode_symlink` and `inode_mknod`). Before, only `open(O_CREAT)`
+  and `mkdir` were checked, so entries could be planted in a protected
+  directory.
+- docs/threat-model.md lists the remaining gaps: leaving the bound cgroup is
+  only prevented by cgroupfs permissions (privileged workloads and delegated
+  agent cgroups are outside the guarantee until governance is ancestor-aware),
+  address families other than inet and packet are not classified, and
+  subtree rules stop at nested mounts.
+- `rk init` and `rk policy suggest --out` no longer write through a
+  symbolic link. Run as root in a directory the user or the governed agent
+  can write, a link planted at the output path (or at `rk init`'s fixed
+  staging name or predictable backup name) made root overwrite the file it
+  pointed to. Files are now staged under a fresh name created with
+  `O_EXCL|O_NOFOLLOW` and renamed into place; an existing regular file at
+  `--out` is still replaced, a symbolic link there is refused. The
+  `--force` backup is created exclusively, mode 0600.
+- `rk policy suggest` no longer widens more than eight observed port ranges
+  for one address into one covering range (nine ports produced
+  `22-65535`). It keeps the lowest eight, the most the kernel holds per
+  address, and lists the rest in the header, not allowed.
+- `rk policy suggest` no longer learns an executable whose path now holds a
+  different file (device and inode differ from what the audit record shows
+  ran); it is listed in the header instead.
+- The traceability check now fails when a referenced Rust test is
+  `#[ignore]`d or not a `#[test]`, a referenced Python test is marked skip
+  or xfail (or would not be collected), or a referenced CI job is disabled
+  or has no step left that does anything.
+- Audit log: startup recovery no longer signs records it finds after the
+  last sealed batch. They were sealed with the live key, so anyone who could
+  write the log could get records of their own signed. They are now moved,
+  unsigned, to `<segment>.jsonl.unsealed`, the sensor logs a warning, and
+  `rk audit verify` lists the file. A crash mid-batch therefore loses that
+  batch (at most one second of records) from the verified chain instead of
+  sealing it.
+- Audit recovery trusts only lines that verify: a header or trailer
+  appended to the newest segment can no longer choose where the chain
+  continues (or get the segment's signed batches truncated). Such a segment
+  is left in place for `rk audit verify` to report, or, holding no batch
+  that verifies, moved aside to `<segment>.jsonl.forged`, which fails
+  verification.
+- Audit batches now sign their record count (trailer `"v":2`, hash domain
+  `rk-audit-v2`), and a current trailer cannot carry the `recovered` marker.
+  Logs from rk 0.2.0 still verify.
+- The sensor no longer rewrites a published `audit.key.pub`. If it does not
+  match the private key, or exists without it (as after `dpkg --purge` and a
+  reinstall), the audit log is not opened and the error says why: move the
+  old public key aside if the key change is intended. An existing key owned
+  by another user, or in a directory others can write, is refused.
+- `rk audit tail` escapes control characters (C0, C1, ESC, DEL) and Unicode
+  bidi overrides in what it prints, so a governed process cannot rewrite the
+  operator's terminal through a path or argument; `rk audit verify` and the
+  comments of `rk policy suggest` do the same. `rk audit tail --json` writes
+  them as `\uXXXX` escapes, so its lines are the same JSON values as stored.
+
 ### Changed
 
+- `rk audit verify` exits 2 (verification failed) in cases it used to pass
+  with a warning or silently: an empty audit directory or one with no batch
+  that verifies (a header alone is not signed), a change of signing
+  key between segments, and a chain that does not start at batch 0. Repeat
+  `--pubkey` to accept a key rotation, and pass `--allow-pruned` if you
+  removed old segments on purpose. `rk policy suggest` refuses such a log
+  too (or use `--no-verify`).
+- `rk audit verify --head SEQ:HASH` checks that the chain still passes
+  through a head recorded earlier (`rk_audit_head_seq` and the `head_hash`
+  label of `rk_audit_info`, or the new `head:` line of `rk audit verify`,
+  printed only when the log verifies), so
+  removal of the newest batches is detected. docs/audit.md and the threat
+  model now say that trust in the log rests on the pinned key and a recorded
+  head kept off the host.
 - `rk status` and `rk policy diff` now require a policy admin (root or a
   member of group `rk`), like `rk policy apply`: they disclose the whole
   policy and the agent inventory.
@@ -52,6 +142,8 @@ and container image. The format follows
   still holding links: the old set is renamed away before anything is
   removed, and a replacement is discarded only while the live set holds
   links.
+- On arm64 the launcher's capability drop called the wrong syscall (it
+  used x86_64's number for `capset`); it now takes the number from libc.
 
 ## [0.2.0] - 2026-10-24
 

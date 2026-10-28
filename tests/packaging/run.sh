@@ -169,8 +169,14 @@ t_fresh_install() {
     fi
     grep -qi "not permitted" <<<"$out" || fail "agent failed for another reason: $out"
 
-    sleep 2 # one audit batch interval
-    audit_verifies || fail "audit log does not verify: $(rk audit verify 2>&1 | tail -n 5)"
+    # A log verifies once it holds a sealed batch; the denies above are sealed
+    # with the next audit batch, later on a slow runner (like wait_generation).
+    local verified=0
+    for _ in $(seq 1 30); do
+        audit_verifies && { verified=1; break; }
+        sleep 0.5
+    done
+    [ "$verified" = 1 ] || fail "audit log does not verify: $(rk audit verify 2>&1 | tail -n 5)"
     rk audit tail -n 50 --verdict deny | contains "DENY" || fail "no deny in the audit log"
     out="$(rk doctor --json)"
     code=$?
@@ -234,9 +240,14 @@ t_init() {
     ls /etc/rk/policy.toml.bak.* >/dev/null 2>&1 || fail "no backup of the replaced policy"
     (cd / && rk run --profile agent -- /bin/bash -c 'exec 3<>/dev/udp/127.0.0.1/9') \
         || fail "the agent's connect failed in AUDIT"
-    sleep 2 # one audit batch interval
-    out="$(rk policy suggest --profile agent 2>/tmp/rk-suggest.err)" \
-        || fail "rk policy suggest failed: $(cat /tmp/rk-suggest.err)"
+    # The decision reaches the log with the next audit batch; slow runners need
+    # more than one batch interval, so poll like wait_generation (15 s).
+    local ok=0
+    for _ in $(seq 1 30); do
+        out="$(rk policy suggest --profile agent 2>/tmp/rk-suggest.err)" && { ok=1; break; }
+        sleep 0.5
+    done
+    [ "$ok" = 1 ] || fail "rk policy suggest failed: $(cat /tmp/rk-suggest.err)"
     contains 'mode = "enforce"' <<<"$out" || fail "suggestion is not in ENFORCE: $out"
     contains '127.0.0.0/8' <<<"$out" || fail "suggestion does not allow the agent's connect: $out"
     printf '%s\n' "$out" >/tmp/rk-suggested.toml

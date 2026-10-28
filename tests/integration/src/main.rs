@@ -173,6 +173,11 @@ path = "/run/rk-test/dir_create_deny"
 access = ["create"]
 
 [[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/create_subtree"
+subtree = true
+access = ["create"]
+
+[[profiles.enforce-profile.files.deny]]
 path = "/run/rk-test/file_chmod_deny"
 access = ["setattr"]
 
@@ -350,6 +355,11 @@ access = ["link"]
 
 [[profiles.enforce-profile.files.deny]]
 path = "/run/rk-test/dir_create_deny"
+access = ["create"]
+
+[[profiles.enforce-profile.files.deny]]
+path = "/run/rk-test/create_subtree"
+subtree = true
 access = ["create"]
 
 [[profiles.enforce-profile.files.deny]]
@@ -714,6 +724,46 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         spawn_child("/sys/fs/cgroup/rk.slice/enforce", "packet_socket", &[])?;
         Ok("AF_PACKET raw socket denied with EPERM".into())
     });
+
+    // Inet transports that no sock_addr hook observes (Strix "Egress
+    // confinement does not cover all IP transports"). The LSM hook runs
+    // before the protocol is looked up, so the verdict does not depend on
+    // which protocol modules the kernel has.
+    run_test(checks, "net_unobserved_transports_denied", || {
+        let before = get_counter(&ebpf, sock_create_counter(rk_verdict::RK_VERDICT_DENY))?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "unobserved_sockets",
+            &["eperm"],
+        )?;
+        let after = get_counter(&ebpf, sock_create_counter(rk_verdict::RK_VERDICT_DENY))?;
+        anyhow::ensure!(
+            after >= before + 12,
+            "socket_create deny counter moved {before} -> {after}, expected at least 12 denials"
+        );
+        Ok(
+            "ping, UDP-Lite, SCTP, DCCP, MPTCP and SOCK_SEQPACKET inet sockets denied with EPERM \
+            and counted; TCP and UDP sockets (protocol 0 or explicit, with type flags) created"
+                .into(),
+        )
+    });
+
+    run_test(
+        checks,
+        "net_unobserved_transports_allowed_without_flag",
+        || {
+            spawn_child(
+                "/sys/fs/cgroup/rk.slice/rawok",
+                "unobserved_sockets",
+                &["ok"],
+            )?;
+            Ok(
+                "with network.deny_raw_sockets = false no unobserved inet socket is refused with \
+            EPERM, and UDP-Lite is created"
+                    .into(),
+            )
+        },
+    );
 
     // Phase 16: TUN/TAP (docs/design/phase-16.md). Interfaces: rktun0 is
     // created and dropped by single attempts; rktun1 is persistent and owned
@@ -2067,6 +2117,106 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         Ok("create in protected directory denied with EPERM, event verified".into())
     });
 
+    // Name-creating syscalls other than create/mkdir must also evaluate the
+    // destination directory's create right (Strix "File protection can be
+    // written around"): rename(2), link(2), symlink(2) and mknod(2) into the
+    // protected directory, and into a subdirectory of a subtree create rule.
+    let protected_dir = "/run/rk-test/dir_create_deny";
+    run_test(checks, "file_rename_into_protected_dir_denied", || {
+        plant_denied(
+            &mut ring,
+            "file_rename",
+            &[
+                "/run/rk-test/file_rename_into_src",
+                "/run/rk-test/dir_create_deny/planted_rename",
+                "eperm",
+            ],
+            protected_dir,
+            RK_FILE_HOOK_RENAME,
+            false,
+        )
+    });
+
+    run_test(checks, "file_link_into_protected_dir_denied", || {
+        plant_denied(
+            &mut ring,
+            "file_link",
+            &[
+                "/run/rk-test/file_link_into_src",
+                "/run/rk-test/dir_create_deny/planted_link",
+                "eperm",
+            ],
+            protected_dir,
+            RK_FILE_HOOK_LINK,
+            false,
+        )
+    });
+
+    run_test(checks, "file_symlink_into_protected_dir_denied", || {
+        plant_denied(
+            &mut ring,
+            "file_symlink",
+            &[
+                "/run/rk-test/file_read_deny",
+                "/run/rk-test/dir_create_deny/planted_symlink",
+                "eperm",
+            ],
+            protected_dir,
+            RK_FILE_HOOK_CREATE,
+            false,
+        )
+    });
+
+    run_test(checks, "file_mknod_into_protected_dir_denied", || {
+        plant_denied(
+            &mut ring,
+            "file_mkfifo",
+            &["/run/rk-test/dir_create_deny/planted_fifo", "eperm"],
+            protected_dir,
+            RK_FILE_HOOK_CREATE,
+            false,
+        )
+    });
+
+    // The event names the directory receiving the name; the rule matched on
+    // its ancestor create_subtree.
+    run_test(checks, "file_rename_into_protected_subtree_denied", || {
+        plant_denied(
+            &mut ring,
+            "file_rename",
+            &[
+                "/run/rk-test/file_rename_into_src",
+                "/run/rk-test/create_subtree/inner/planted_rename",
+                "eperm",
+            ],
+            "/run/rk-test/create_subtree/inner",
+            RK_FILE_HOOK_RENAME,
+            true,
+        )
+    });
+
+    run_test(checks, "file_rename_within_unprotected_dir_allowed", || {
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_rename",
+            &[
+                "/run/rk-test/file_rename_into_src",
+                "/run/rk-test/file_rename_into_moved",
+                "ok",
+            ],
+        )?;
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce",
+            "file_rename",
+            &[
+                "/run/rk-test/file_rename_into_moved",
+                "/run/rk-test/file_rename_into_src",
+                "ok",
+            ],
+        )?;
+        Ok("rename into a directory without a create rule still succeeds".into())
+    });
+
     run_test(checks, "file_chmod_denied", || {
         let (dev, ino) = file_identity("/run/rk-test/file_chmod_deny")?;
         drain_ringbuf(&mut ring)?;
@@ -2500,6 +2650,13 @@ fn drain_ringbuf(rb: &mut RingBuf<MapData>) -> Result<()> {
     Ok(())
 }
 
+/// Index of the socket-creation decision counter for `verdict` (`enum rk_verdict`).
+fn sock_create_counter(verdict: u32) -> u32 {
+    rk_counter::RK_CNT_DECISION_BASE
+        + rk_ebpf_common::rk_hook::RK_HOOK_SOCK_CREATE * rk_ebpf_common::RK_VERDICTS
+        + verdict
+}
+
 /// Index of the TUN/TAP decision counter for `verdict` (`enum rk_verdict`).
 fn tun_counter(verdict: u32) -> u32 {
     rk_counter::RK_CNT_DECISION_BASE
@@ -2728,11 +2885,47 @@ fn file_rule_id(
         .with_context(|| format!("file rule for {path} in profile {profile} not found"))
 }
 
+/// (superblock device, inode) in the kernel encoding: what file events carry.
 #[cfg(target_os = "linux")]
 fn file_identity(path: &str) -> Result<(u64, u64)> {
-    use std::os::unix::fs::MetadataExt;
-    let meta = fs::metadata(path).with_context(|| format!("stat {path}"))?;
-    Ok((meta.dev(), meta.ino()))
+    let id = rk_sensor::identity::MountTable::new()
+        .identity(Path::new(path))
+        .with_context(|| format!("resolve {path}"))?;
+    Ok((id.dev, id.ino))
+}
+
+/// Runs a name-creating `workload` whose new name lands in `dir` and expects
+/// EPERM, no new entry, and a create-deny file event on `dir` from `hook`.
+/// The new name is the second-to-last argument.
+#[cfg(target_os = "linux")]
+fn plant_denied(
+    ring: &mut RingBuf<MapData>,
+    workload: &str,
+    args: &[&str],
+    dir: &str,
+    hook: u16,
+    subtree: bool,
+) -> Result<String> {
+    let (dev, ino) = file_identity(dir)?;
+    drain_ringbuf(ring)?;
+    spawn_child("/sys/fs/cgroup/rk.slice/enforce", workload, args)?;
+    let target = args[args.len() - 2];
+    anyhow::ensure!(
+        fs::symlink_metadata(target).is_err(),
+        "{target} exists after the denied {workload}"
+    );
+    let ev = poll_file_event(ring, Duration::from_secs(2), |e| {
+        e.file_dev == dev && e.file_ino == ino && e.hook == hook
+    })?;
+    if ev.verdict != rk_verdict::RK_VERDICT_DENY as u8
+        || (ev.access & RK_FILE_CREATE) == 0
+        || (subtree && (ev.flags & RK_FILE_EV_SUBTREE) == 0)
+    {
+        anyhow::bail!("event mismatch for {workload} into {dir}: {ev:?}");
+    }
+    Ok(format!(
+        "{workload} into {dir} denied with EPERM, nothing created; create-deny event on the directory verified"
+    ))
 }
 
 #[cfg(target_os = "linux")]
@@ -2989,6 +3182,8 @@ fn setup_environment() {
         "file_rename_exchange_b",
         "file_rename_src_allowed",
         "file_link_deny",
+        "file_rename_into_src",
+        "file_link_into_src",
         "file_chmod_deny",
         "file_hardlink_base",
         "file_bind_base",
@@ -3005,6 +3200,7 @@ fn setup_environment() {
     }
 
     let _ = fs::create_dir_all("/run/rk-test/file_unlinkat_dir_deny");
+    let _ = fs::create_dir_all("/run/rk-test/create_subtree/inner");
     let _ = fs::create_dir_all("/run/rk-test/dir_create_deny");
 
     let _ = fs::remove_file("/run/rk-test/file_hardlink_alias");

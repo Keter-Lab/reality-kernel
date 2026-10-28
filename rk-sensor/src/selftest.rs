@@ -375,11 +375,15 @@ mod linux {
             .map_err(|e| ctx("stat temporary cgroup", e))?
             .ino();
         fs::write(probe_file, b"rk").map_err(|e| ctx("create probe file", e))?;
-        let probe_meta = fs::metadata(probe_file).map_err(|e| ctx("stat probe file", e))?;
+        // The superblock device the hook reports, not st_dev (they differ on
+        // btrfs; see crate::identity).
+        let probe = crate::identity::MountTable::new()
+            .identity(probe_file)
+            .map_err(|e| ctx("resolve probe file", e))?;
         let expected = ExpectedFile {
             cgroup_id,
-            ino: probe_meta.ino(),
-            dev: kernel_dev(probe_meta.dev()),
+            ino: probe.ino,
+            dev: probe.dev,
             name: probe_file
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())

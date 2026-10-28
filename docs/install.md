@@ -115,7 +115,11 @@ Removal stops the service and runs `rk-sensor --uninstall`, which detaches
 every program: protection ends, explicitly. The private audit key and the
 engine state are deleted (`dpkg --remove` keeps them; `--purge` and `rpm -e`
 delete them). The audit logs and the public key stay, as evidence; delete
-`/var/log/rk` and `/var/lib/rk` yourself when you no longer need them.
+`/var/log/rk` and `/var/lib/rk` yourself when you no longer need them. If
+you install again after a purge, the sensor will not replace the kept
+`audit.key.pub` with a new key's: move it aside first (keep it to verify
+the old segments, with `rk audit verify --pubkey OLD --pubkey NEW`), or the
+audit log stays off ([audit.md](audit.md#reading-and-verifying)).
 
 To end protection without removing the package: `sudo rk-sensor --uninstall`
 after stopping the service.

@@ -6,7 +6,7 @@
 
 use std::fs;
 use std::io::Write as _;
-use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -49,26 +49,34 @@ impl AuditKey {
 
     /// Loads the key at `path`, creating it (0600, directory 0700) and its
     /// public half at `<path>.pub` when it does not exist. An existing key
-    /// readable by anyone but its owner is refused.
+    /// readable by anyone but its owner, owned by another user, or in a
+    /// directory others can write is refused. A published `<path>.pub` is
+    /// never rewritten: one that disagrees with the private key, or one that
+    /// exists without it, is an error, because the published key is what
+    /// verifiers trust (docs/audit.md).
     pub fn load_or_create(path: &Path) -> Result<Self> {
+        let public = public_path(path);
         match fs::read(path) {
             Ok(bytes) => {
-                let mode = fs::metadata(path)?.permissions().mode();
-                if mode & 0o077 != 0 {
-                    bail!(
-                        "{}: audit key is accessible to group or others (mode {:o})",
-                        path.display(),
-                        mode & 0o777
-                    );
-                }
+                check_location(path)?;
                 let seed: [u8; SEED_LEN] = bytes.as_slice().try_into().with_context(|| {
                     format!("{}: expected a {SEED_LEN}-byte key", path.display())
                 })?;
                 let key = Self::from_seed(seed);
-                key.write_public(&public_path(path))?;
+                key.publish(&public)?;
                 Ok(key)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if public.exists() {
+                    bail!(
+                        "{}: a published audit public key exists without its private key {}; \
+                         refusing to generate a new key that would replace it. If the key \
+                         change is intended, move the old public key aside (keep it to verify \
+                         the older segments) and start again",
+                        public.display(),
+                        path.display()
+                    );
+                }
                 let key = Self::generate()?;
                 if let Some(dir) = path.parent() {
                     fs::create_dir_all(dir)?;
@@ -82,20 +90,51 @@ impl AuditKey {
                     .with_context(|| format!("create {}", path.display()))?;
                 file.write_all(&key.signing.to_bytes())?;
                 file.sync_all()?;
-                key.write_public(&public_path(path))?;
+                key.publish(&public)?;
                 Ok(key)
             }
             Err(e) => Err(e).with_context(|| format!("read {}", path.display())),
         }
     }
 
-    fn write_public(&self, path: &Path) -> Result<()> {
-        let text = format!("{}\n", hex::encode(self.public_key()));
-        if fs::read_to_string(path).ok().as_deref() != Some(text.as_str()) {
-            fs::write(path, text).with_context(|| format!("write {}", path.display()))?;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o644))?;
+    /// Writes the public half to `path` unless it is there already; refuses
+    /// to replace a different one.
+    fn publish(&self, path: &Path) -> Result<()> {
+        match fs::read_to_string(path) {
+            Ok(existing) => {
+                let published = parse_public_key(&existing).with_context(|| {
+                    format!(
+                        "{}: published audit public key is unreadable",
+                        path.display()
+                    )
+                })?;
+                if published != self.public_key() {
+                    bail!(
+                        "{}: published audit public key {} does not match the private key {}; \
+                         refusing to overwrite it. Either the private key or the published key \
+                         was replaced: find out which before restoring one of them",
+                        path.display(),
+                        key_id(&published),
+                        self.key_id()
+                    );
+                }
+                Ok(())
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let mut file = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o644)
+                    .open(path)
+                    .with_context(|| format!("create {}", path.display()))?;
+                file.write_all(format!("{}\n", hex::encode(self.public_key())).as_bytes())?;
+                file.sync_all()?;
+                // The mode given to open() is filtered by the umask.
+                fs::set_permissions(path, fs::Permissions::from_mode(0o644))?;
+                Ok(())
+            }
+            Err(e) => Err(e).with_context(|| format!("read {}", path.display())),
         }
-        Ok(())
     }
 
     pub fn public_key(&self) -> [u8; 32] {
@@ -109,6 +148,46 @@ impl AuditKey {
     pub fn sign(&self, message: &[u8]) -> [u8; 64] {
         self.signing.sign(message).to_bytes()
     }
+}
+
+/// An existing key must be private to its owner, owned by the user that uses
+/// it (root, for the sensor), and in a directory no one else can write:
+/// otherwise someone else could have read it, or could swap in their own.
+fn check_location(path: &Path) -> Result<()> {
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    let euid = unsafe { libc::geteuid() };
+    let meta = fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
+    let mode = meta.permissions().mode();
+    if mode & 0o077 != 0 {
+        bail!(
+            "{}: audit key is accessible to group or others (mode {:o})",
+            path.display(),
+            mode & 0o777
+        );
+    }
+    if meta.uid() != euid {
+        bail!(
+            "{}: audit key is owned by uid {}, not by uid {euid} that uses it",
+            path.display(),
+            meta.uid()
+        );
+    }
+    let dir = match path.parent() {
+        Some(d) if !d.as_os_str().is_empty() => d,
+        _ => Path::new("."),
+    };
+    let dmeta = fs::metadata(dir).with_context(|| format!("stat {}", dir.display()))?;
+    let dmode = dmeta.permissions().mode();
+    if dmeta.uid() != euid || dmode & 0o022 != 0 {
+        bail!(
+            "{}: the audit key's directory must be owned by uid {euid} and writable by no one \
+             else (owner uid {}, mode {:o})",
+            dir.display(),
+            dmeta.uid(),
+            dmode & 0o777
+        );
+    }
+    Ok(())
 }
 
 /// `<key>.pub`.
@@ -182,6 +261,50 @@ mod tests {
         assert_eq!(parse_public_key(&published).unwrap(), first.public_key());
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         assert!(AuditKey::load_or_create(&path).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn published_public_key_is_never_rewritten() {
+        let dir = std::env::temp_dir().join(format!("rk-audit-pub-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let path = dir.join("audit.key");
+        let first = AuditKey::load_or_create(&path).unwrap();
+        let public = public_path(&path);
+
+        // The private key replaced: the published key disagrees, and stays.
+        let other = AuditKey::from_seed([3; 32]);
+        fs::write(&path, other.signing.to_bytes()).unwrap();
+        let err = AuditKey::load_or_create(&path).err().unwrap().to_string();
+        assert!(err.contains("does not match the private key"), "{err}");
+        let published = parse_public_key(&fs::read_to_string(&public).unwrap()).unwrap();
+        assert_eq!(published, first.public_key());
+
+        // The private key removed: no new key replaces the published one.
+        fs::remove_file(&path).unwrap();
+        let err = AuditKey::load_or_create(&path).err().unwrap().to_string();
+        assert!(err.contains("without its private key"), "{err}");
+        assert!(!path.exists());
+
+        // Moved aside on purpose: a new key is generated and published.
+        fs::rename(&public, dir.join("audit.key.pub.old")).unwrap();
+        let new = AuditKey::load_or_create(&path).unwrap();
+        let published = parse_public_key(&fs::read_to_string(&public).unwrap()).unwrap();
+        assert_eq!(published, new.public_key());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn key_in_a_directory_others_can_write_is_refused() {
+        let dir = std::env::temp_dir().join(format!("rk-audit-keydir-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let path = dir.join("audit.key");
+        AuditKey::load_or_create(&path).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o777)).unwrap();
+        let err = AuditKey::load_or_create(&path).err().unwrap().to_string();
+        assert!(err.contains("writable by no one else"), "{err}");
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(AuditKey::load_or_create(&path).is_ok());
         let _ = fs::remove_dir_all(&dir);
     }
 }

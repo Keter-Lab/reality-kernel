@@ -102,8 +102,8 @@ chain and signatures like `rk audit verify` (refusing on failure unless
 
 | From | Suggested |
 |---|---|
-| exec records | `exec.allow` with the absolute path of each distinct executed file. Records name the file as passed to `execve` (possibly relative), and an interpreter's record carries the script's name, so files are matched by identity: the record's device and inode against the record's path when absolute, then the `PATH` directories and any `--search DIR`. A file that cannot be located is listed for the human, never guessed. Interpreters (`sh`, `bash`, `python3`, `node`, …) are allowed but called out: allowing one allows any script it runs |
-| connect / sendmsg records | `network.allow` with one rule per destination address and protocol, listing the observed ports. Loopback is grouped. Public addresses are called out: a SaaS API behind a CDN changes address, and hostname rules arrive in v0.3.0 |
+| exec records | `exec.allow` with the absolute path of each distinct executed file. Records name the file as passed to `execve` (possibly relative), and an interpreter's record carries the script's name, so files are matched by identity: the record's device and inode against the record's path when absolute, then the `PATH` directories and any `--search DIR`. A file that cannot be located is listed for the human, never guessed; nor is a path that now holds a different file (another device/inode than the one that ran: it was replaced after it ran), which is listed and never learned. Interpreters (`sh`, `bash`, `python3`, `node`, …) are allowed but called out: allowing one allows any script it runs |
+| connect / sendmsg records | `network.allow` with one rule per destination address and protocol, listing the observed ports. Loopback is grouped. The kernel holds at most eight port/protocol ranges per address (docs/policy.md): past that the lowest eight are kept and the rest listed for the human, never widened into one covering range. Public addresses are called out: a SaaS API behind a CDN changes address, and hostname rules arrive in v0.3.0 |
 | file records | the `files.deny` entries from the starter profile, minus nothing: each one the agent read is listed with how often, so the human decides whether to allow it (a commented-out rule) or keep it denied |
 | raw / packet socket, TUN/TAP records | never allowed automatically; listed for the human |
 
@@ -112,6 +112,14 @@ and `exec.default` `"deny"` and a header comment giving the log range and
 record counts, written to stdout or `--out FILE`. It is never applied; the
 next step is `rk policy diff` then `rk policy apply`. `--since` limits the
 window. A profile with no records is an error, not an empty allow list.
+
+Both commands run as root, often in a directory the user or the agent can
+write (`--out agent.toml`). No file is opened through a symbolic link: the
+policy and `--out` file are staged under a fresh name created with
+`O_CREAT|O_EXCL|O_NOFOLLOW` next to the destination and renamed over it
+(an existing regular file is replaced; a symbolic link or anything else at
+the destination is refused), and the `--force` backup is created exclusively
+(mode 0600; a taken name moves on to `.bak.<timestamp>.1`, ...).
 
 ### 3.4 Secret files
 
