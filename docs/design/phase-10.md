@@ -52,13 +52,17 @@ So replacement is **make-before-break**:
    policy is the stricter of the two, never looser.
 4. Events the old programs left in the old ring buffer are drained through
    the audit observer, so the audit log keeps them.
-5. The old pin set is removed (its links detach: nothing else holds them),
-   and `rk-next` is renamed to `rk` (bpffs supports rename).
+5. The old pin set is renamed to `rk-old`, `rk-next` is renamed to `rk`
+   (bpffs supports rename), and `rk-old` is removed (its links detach:
+   nothing else holds them).
 
 Crash safety: a sensor that dies in steps 1–4 leaves `rk` attached;
-the next start deletes the partial `rk-next` and starts over. One that dies
-between removing `rk` and the rename leaves only `rk-next`, which the next
-start renames and adopts. At no point is neither set attached.
+the next start deletes the partial `rk-next` and starts over, but only while
+`rk` still holds links: if it holds none and `rk-next` does, `rk-next` is the
+only set still attached and takes its place. One that dies during step 5
+leaves whole sets under `rk-old`, `rk-next` and `rk`, never a half-removed
+`rk`; the next start finishes the switch (or, with only `rk-old` left, puts
+it back). At no point is neither set attached.
 
 The old programs check the old heartbeat, which stops being renewed when the
 old sensor exits. A package upgrade takes well under the 10 s default
@@ -194,8 +198,9 @@ checked by the `traceability` job like the VM and kind reports.
   start its heartbeat, attach every program, carry the policy over (the old
   pin set's state file, else the policy file; if neither works the new set is
   removed and the old one keeps enforcing), drain the old ring buffer through
-  the audit observer, then remove `rk` and rename `rk-next`.
-  `rk-sensor --uninstall` also removes a leftover `rk-next`.
+  the audit observer, then rename `rk` to `rk-old`, rename `rk-next` to `rk`
+  and remove `rk-old`.
+  `rk-sensor --uninstall` also removes a leftover `rk-next` or `rk-old`.
 - **rpm has no purge**: `rpm -e` deletes the private key and engine state,
   like `dpkg --purge`; `dpkg --remove` keeps them.
 - **Rocky Linux 9 container**: built in CI from the digest-pinned

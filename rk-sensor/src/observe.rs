@@ -168,7 +168,7 @@ impl Observer {
             if body.flags & rk_exec_flag::RK_EXEC_DECISION == 0 {
                 let mut names = *strings;
                 if let Some(path) = names.next() {
-                    self.procs.record_exec(hdr.tgid, text(path));
+                    self.procs.record_exec(hdr.tgid, text(path), hdr.ts_ns);
                 }
                 if !self.include_allow {
                     return;
@@ -194,7 +194,7 @@ impl Observer {
             .registry
             .as_ref()
             .and_then(|r| r.session_for_cgroup(hdr.cgroup_id));
-        let proc_info = self.procs.lookup(hdr.tgid);
+        let proc_info = self.procs.lookup(hdr.tgid, hdr.ts_ns);
         let record = ocsf::decision(&Decision {
             time_ms: wall_ms(hdr.ts_ns),
             activity: activity_owned.as_activity(),

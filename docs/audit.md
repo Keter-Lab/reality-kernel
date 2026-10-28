@@ -128,7 +128,7 @@ the kernel's boot-time stamp), `device.hostname` and `severity_id`.
 | `file.name`, `path` | the name the kernel reported (a path when it is absolute) |
 | `unmapped.rk.verdict` | `deny`, `audit_would_deny`, `allow` |
 | `unmapped.rk.rule_id`, `policy_gen`, `cgroup_id`, `gid` | from the kernel record |
-| `unmapped.rk.enrichment` | `exec_record`, `procfs` or `unavailable` |
+| `unmapped.rk.enrichment` | `exec_record`, `procfs` or `unavailable`. The process table keys on tgid and checks each process's start time against the decision's, so after pid reuse it reports `unavailable` rather than another process's executable (start times have clock-tick granularity) |
 | `unmapped.rk.file_dev`, `file_ino` | exec and file identity (kernel `dev_t`) |
 | `unmapped.rk.access` | file access requested: `read`, `write`, `exec`, `create`, `delete`, `rename`, `truncate`, `link`, `setattr` |
 | `unmapped.rk.lost.kernel`, `.channel` | Application Error only: events lost in the kernel (ring buffer full, emission failed) and in the userspace pipeline |

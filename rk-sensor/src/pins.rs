@@ -98,17 +98,65 @@ pub fn next_root(root: &Path) -> PathBuf {
     PathBuf::from(p)
 }
 
+/// `<root>-old`, where the replaced pin set waits during the switch.
+fn old_root(root: &Path) -> PathBuf {
+    let mut p = root.as_os_str().to_owned();
+    p.push("-old");
+    PathBuf::from(p)
+}
+
+/// Whether the pin set at `root` still holds pinned links, i.e. still has
+/// programs attached through it.
+fn holds_links(root: &Path) -> bool {
+    fs::read_dir(links_dir(root))
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false)
+}
+
 /// Puts the pin directories in a consistent state after a sensor that died
-/// mid-replacement: with both `root` and `<root>-next`, the replacement had
-/// not switched yet, so the partial `-next` is dropped (the old set is still
-/// attached); with only `-next`, the old set was already removed, so `-next`
-/// becomes `root`. Returns what it did, for the log.
+/// mid-replacement, never deleting the only set that holds links:
+/// - `<root>-old` exists: the switch had started ([`finish_replacement`]
+///   renames the old set away only once the new one is ready). The new set
+///   takes `root` and the old one is removed; with no new set, the old one is
+///   put back.
+/// - `root` and `<root>-next`: the replacement had not switched yet, so the
+///   partial `-next` is dropped and the old set stays attached, unless the
+///   old set holds no links any more while `-next` does (an older sensor
+///   removed the old set in place and died part-way): then `-next` is the
+///   only set still enforcing and takes `root`.
+/// - only `-next`: the old set was already removed, so `-next` becomes `root`.
+///
+/// Returns what it did, for the log.
 pub fn reconcile(root: &Path) -> Result<Option<&'static str>> {
     let next = next_root(root);
+    let old = old_root(root);
+    let mut done = None;
+    if old.exists() {
+        if !root.exists() && next.exists() {
+            fs::rename(&next, root)
+                .with_context(|| format!("rename {} to {}", next.display(), root.display()))?;
+        }
+        if root.exists() {
+            fs::remove_dir_all(&old).with_context(|| format!("remove {}", old.display()))?;
+            done = Some("completed an interrupted replacement");
+        } else {
+            fs::rename(&old, root)
+                .with_context(|| format!("rename {} to {}", old.display(), root.display()))?;
+            done = Some("restored the pin set of an interrupted replacement; it stays attached");
+        }
+    }
     if !next.exists() {
-        return Ok(None);
+        return Ok(done);
     }
     if root.exists() {
+        if !holds_links(root) && holds_links(&next) {
+            fs::remove_dir_all(root).with_context(|| format!("remove {}", root.display()))?;
+            fs::rename(&next, root)
+                .with_context(|| format!("rename {} to {}", next.display(), root.display()))?;
+            return Ok(Some(
+                "the running pin set had lost its links: the replacement, still attached, takes its place",
+            ));
+        }
         fs::remove_dir_all(&next).with_context(|| format!("remove {}", next.display()))?;
         Ok(Some(
             "removed an unfinished replacement; the running object stays attached",
@@ -120,14 +168,20 @@ pub fn reconcile(root: &Path) -> Result<Option<&'static str>> {
     }
 }
 
-/// Ends a replacement: removes the old pin set (its links detach, nothing
-/// else holds them) and moves the new one to `root`. Call only once the new
-/// programs are attached and the new maps hold the policy.
+/// Ends a replacement: the new pin set (`<root>-next`) takes `root` and the
+/// old one is removed, which detaches its links. Call only once the new
+/// programs are attached and the new maps hold the policy. The old set is
+/// renamed away before anything is deleted, so a crash at any step leaves
+/// whole pin sets that [`reconcile`] can finish with: never a half-removed
+/// live set next to a replacement it would discard.
 pub fn finish_replacement(root: &Path) -> Result<()> {
-    fs::remove_dir_all(root).with_context(|| format!("remove {}", root.display()))?;
+    let old = old_root(root);
     let next = next_root(root);
+    fs::rename(root, &old)
+        .with_context(|| format!("rename {} to {}", root.display(), old.display()))?;
     fs::rename(&next, root)
-        .with_context(|| format!("rename {} to {}", next.display(), root.display()))
+        .with_context(|| format!("rename {} to {}", next.display(), root.display()))?;
+    fs::remove_dir_all(&old).with_context(|| format!("remove {}", old.display()))
 }
 
 /// Abandons a replacement that could not be completed: the new pin set is
@@ -295,8 +349,9 @@ pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
 /// holds it. Returns whether anything was removed.
 pub fn uninstall(root: &Path) -> Result<bool> {
     let mut removed = false;
-    // `-next` too: a replacement interrupted mid-way is attached as well.
-    for dir in [next_root(root), root.to_path_buf()] {
+    // `-next` and `-old` too: a replacement interrupted mid-way is attached
+    // as well.
+    for dir in [next_root(root), old_root(root), root.to_path_buf()] {
         if dir.exists() {
             fs::remove_dir_all(&dir).with_context(|| format!("remove {}", dir.display()))?;
             removed = true;
@@ -381,6 +436,74 @@ mod tests {
         finish_replacement(&root).unwrap();
         assert_eq!(tag(&root), "new");
         assert!(!next_root(&root).exists());
+    }
+
+    fn add_link(dir: &Path) {
+        fs::create_dir_all(links_dir(dir)).unwrap();
+        fs::write(links_dir(dir).join("rk_connect4"), "").unwrap();
+    }
+
+    /// A replacement is deleted only while the live set still holds links:
+    /// a live set that lost them (removed part-way by an interrupted switch)
+    /// gives way to the replacement, which is the only set still attached.
+    #[test]
+    fn reconcile_never_deletes_the_only_set_holding_links() {
+        let root = scratch("lost-links");
+        mark(&root, "old");
+        fs::create_dir_all(links_dir(&root)).unwrap(); // emptied
+        mark(&next_root(&root), "new");
+        add_link(&next_root(&root));
+        assert!(reconcile(&root).unwrap().is_some());
+        assert_eq!(tag(&root), "new");
+        assert!(holds_links(&root));
+        assert!(!next_root(&root).exists());
+
+        // With links still in the live set, the replacement is the one dropped.
+        let root = scratch("kept-links");
+        mark(&root, "old");
+        add_link(&root);
+        mark(&next_root(&root), "new");
+        add_link(&next_root(&root));
+        assert!(reconcile(&root).unwrap().is_some());
+        assert_eq!(tag(&root), "old");
+        assert!(!next_root(&root).exists());
+    }
+
+    /// Every crash point of `finish_replacement` leaves whole sets that
+    /// reconcile finishes with.
+    #[test]
+    fn reconcile_finishes_every_step_of_a_switch() {
+        // Old set renamed away, new one not moved yet.
+        let root = scratch("step1");
+        mark(&old_root(&root), "old");
+        mark(&next_root(&root), "new");
+        assert!(reconcile(&root).unwrap().is_some());
+        assert_eq!(tag(&root), "new");
+        assert!(!old_root(&root).exists() && !next_root(&root).exists());
+
+        // New set in place, old one not removed yet.
+        let root = scratch("step2");
+        mark(&old_root(&root), "old");
+        mark(&root, "new");
+        assert!(reconcile(&root).unwrap().is_some());
+        assert_eq!(tag(&root), "new");
+        assert!(!old_root(&root).exists());
+
+        // Only the renamed old set: put it back.
+        let root = scratch("step0");
+        mark(&old_root(&root), "old");
+        assert!(reconcile(&root).unwrap().is_some());
+        assert_eq!(tag(&root), "old");
+        assert!(!old_root(&root).exists());
+
+        // A completed switch leaves nothing behind.
+        let root = scratch("done");
+        mark(&root, "old");
+        mark(&next_root(&root), "new");
+        finish_replacement(&root).unwrap();
+        assert_eq!(tag(&root), "new");
+        assert!(!old_root(&root).exists() && !next_root(&root).exists());
+        assert_eq!(reconcile(&root).unwrap(), None);
     }
 
     #[test]

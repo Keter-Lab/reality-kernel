@@ -8,6 +8,51 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `rk status` and `rk policy diff` now require a policy admin (root or a
+  member of group `rk`), like `rk policy apply`: they disclose the whole
+  policy and the agent inventory.
+- `rk run` refuses an unknown profile and one the caller may not launch with
+  the same message, so an unprivileged caller cannot probe which profiles
+  exist. A policy admin still gets the reason.
+- rk-nri: while rk-sensor is unreachable, every container is refused except
+  unannotated pods in an explicit exempt set (new Helm value
+  `exemptNamespaces`, default `kube-system`, plus the chart's own namespace).
+  Before, any namespace missing from the chart's `namespaces` list started
+  ungoverned, including one given rules after the plugin started.
+  `-governed-namespaces` is ignored. `failurePolicy: Ignore` is now logged
+  as starting containers UNGOVERNED, at startup and for each container.
+
+### Fixed
+
+- Launcher fork fallback (kernels without `clone3`): the child now runs the
+  command only after the explicit release byte, and is killed and reaped if
+  the cgroup attach fails. Before, a failed attach could leave a uid-0 child
+  that later ran the command in the daemon's own, ungoverned cgroup. A
+  launch whose `/proc/<pid>/cgroup` cannot be read is now a failed launch.
+- `rk` Signal requests go through the agent's pidfd, and the agent leaves
+  the registry as soon as it is reaped, so a signal can never reach a
+  process that reused the pid.
+- Container binding: the cgroup read from the runtime's pid must name the
+  container id, and the process is held with a pidfd while it is read, so a
+  recycled pid cannot bind another workload's cgroup.
+- Audit enrichment checks process start times, so after pid reuse a decision
+  is recorded with `enrichment: unavailable` instead of naming another
+  process's executable.
+- A sensor restart that adopts pins without a usable state file keeps every
+  cgroup binding in the kernel instead of removing all that the policy file
+  does not name, which unbound every running agent and container.
+- A runtime binding whose cgroup is gone no longer blocks removing its
+  profile; the next apply drops it.
+- An apply that would overflow a map is refused before the generation flip
+  (and by `--dry-run` alike), and a failure after the flip no longer leaves
+  the daemon reporting the previous policy.
+- An interrupted pin-set replacement can no longer delete the only pin set
+  still holding links: the old set is renamed away before anything is
+  removed, and a replacement is discarded only while the live set holds
+  links.
+
 ## [0.2.0] - 2026-10-24
 
 ### Added
