@@ -383,7 +383,7 @@ Every enforced or audit-would-deny decision appears in the audit log with its ru
 
 ### audit_tamper
 
-Tampering with a stored audit batch is detected by verification
+Tampering with a stored audit batch is detected by verification; so are an emptied log, removed oldest segments, a change of signing key, and (given a recorded chain head) removed newest batches; startup recovery never signs records the writer did not write, and the published public key is never rewritten; rk audit tail escapes terminal control characters a governed process put in a record
 
 - `audit_tamper_detected` (VM suite, every kernel)
 - `audit_verify_detects_modified_record` (Rust test)
@@ -392,7 +392,18 @@ Tampering with a stored audit batch is detected by verification
 - `audit_verify_detects_inserted_batch` (Rust test)
 - `audit_verify_detects_bad_signature_and_pinned_key` (Rust test)
 - `deleting_the_middle_segment_is_detected` (Rust test)
-- `reopening_continues_the_chain_and_seals_leftovers` (Rust test)
+- `reopening_continues_the_chain_and_sets_leftovers_aside` (Rust test)
+- `recovery_does_not_sign_appended_records` (Rust test)
+- `empty_audit_dir_fails_verification` (Rust test)
+- `signing_key_change_fails_unless_both_keys_are_pinned` (Rust test)
+- `expected_head_must_be_on_the_chain` (Rust test)
+- `published_public_key_is_never_rewritten` (Rust test)
+- `tail_escapes_terminal_control_sequences` (Rust test)
+- `tail_json_escapes_terminal_control_sequences` (Rust test)
+- `recovery_never_trusts_appended_control_lines` (Rust test)
+- `a_log_of_headers_alone_does_not_verify` (Rust test)
+- `a_failed_verification_reports_no_head` (Rust test)
+- `trailer_fields_cannot_be_edited` (Rust test)
 
 ### ocsf_schema
 

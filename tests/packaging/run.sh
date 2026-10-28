@@ -169,8 +169,14 @@ t_fresh_install() {
     fi
     grep -qi "not permitted" <<<"$out" || fail "agent failed for another reason: $out"
 
-    sleep 2 # one audit batch interval
-    audit_verifies || fail "audit log does not verify: $(rk audit verify 2>&1 | tail -n 5)"
+    # A log verifies once it holds a sealed batch; the denies above are sealed
+    # with the next audit batch, later on a slow runner (like wait_generation).
+    local verified=0
+    for _ in $(seq 1 30); do
+        audit_verifies && { verified=1; break; }
+        sleep 0.5
+    done
+    [ "$verified" = 1 ] || fail "audit log does not verify: $(rk audit verify 2>&1 | tail -n 5)"
     rk audit tail -n 50 --verdict deny | contains "DENY" || fail "no deny in the audit log"
     out="$(rk doctor --json)"
     code=$?

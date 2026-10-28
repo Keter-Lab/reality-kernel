@@ -658,7 +658,14 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
             None => None,
         };
         let report = rk_audit::chain::verify_dir(&opts.dir, pinned)?;
-        if !report.ok() {
+        // A log with no sealed batch fails verification (it proves nothing),
+        // but here it only means the agent has not run yet: nothing in it is
+        // read, and the "no decision records" error below says what to do.
+        let nothing_sealed = report.batches == 0
+            && report.records == 0
+            && report.unsealed_tail == 0
+            && report.problems.iter().all(|p| p.segment.is_empty());
+        if !report.ok() && !nothing_sealed {
             let problems: Vec<String> = report
                 .problems
                 .iter()

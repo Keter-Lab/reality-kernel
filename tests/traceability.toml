@@ -316,8 +316,8 @@ tests = ["vm:audit_every_decision_logged", "vm:audit_records_loss", "unit:deny_a
 [[criterion]]
 phase = "9"
 id = "audit_tamper"
-text = "Tampering with a stored audit batch is detected by verification"
-tests = ["vm:audit_tamper_detected", "unit:audit_verify_detects_modified_record", "unit:audit_verify_detects_deleted_batch", "unit:audit_verify_detects_reordered_batches", "unit:audit_verify_detects_inserted_batch", "unit:audit_verify_detects_bad_signature_and_pinned_key", "unit:deleting_the_middle_segment_is_detected", "unit:reopening_continues_the_chain_and_seals_leftovers"]
+text = "Tampering with a stored audit batch is detected by verification; so are an emptied log, removed oldest segments, a change of signing key, and (given a recorded chain head) removed newest batches; startup recovery never signs records the writer did not write, and the published public key is never rewritten; rk audit tail escapes terminal control characters a governed process put in a record"
+tests = ["vm:audit_tamper_detected", "unit:audit_verify_detects_modified_record", "unit:audit_verify_detects_deleted_batch", "unit:audit_verify_detects_reordered_batches", "unit:audit_verify_detects_inserted_batch", "unit:audit_verify_detects_bad_signature_and_pinned_key", "unit:deleting_the_middle_segment_is_detected", "unit:reopening_continues_the_chain_and_sets_leftovers_aside", "unit:recovery_does_not_sign_appended_records", "unit:empty_audit_dir_fails_verification", "unit:signing_key_change_fails_unless_both_keys_are_pinned", "unit:expected_head_must_be_on_the_chain", "unit:published_public_key_is_never_rewritten", "unit:tail_escapes_terminal_control_sequences", "unit:tail_json_escapes_terminal_control_sequences", "unit:recovery_never_trusts_appended_control_lines", "unit:a_log_of_headers_alone_does_not_verify", "unit:a_failed_verification_reports_no_head", "unit:trailer_fields_cannot_be_edited"]
 
 [[criterion]]
 phase = "9"

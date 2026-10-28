@@ -63,8 +63,18 @@ launch a profile; agents never run as root.
 [agent-unprivileged](evidence.md#agent-unprivileged).
 
 ### A3. Someone who edits the audit log
-Any modified, inserted, removed or reordered batch fails `rk audit verify`.
-[audit_tamper](evidence.md#audit_tamper).
+Any modified, inserted, removed or reordered batch fails `rk audit verify`,
+and so do an emptied log, removed oldest segments and a change of signing
+key. The sensor never signs records it did not write: lines it finds after
+the last sealed batch at startup are set aside unsigned. The files can only
+prove that they are consistent with themselves, so the guarantee is
+relative to an anchor kept off the host: verify with `--pubkey` (the public
+key copied at install time) and `--head` (a chain head recorded from the
+metrics). Without them a log rewritten whole under a new key, or with its
+newest batches removed, goes unnoticed. Batches newer than the last recorded
+head are protected only by shipping records off the host (OTLP).
+[audit_tamper](evidence.md#audit_tamper),
+[what verification cannot detect](audit.md#what-verification-detects-and-what-it-cannot).
 
 ### A4. A tampered artifact between the release workflow and the user
 Every release file is signed by this repository's release workflow

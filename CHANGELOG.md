@@ -29,6 +29,49 @@ and container image. The format follows
   `#[ignore]`d or not a `#[test]`, a referenced Python test is marked skip
   or xfail (or would not be collected), or a referenced CI job is disabled
   or has no step left that does anything.
+- Audit log: startup recovery no longer signs records it finds after the
+  last sealed batch. They were sealed with the live key, so anyone who could
+  write the log could get records of their own signed. They are now moved,
+  unsigned, to `<segment>.jsonl.unsealed`, the sensor logs a warning, and
+  `rk audit verify` lists the file. A crash mid-batch therefore loses that
+  batch (at most one second of records) from the verified chain instead of
+  sealing it.
+- Audit recovery trusts only lines that verify: a header or trailer
+  appended to the newest segment can no longer choose where the chain
+  continues (or get the segment's signed batches truncated). Such a segment
+  is left in place for `rk audit verify` to report, or, holding no batch
+  that verifies, moved aside to `<segment>.jsonl.forged`, which fails
+  verification.
+- Audit batches now sign their record count (trailer `"v":2`, hash domain
+  `rk-audit-v2`), and a current trailer cannot carry the `recovered` marker.
+  Logs from rk 0.2.0 still verify.
+- The sensor no longer rewrites a published `audit.key.pub`. If it does not
+  match the private key, or exists without it (as after `dpkg --purge` and a
+  reinstall), the audit log is not opened and the error says why: move the
+  old public key aside if the key change is intended. An existing key owned
+  by another user, or in a directory others can write, is refused.
+- `rk audit tail` escapes control characters (C0, C1, ESC, DEL) and Unicode
+  bidi overrides in what it prints, so a governed process cannot rewrite the
+  operator's terminal through a path or argument; `rk audit verify` and the
+  comments of `rk policy suggest` do the same. `rk audit tail --json` writes
+  them as `\uXXXX` escapes, so its lines are the same JSON values as stored.
+
+### Changed
+
+- `rk audit verify` exits 2 (verification failed) in cases it used to pass
+  with a warning or silently: an empty audit directory or one with no batch
+  that verifies (a header alone is not signed), a change of signing
+  key between segments, and a chain that does not start at batch 0. Repeat
+  `--pubkey` to accept a key rotation, and pass `--allow-pruned` if you
+  removed old segments on purpose. `rk policy suggest` refuses such a log
+  too (or use `--no-verify`).
+- `rk audit verify --head SEQ:HASH` checks that the chain still passes
+  through a head recorded earlier (`rk_audit_head_seq` and the `head_hash`
+  label of `rk_audit_info`, or the new `head:` line of `rk audit verify`,
+  printed only when the log verifies), so
+  removal of the newest batches is detected. docs/audit.md and the threat
+  model now say that trust in the log rests on the pinned key and a recorded
+  head kept off the host.
 
 ## [0.2.0] - 2026-10-24
 
