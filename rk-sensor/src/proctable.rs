@@ -182,10 +182,7 @@ impl ProcTable {
                 let ppid = if e.ppid_tried {
                     e.ppid
                 } else {
-                    let ppid = live
-                        .as_ref()
-                        .filter(|_| same_as_live)
-                        .and_then(|s| s.ppid);
+                    let ppid = live.as_ref().filter(|_| same_as_live).and_then(|s| s.ppid);
                     if let Some(entry) = self.cache.get_mut(&tgid) {
                         entry.ppid = ppid;
                         entry.ppid_tried = true;
@@ -300,13 +297,20 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         std::os::unix::fs::symlink(exe, dir.join("exe")).unwrap();
         let fill = ["0"; 17].join(" ");
-        fs::write(dir.join("stat"), format!("{pid} (x) S 1 {fill} {start} 0 0")).unwrap();
+        fs::write(
+            dir.join("stat"),
+            format!("{pid} (x) S 1 {fill} {start} 0 0"),
+        )
+        .unwrap();
     }
 
     #[test]
     fn starttime_is_field_22() {
         let fill = ["0"; 17].join(" ");
-        assert_eq!(parse_starttime(&format!("7 (a) b) S 1 {fill} 4242 0")), Some(4242));
+        assert_eq!(
+            parse_starttime(&format!("7 (a) b) S 1 {fill} 4242 0")),
+            Some(4242)
+        );
         assert_eq!(parse_starttime("7 (a) S 1 1 1"), None);
     }
 

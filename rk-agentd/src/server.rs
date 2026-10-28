@@ -16,7 +16,9 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::auth::{check_launchable_by, check_policy_admin, get_peer_cred, launch_refusal, PeerCred};
+use crate::auth::{
+    check_launchable_by, check_policy_admin, get_peer_cred, launch_refusal, PeerCred,
+};
 use crate::cgroup::{create_agent_cgroup, drain_and_remove_cgroup, kill_cgroup, open_cgroup_dir};
 use crate::launcher::{pidfd_open, signal_process, spawn_in_cgroup};
 use crate::protocol::{
@@ -966,7 +968,10 @@ mod tests {
     #[test]
     fn placement_check_fails_closed() {
         let expected = "/rk.slice/agent-1";
-        assert_eq!(placement_problem(Some("0::/rk.slice/agent-1\n"), expected), None);
+        assert_eq!(
+            placement_problem(Some("0::/rk.slice/agent-1\n"), expected),
+            None
+        );
         assert_eq!(
             placement_problem(Some("12:cpu:/x\n0::/rk.slice/agent-1\n"), expected),
             None

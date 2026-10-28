@@ -892,7 +892,9 @@ impl PolicyEngine {
                 let paths = cgroup_paths(&self.cgroup_fs, &ids);
                 self.bindings = kernel
                     .into_iter()
-                    .map(|(id, profile)| (id, (paths.get(&id).cloned().unwrap_or_default(), profile)))
+                    .map(|(id, profile)| {
+                        (id, (paths.get(&id).cloned().unwrap_or_default(), profile))
+                    })
                     .collect();
                 self.adopted = self.bindings.clone();
                 if !self.adopted.is_empty() {
@@ -1058,7 +1060,9 @@ impl PolicyEngine {
         let synced = self.sync_bindings(ebpf, bindings);
         self.persist();
         synced.with_context(|| {
-            format!("generation {generation} is live, but not every cgroup binding could be written")
+            format!(
+                "generation {generation} is live, but not every cgroup binding could be written"
+            )
         })?;
         report.bindings = self.bindings.len();
         Ok(report)
@@ -1468,9 +1472,8 @@ impl PolicyEngine {
                         applied.insert(id, old.clone());
                     }
                     if first_err.is_none() {
-                        first_err = Some(
-                            anyhow::Error::from(e).context(format!("bind cgroup {id}")),
-                        );
+                        first_err =
+                            Some(anyhow::Error::from(e).context(format!("bind cgroup {id}")));
                     }
                 }
             }
@@ -1855,7 +1858,10 @@ mod tests {
         let found = cgroup_paths(&root, &ids);
         assert_eq!(found.len(), 2);
         assert_eq!(found[&ino(&agent)], "rk.slice/agent-1");
-        assert_eq!(found[&ino(&pod)], "kubepods.slice/pod-a/cri-containerd-x.scope");
+        assert_eq!(
+            found[&ino(&pod)],
+            "kubepods.slice/pod-a/cri-containerd-x.scope"
+        );
 
         assert!(cgroup_alive(&root, "rk.slice/agent-1", ino(&agent)));
         // Same path, different cgroup: the bound one is gone.
@@ -1896,7 +1902,9 @@ mod tests {
         engine
             .adopted
             .insert(u64::MAX - 3, ("rk.slice/agent-removed".into(), 6));
-        engine.adopted.insert(ino(&static_cg), ("rk.slice/static".into(), 6));
+        engine
+            .adopted
+            .insert(ino(&static_cg), ("rk.slice/static".into(), 6));
 
         // The policy drops `old` and binds `rk.slice/static` itself.
         let text = "[profiles.agent]\nmode = \"audit\"\n[profiles.agent.files]\ninclude = []\n\
@@ -1910,10 +1918,14 @@ mod tests {
         assert_eq!(wanted[&ino(&adopted_pod)].1, 5, "adopted binding unchanged");
         assert_ne!(wanted[&ino(&static_cg)].1, 6, "the static binding wins");
         assert!(!wanted.contains_key(&(u64::MAX - 3)));
-        assert!(engine.dry_run(text).is_ok(), "a stale binding blocked the apply");
+        assert!(
+            engine.dry_run(text).is_ok(),
+            "a stale binding blocked the apply"
+        );
 
         // A live agent still protects its profile.
-        let without_agent = "[profiles.other]\nmode = \"audit\"\n[profiles.other.files]\ninclude = []\n";
+        let without_agent =
+            "[profiles.other]\nmode = \"audit\"\n[profiles.other.files]\ninclude = []\n";
         let e = engine.dry_run(without_agent).unwrap_err().to_string();
         assert!(e.contains("used by running agent"), "{e}");
         fs::remove_dir_all(&root).unwrap();
@@ -1925,9 +1937,20 @@ mod tests {
     fn capacity_is_checked_before_anything_is_written() {
         let mut live = SlotContents::default();
         assert!(check_capacity(&live, CAP_NET, 0, 0, 0, CAP_BINDINGS).is_ok());
-        live.deny.push((0, KeyData { scope: 0, addr: [0; 16] }));
-        let e = check_capacity(&live, CAP_NET, 0, 0, 0, 0).unwrap_err().to_string();
-        assert!(e.contains("network deny") && e.contains("Nothing was changed"), "{e}");
+        live.deny.push((
+            0,
+            KeyData {
+                scope: 0,
+                addr: [0; 16],
+            },
+        ));
+        let e = check_capacity(&live, CAP_NET, 0, 0, 0, 0)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("network deny") && e.contains("Nothing was changed"),
+            "{e}"
+        );
         assert!(check_capacity(&live, 0, 0, CAP_EXEC + 1, 0, 0).is_err());
         assert!(check_capacity(&live, 0, 0, 0, CAP_FILE + 1, 0).is_err());
         assert!(check_capacity(&live, 0, 0, 0, 0, CAP_BINDINGS + 1).is_err());

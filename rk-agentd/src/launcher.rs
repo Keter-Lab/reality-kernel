@@ -455,7 +455,9 @@ fn spawn_fallback_pipe(
     let attached = match ready {
         Some(_) => fs::write(&procs, format!("{pid}\n"))
             .with_context(|| format!("failed to attach child to {}", procs.display())),
-        None => Err(anyhow::anyhow!("child exited before it could be attached to its cgroup")),
+        None => Err(anyhow::anyhow!(
+            "child exited before it could be attached to its cgroup"
+        )),
     };
     if let Err(e) = attached {
         // Closing the release pipe alone makes the child exit; kill it too,
@@ -630,7 +632,10 @@ mod tests {
 
         let (r, w) = cloexec_pipe().unwrap();
         write_byte(&w, 1);
-        assert!(!unsafe { wait_for_release(r.as_raw_fd()) }, "wrong byte released");
+        assert!(
+            !unsafe { wait_for_release(r.as_raw_fd()) },
+            "wrong byte released"
+        );
     }
 
     /// When the cgroup attach fails, the fallback kills and reaps the child
@@ -665,7 +670,10 @@ mod tests {
         let err = spawn_fallback_pipe(&missing_cgroup, ctx).unwrap_err();
         assert!(format!("{err:#}").contains("attach"), "{err:#}");
         std::thread::sleep(std::time::Duration::from_millis(300));
-        assert!(!marker.exists(), "the command ran although the attach failed");
+        assert!(
+            !marker.exists(),
+            "the command ran although the attach failed"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
