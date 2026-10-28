@@ -426,7 +426,7 @@ fn run_audit_verify(
         // Recorded off the host, this is what a later --head checks.
         println!("head: {head}:{hash}");
     }
-    if r.head_anchored {
+    if r.head_anchored && r.ok() {
         println!("passes through the expected head");
     }
     if r.unsealed_tail > 0 {
