@@ -279,10 +279,11 @@ Removal unbinds; ConfigMap updates apply live; the daemon resyncs and stays insi
 
 ### k8s-fail-closed
 
-Fail closed when the daemon is down, without blocking ungovernable pods
+Fail closed when the daemon is down: only unannotated pods in exempt namespaces start
 
 - `k8s_daemon_down_fails_closed` (Kubernetes (kind))
-- `TestDaemonDownRefusesOnlyGovernablePods` (Go test)
+- `TestDaemonDownRefusesAllButExemptNamespaces` (Go test)
+- `TestExemptPodsNeverWaitOnTheDaemon` (Go test)
 
 ### capability-honesty
 

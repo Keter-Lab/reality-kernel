@@ -27,6 +27,10 @@
       }
     },
     "extraPolicy": {"type": "string"},
+    "exemptNamespaces": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"}
+    },
     "failurePolicy": {"enum": ["Fail", "Ignore"]},
     "heartbeatTimeoutSeconds": {"type": "integer", "minimum": 1},
     "k8sCgroupRoot": {"type": "string", "minLength": 1},

@@ -1,3 +1,9 @@
+{{- /* An exempt namespace's unannotated pods are never governed: one with rules must not be exempt. */}}
+{{- range $ns := append (.Values.exemptNamespaces | default list) .Release.Namespace }}
+{{- if hasKey ($.Values.namespaces | default dict) $ns }}
+{{- fail (printf "namespace %q has rules in `namespaces` but is exempt (exemptNamespaces, or the release namespace): its unannotated pods would never be governed" $ns) }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -121,8 +127,8 @@ spec:
             - {{ .Values.nri.pluginIndex | quote }}
             - -failure-policy
             - {{ .Values.failurePolicy | quote }}
-            - -governed-namespaces
-            - {{ keys .Values.namespaces | sortAlpha | join "," | quote }}
+            - -exempt-namespaces
+            - {{ append (.Values.exemptNamespaces | default list) .Release.Namespace | uniq | sortAlpha | join "," | quote }}
           # Ready only once registered with NRI: before that, containers on
           # this node start without passing through rk-nri.
           readinessProbe:

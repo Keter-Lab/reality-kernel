@@ -157,12 +157,28 @@ The quarantine profile can't be selected by annotation. `rk policy diff` and
   installation. Clusters that need governance from node boot should keep new
   nodes tainted until this pod is Ready.
 - **Fail-closed by default** if the daemon is unreachable: the plugin refuses
-  every container that could be governed, meaning annotated pods and pods in
-  a namespace with rules (the plugin gets that list from the same Helm values
-  as the policy). Other pods start, since they would not be governed anyway,
-  so a daemon crash can't stop `kube-system` from healing. A Helm
-  value `failurePolicy: Ignore` lets clusters choose availability over
-  enforcement, with a warning on each skipped container. See decision 3.
+  every container except unannotated pods in an explicit exempt set (Helm
+  `exemptNamespaces`, default `kube-system`, plus the chart's own namespace),
+  so a daemon crash can't stop `kube-system` or rk-sensor itself from healing.
+  An earlier version did the opposite, starting every pod outside a list of
+  governed namespaces rendered from the Helm values; a namespace that gained
+  rules some other way, or before the plugin was restarted with the new list,
+  then started ungoverned. A Helm value `failurePolicy: Ignore` lets clusters
+  choose availability over enforcement: rk-nri logs a warning at startup and
+  on each container it starts ungoverned. See decision 3.
+  Unannotated pods in an exempt namespace are never governed: rk-nri starts
+  them without a daemon call, so a slow or dead daemon cannot hold up
+  `kube-system` on the node. The exempt set is therefore a bypass: rk-nri
+  logs every entry at startup, and the chart refuses to render if an exempt
+  namespace has rules in `namespaces`. The durable fix is for rk-nri to get
+  the governed and exempt sets from the daemon on connect instead of from its
+  own flags; fail-closed is what makes deferring that safe.
+- **The binding names the container.** The daemon binds the cgroup it reads
+  from `/proc/<pid>/cgroup` only if a segment of it names the container id
+  NRI gave (`cri-containerd-<id>.scope`, `crio-<id>.scope`, or `<id>` with the
+  cgroupfs driver), and holds the process with a pidfd while reading it. A pid
+  recycled into another workload is refused instead of binding that
+  workload's cgroup.
 
 ## 6. Capability honesty (fix found during design)
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,12 +25,17 @@ type plugin struct {
 	daemon daemon
 	// failOpen starts containers whose binding failed because the daemon was
 	// unreachable (Helm failurePolicy: Ignore). Policy refusals always fail.
+	// It is an explicit opt-out of enforcement, logged loudly at startup and
+	// on every container it lets through.
 	failOpen bool
-	// governed lists the namespaces with rules in the policy (rendered from
-	// the same Helm values). While the daemon is unreachable, a pod that is
-	// neither annotated nor in one of them could not be governed anyway, so it
-	// starts: otherwise a daemon crash would stop kube-system from healing.
-	governed map[string]bool
+	// exempt lists the namespaces whose unannotated pods may start while the
+	// daemon is unreachable (Helm exemptNamespaces plus the chart's own
+	// namespace), so a daemon crash cannot stop kube-system or rk-sensor
+	// itself from healing. Every other namespace is refused while the daemon
+	// is unreachable: the plugin cannot know the current policy, and a
+	// namespace given rules after this plugin started must not start
+	// ungoverned.
+	exempt map[string]bool
 	// resync tracks background rebinds started by Synchronize.
 	resync sync.WaitGroup
 }
@@ -54,6 +62,12 @@ func bindRequest(pod *api.PodSandbox, ctr *api.Container) BindRequest {
 func (p *plugin) bind(pod *api.PodSandbox, ctr *api.Container) error {
 	req := bindRequest(pod, ctr)
 	where := fmt.Sprintf("%s/%s container %s", req.Namespace, req.Pod, req.Container)
+	// An unannotated pod in an exempt namespace is never governed, so it
+	// starts without asking the daemon: it never waits on a slow or dead
+	// rk-sensor, and an outage cannot hold up kube-system on this node.
+	if _, annotated := req.Annotations[profileAnnotation]; !annotated && p.exempt[req.Namespace] {
+		return nil
+	}
 	start := time.Now()
 	reply, err := p.daemon.Bind(req)
 	took := time.Since(start).Round(time.Millisecond)
@@ -61,14 +75,14 @@ func (p *plugin) bind(pod *api.PodSandbox, ctr *api.Container) error {
 		log.Printf("WARNING: slow rk-sensor reply for %s: %s", where, took)
 	}
 	if err != nil {
-		if _, annotated := req.Annotations[profileAnnotation]; !annotated && !p.governed[req.Namespace] {
-			return nil
-		}
+		// Fail closed: any namespace that is not exempt may have rules this
+		// plugin does not know about.
 		if p.failOpen {
-			log.Printf("WARNING: starting %s ungoverned (failurePolicy Ignore): %v", where, err)
+			log.Printf("WARNING: starting %s UNGOVERNED: rk-sensor is unreachable and failurePolicy is Ignore: %v", where, err)
 			return nil
 		}
-		return fmt.Errorf("reality-kernel: %s not started (after %s): %w", where, took, err)
+		log.Printf("REFUSED %s: rk-sensor unreachable (after %s): %v; kubelet retries with backoff", where, took, err)
+		return fmt.Errorf("reality-kernel: %s not started: rk-sensor unreachable (after %s): %w", where, took, err)
 	}
 	switch reply.Kind {
 	case "ContainerBound":
@@ -77,6 +91,7 @@ func (p *plugin) bind(pod *api.PodSandbox, ctr *api.Container) error {
 	case "NotGoverned":
 		return nil
 	case "Error":
+		log.Printf("REFUSED %s: %s", where, reply.Message)
 		return fmt.Errorf("reality-kernel: %s refused: %s", where, reply.Message)
 	default:
 		return fmt.Errorf("reality-kernel: %s: unexpected daemon response %q", where, reply.Kind)
@@ -140,4 +155,20 @@ func (p *plugin) StopContainer(_ context.Context, _ *api.PodSandbox, ctr *api.Co
 func (p *plugin) RemoveContainer(_ context.Context, _ *api.PodSandbox, ctr *api.Container) error {
 	p.unbind(ctr)
 	return nil
+}
+
+// namespaceSet parses a comma-separated namespace list.
+func namespaceSet(list string) map[string]bool {
+	set := map[string]bool{}
+	for _, ns := range strings.Split(list, ",") {
+		if ns = strings.TrimSpace(ns); ns != "" {
+			set[ns] = true
+		}
+	}
+	return set
+}
+
+// sortedKeys returns the members of a namespace set in name order.
+func sortedKeys(set map[string]bool) []string {
+	return slices.Sorted(maps.Keys(set))
 }

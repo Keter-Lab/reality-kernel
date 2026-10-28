@@ -583,6 +583,14 @@ pub struct PolicyEngine {
     /// Agent cgroups bound at runtime (`rk run`): cgroup id -> (path, profile
     /// name). Kept across reloads; profile ids are stable (ADR-0005).
     dynamic: BTreeMap<u64, (String, String)>,
+    /// Bindings found in the kernel map when pins were adopted without a
+    /// usable state file: cgroup id -> (path found in the cgroup filesystem,
+    /// or "" if none; profile id). They are runtime bindings (agents,
+    /// containers) the engine cannot attribute to a profile name, so it keeps
+    /// them exactly as they are: an apply never removes one while its cgroup
+    /// may still exist, and a static binding or a container rebind of the
+    /// same cgroup takes it over (docs/design/phase-6.md §3.3).
+    adopted: BTreeMap<u64, (String, u32)>,
     /// Agent cgroups unbound most recently, oldest first: (cgroup id,
     /// profile name). An agent's last events can reach the audit log after
     /// it exited and was unbound; they still name its profile. Capped at
@@ -610,8 +618,105 @@ struct EngineState {
     bindings: BTreeMap<u64, (String, u32)>,
     quarantined: BTreeSet<u64>,
     dynamic: BTreeMap<u64, (String, String)>,
+    /// Absent in files written before it existed.
+    #[serde(default)]
+    adopted: BTreeMap<u64, (String, u32)>,
     text: Option<String>,
     previous_text: Option<String>,
+}
+
+/// Map capacities (`max_entries` in rk-bpf; pinned by the test
+/// `map_capacities_match_the_bpf_sources`). An apply that would not fit is
+/// refused before anything is written, so it never fails after the flip.
+const CAP_BINDINGS: usize = 4096;
+const CAP_NET: usize = 65536;
+const CAP_EXEC: usize = 65536;
+const CAP_FILE: usize = 65536;
+
+/// How deep `cgroup_paths` looks below the cgroup root.
+const MAX_CGROUP_DEPTH: usize = 32;
+
+/// Whether the cgroup bound as `id` may still exist at `path` (relative to
+/// `cgroup_fs`). Only a definite answer counts as gone: the directory is
+/// missing, or is now a different cgroup. An unknown path ("") or an error
+/// other than not-found keep the binding.
+fn cgroup_alive(cgroup_fs: &Path, path: &str, id: u64) -> bool {
+    if path.is_empty() {
+        return true;
+    }
+    match fs::metadata(cgroup_fs.join(path)) {
+        Ok(meta) => meta.ino() == id,
+        Err(e) => e.kind() != std::io::ErrorKind::NotFound,
+    }
+}
+
+/// Paths, relative to `cgroup_fs`, of the cgroups whose ids are in `ids`,
+/// found by walking the cgroup filesystem (a cgroup's id is its directory's
+/// inode number). Ids not found are left out.
+fn cgroup_paths(cgroup_fs: &Path, ids: &BTreeSet<u64>) -> BTreeMap<u64, String> {
+    let mut found = BTreeMap::new();
+    let mut stack = vec![(cgroup_fs.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = stack.pop() {
+        if found.len() == ids.len() {
+            break;
+        }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            // Neither call follows symlinks; most entries are interface
+            // files, so the cheap type check comes first.
+            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            let path = entry.path();
+            if ids.contains(&meta.ino()) {
+                if let Ok(rel) = path.strip_prefix(cgroup_fs) {
+                    found.insert(meta.ino(), rel.to_string_lossy().into_owned());
+                }
+            }
+            if depth < MAX_CGROUP_DEPTH {
+                stack.push((path, depth + 1));
+            }
+        }
+    }
+    found
+}
+
+/// Refuses an apply whose entries would not fit the maps. The inactive slot
+/// is cleared before it is written, so each map must hold the live slot's
+/// entries plus the new ones; bindings are rewritten in place.
+fn check_capacity(
+    live: &SlotContents,
+    deny: usize,
+    allow: usize,
+    exec: usize,
+    files: usize,
+    bindings: usize,
+) -> Result<()> {
+    for (what, live_n, new_n, cap) in [
+        ("network deny", live.deny.len(), deny, CAP_NET),
+        ("network allow", live.allow.len(), allow, CAP_NET),
+        ("exec allowlist", live.exec.len(), exec, CAP_EXEC),
+        ("file protection", live.files.len(), files, CAP_FILE),
+    ] {
+        if live_n + new_n > cap {
+            anyhow::bail!(
+                "the policy needs {new_n} {what} entries; with the {live_n} of the live \
+                 generation that exceeds the map's capacity of {cap}. Nothing was changed"
+            );
+        }
+    }
+    if bindings > CAP_BINDINGS {
+        anyhow::bail!(
+            "the policy and running agents need {bindings} cgroup bindings, more than the \
+             map's capacity of {CAP_BINDINGS}. Nothing was changed"
+        );
+    }
+    Ok(())
 }
 
 /// Snapshot of the active policy for naming decisions in the audit log.
@@ -678,6 +783,7 @@ impl PolicyEngine {
             bindings: BTreeMap::new(),
             quarantined: BTreeSet::new(),
             dynamic: BTreeMap::new(),
+            adopted: BTreeMap::new(),
             retired: VecDeque::new(),
             policy: None,
             text: None,
@@ -709,6 +815,7 @@ impl PolicyEngine {
             bindings: self.bindings.clone(),
             quarantined: self.quarantined.clone(),
             dynamic: self.dynamic.clone(),
+            adopted: self.adopted.clone(),
             text: self.text.clone(),
             previous_text: self.previous_text.clone(),
         };
@@ -761,6 +868,7 @@ impl PolicyEngine {
         self.ids = state.ids;
         self.generation = state.generation;
         self.dynamic = state.dynamic;
+        self.adopted = state.adopted;
         self.quarantined = state.quarantined;
         // The new maps hold no binding yet: forget the old ones so every
         // binding is written.
@@ -805,22 +913,43 @@ impl PolicyEngine {
                 self.bindings = s.bindings;
                 self.quarantined = s.quarantined;
                 self.dynamic = s.dynamic;
+                self.adopted = s.adopted;
                 self.text = s.text;
                 self.previous_text = s.previous_text;
             }
             None => {
-                // Only the kernel's view: binding paths are unknown, and a
-                // new id allocation is checked against live bindings on apply.
+                // Only the kernel's view. Every binding in the map is kept
+                // as an adopted binding: the engine cannot tell an agent's or
+                // container's binding from a static one, and must not unbind
+                // a running workload because the state file is gone. Paths
+                // come from the cgroup filesystem where the cgroup is found.
                 self.generation = kernel_gen;
                 let map = ebpf
                     .map(MAP_BINDINGS)
                     .context("rk_cgroup_profile missing")?;
                 let bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
-                self.bindings = bindings
+                let kernel: BTreeMap<u64, u32> = bindings
                     .iter()
                     .filter_map(|entry| entry.ok())
-                    .map(|(id, b)| (id, (String::new(), b.0.profile)))
+                    .map(|(id, b)| (id, b.0.profile))
                     .collect();
+                let ids: BTreeSet<u64> = kernel.keys().copied().collect();
+                let paths = cgroup_paths(&self.cgroup_fs, &ids);
+                self.bindings = kernel
+                    .into_iter()
+                    .map(|(id, profile)| {
+                        (id, (paths.get(&id).cloned().unwrap_or_default(), profile))
+                    })
+                    .collect();
+                self.adopted = self.bindings.clone();
+                if !self.adopted.is_empty() {
+                    tracing::warn!(
+                        bindings = self.adopted.len(),
+                        found = paths.len(),
+                        "adopted pins without a usable state file: keeping every cgroup binding \
+                         in the kernel until its cgroup is removed or rebound"
+                    );
+                }
             }
         }
         if let Some(text) = self.text.clone() {
@@ -918,9 +1047,17 @@ impl PolicyEngine {
         let generation = self.generation + 1;
         let compiled = net::compile(&policy, generation)?;
         let mut bindings = self.resolve_bindings(&policy, true)?;
-        self.add_dynamic_bindings(&policy, &mut bindings)?;
+        let (stale, kept_adopted) = self.add_runtime_bindings(&policy, &mut bindings)?;
         let exec = resolve_exec(&compiled.exec)?;
         let (files, skipped_files) = resolve_files(&compiled.files)?;
+        check_capacity(
+            &self.written[self.active_slot as usize],
+            compiled.deny.len(),
+            compiled.allow.len(),
+            exec.len(),
+            files.len(),
+            bindings.len(),
+        )?;
 
         if let Some(flip) = self.last_flip {
             let elapsed = flip.elapsed();
@@ -942,10 +1079,9 @@ impl PolicyEngine {
         self.generation = generation;
         self.ids = ids;
 
-        // Profile ids are stable, so (re)binding after the flip is safe.
-        self.sync_bindings(ebpf, bindings)?;
-
-        let report = ApplyReport {
+        // The new policy is live: record it before anything else can fail,
+        // so what the engine reports and persists never lags the kernel.
+        let mut report = ApplyReport {
             generation,
             slot,
             profiles: compiled.profiles.len(),
@@ -954,11 +1090,26 @@ impl PolicyEngine {
             exec_entries: exec.len(),
             file_entries: files.len(),
             skipped_files,
-            bindings: self.bindings.len(),
+            bindings: 0,
         };
         self.policy = Some(policy);
         self.previous_text = self.text.replace(text.to_string());
+        for id in stale {
+            if let Some((_, profile)) = self.dynamic.remove(&id) {
+                self.retire(id, profile);
+            }
+        }
+        self.adopted.retain(|id, _| kept_adopted.contains(id));
+
+        // Profile ids are stable, so (re)binding after the flip is safe.
+        let synced = self.sync_bindings(ebpf, bindings);
         self.persist();
+        synced.with_context(|| {
+            format!(
+                "generation {generation} is live, but not every cgroup binding could be written"
+            )
+        })?;
+        report.bindings = self.bindings.len();
         Ok(report)
     }
 
@@ -981,15 +1132,24 @@ impl PolicyEngine {
         let generation = self.generation + 1;
         let compiled = net::compile(&policy, generation)?;
         let mut bindings = self.resolve_bindings(&policy, false)?;
-        self.add_dynamic_bindings(&policy, &mut bindings)?;
+        self.add_runtime_bindings(&policy, &mut bindings)?;
         let exec = resolve_exec(&compiled.exec)?;
         let (files, skipped_files) = resolve_files(&compiled.files)?;
-        let cgroups_to_create = policy
+        let cgroups_to_create: Vec<String> = policy
             .bindings
             .iter()
             .filter(|b| !self.cgroup_fs.join(&b.cgroup).is_dir())
             .map(|b| b.cgroup.clone())
             .collect();
+        // An apply creates those cgroups, each a new binding.
+        check_capacity(
+            &self.written[self.active_slot as usize],
+            compiled.deny.len(),
+            compiled.allow.len(),
+            exec.len(),
+            files.len(),
+            bindings.len() + cgroups_to_create.len(),
+        )?;
         Ok(DryRun {
             generation,
             profiles: compiled.profiles.len(),
@@ -1034,15 +1194,28 @@ impl PolicyEngine {
         Ok(out)
     }
 
-    /// Adds the runtime agent bindings to `wanted`. Fails, before anything in
-    /// the kernel changes, if `policy` drops a profile a running agent uses, or
-    /// statically binds an agent's cgroup.
-    fn add_dynamic_bindings(
+    /// Adds the runtime bindings to `wanted`: agents' and containers'
+    /// (`dynamic`), and those adopted without a state file (`adopted`). Fails,
+    /// before anything in the kernel changes, if `policy` drops a profile a
+    /// running agent uses, or statically binds an agent's cgroup.
+    ///
+    /// A runtime binding whose cgroup is gone (see `cgroup_alive`) is stale:
+    /// it is left out and does not block the apply, so an agent or container
+    /// whose unbind never arrived cannot pin its profile forever. An adopted
+    /// binding the policy now binds statically is left to the policy. Returns
+    /// the stale `dynamic` ids, for the apply to drop, and the adopted ids
+    /// still kept.
+    fn add_runtime_bindings(
         &self,
         policy: &Policy,
         wanted: &mut BTreeMap<u64, (String, u32)>,
-    ) -> Result<()> {
+    ) -> Result<(Vec<u64>, BTreeSet<u64>)> {
+        let mut stale = Vec::new();
         for (id, (path, profile)) in &self.dynamic {
+            if !cgroup_alive(&self.cgroup_fs, path, *id) {
+                stale.push(*id);
+                continue;
+            }
             let pid = policy
                 .profiles
                 .iter()
@@ -1058,7 +1231,15 @@ impl PolicyEngine {
             }
             wanted.insert(*id, (path.clone(), pid));
         }
-        Ok(())
+        let mut kept = BTreeSet::new();
+        for (id, (path, profile)) in &self.adopted {
+            if wanted.contains_key(id) || !cgroup_alive(&self.cgroup_fs, path, *id) {
+                continue;
+            }
+            wanted.insert(*id, (path.clone(), *profile));
+            kept.insert(*id);
+        }
+        Ok((stale, kept))
     }
 
     /// Binds an agent cgroup (created by the caller under `rk.slice/`) to a
@@ -1116,7 +1297,12 @@ impl PolicyEngine {
         let id = fs::metadata(&path)
             .with_context(|| format!("stat cgroup {}", path.display()))?
             .ino();
-        if self.bindings.contains_key(&id) && !self.dynamic.contains_key(&id) {
+        // A binding adopted without a state file may be this very container
+        // (NRI resyncs after a restart): rebinding it attributes it.
+        if self.bindings.contains_key(&id)
+            && !self.dynamic.contains_key(&id)
+            && !self.adopted.contains_key(&id)
+        {
             anyhow::bail!("`{cgroup}` is bound statically by the policy");
         }
         if self.quarantined.contains(&id) {
@@ -1124,6 +1310,7 @@ impl PolicyEngine {
         }
         self.set_binding(ebpf, id, pid)?;
         self.bindings.insert(id, (cgroup.to_string(), pid));
+        self.adopted.remove(&id);
         self.dynamic
             .insert(id, (cgroup.to_string(), profile.to_string()));
         self.persist();
@@ -1300,21 +1487,46 @@ impl PolicyEngine {
             .map_mut(MAP_BINDINGS)
             .context("rk_cgroup_profile missing")?;
         let mut bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
-        for (id, (_, profile)) in &wanted {
-            if self.bindings.get(id).map(|(_, p)| p) != Some(profile) {
-                let value = rk_binding {
-                    profile: *profile,
-                    ..rk_binding::zeroed()
-                };
-                bindings.insert(id, Binding(value), 0)?;
-            }
-        }
+        // Removals first, so the map never holds more than the bindings
+        // wanted (the capacity check counts exactly those).
         for id in self.bindings.keys() {
             if !wanted.contains_key(id) {
                 let _ = bindings.remove(id);
             }
         }
-        self.bindings = wanted;
+        // Keep going past a failed write, and record what the kernel really
+        // holds: a failed binding keeps its previous entry, if any.
+        let mut first_err = None;
+        let mut applied = BTreeMap::new();
+        for (id, entry) in wanted {
+            let current = self.bindings.get(&id);
+            if current.map(|(_, p)| *p) == Some(entry.1) {
+                applied.insert(id, entry);
+                continue;
+            }
+            let value = rk_binding {
+                profile: entry.1,
+                ..rk_binding::zeroed()
+            };
+            match bindings.insert(id, Binding(value), 0) {
+                Ok(()) => {
+                    applied.insert(id, entry);
+                }
+                Err(e) => {
+                    if let Some(old) = current {
+                        applied.insert(id, old.clone());
+                    }
+                    if first_err.is_none() {
+                        first_err =
+                            Some(anyhow::Error::from(e).context(format!("bind cgroup {id}")));
+                    }
+                }
+            }
+        }
+        self.bindings = applied;
+        if let Some(e) = first_err {
+            return Err(e);
+        }
         Ok(())
     }
 }
@@ -1665,6 +1877,148 @@ mod tests {
         // A missing path that is not from a built-in list fails the apply.
         assert!(resolve_files(&[file_rule("/nonexistent/rk/required", 1, 14, false)]).is_err());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn scratch_cgroupfs(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("rk-cgfs-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn ino(path: &Path) -> u64 {
+        fs::metadata(path).unwrap().ino()
+    }
+
+    /// Bindings found in the kernel are matched to their cgroup by walking
+    /// the cgroup filesystem; only a definitely removed cgroup counts as gone.
+    #[test]
+    fn cgroup_paths_and_liveness_come_from_the_cgroup_filesystem() {
+        let root = scratch_cgroupfs("walk");
+        let agent = root.join("rk.slice/agent-1");
+        let pod = root.join("kubepods.slice/pod-a/cri-containerd-x.scope");
+        fs::create_dir_all(&agent).unwrap();
+        fs::create_dir_all(&pod).unwrap();
+        let ids: BTreeSet<u64> = [ino(&agent), ino(&pod), u64::MAX].into();
+        let found = cgroup_paths(&root, &ids);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[&ino(&agent)], "rk.slice/agent-1");
+        assert_eq!(
+            found[&ino(&pod)],
+            "kubepods.slice/pod-a/cri-containerd-x.scope"
+        );
+
+        assert!(cgroup_alive(&root, "rk.slice/agent-1", ino(&agent)));
+        // Same path, different cgroup: the bound one is gone.
+        assert!(!cgroup_alive(&root, "rk.slice/agent-1", ino(&agent) + 1));
+        assert!(!cgroup_alive(&root, "rk.slice/agent-gone", 7));
+        // Unknown path: kept.
+        assert!(cgroup_alive(&root, "", 7));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A restart without a usable state file must not unbind running
+    /// workloads: adopted bindings stay in what an apply writes until their
+    /// cgroup is gone or the policy binds the cgroup itself. A dynamic
+    /// binding whose cgroup is gone no longer blocks removing its profile.
+    #[test]
+    fn runtime_bindings_survive_unless_their_cgroup_is_gone() {
+        let root = scratch_cgroupfs("runtime");
+        let live_agent = root.join("rk.slice/agent-live");
+        let adopted_pod = root.join("kubepods.slice/cri-containerd-y.scope");
+        let static_cg = root.join("rk.slice/static");
+        for d in [&live_agent, &adopted_pod, &static_cg] {
+            fs::create_dir_all(d).unwrap();
+        }
+        let mut engine = PolicyEngine::new(root.clone());
+        engine.dynamic.insert(
+            ino(&live_agent),
+            ("rk.slice/agent-live".into(), "agent".into()),
+        );
+        // The agent exited while its unbind was lost: its cgroup is gone.
+        engine
+            .dynamic
+            .insert(u64::MAX - 1, ("rk.slice/agent-gone".into(), "old".into()));
+        engine.adopted.insert(
+            ino(&adopted_pod),
+            ("kubepods.slice/cri-containerd-y.scope".into(), 5),
+        );
+        engine.adopted.insert(u64::MAX - 2, (String::new(), 6)); // path unknown
+        engine
+            .adopted
+            .insert(u64::MAX - 3, ("rk.slice/agent-removed".into(), 6));
+        engine
+            .adopted
+            .insert(ino(&static_cg), ("rk.slice/static".into(), 6));
+
+        // The policy drops `old` and binds `rk.slice/static` itself.
+        let text = "[profiles.agent]\nmode = \"audit\"\n[profiles.agent.files]\ninclude = []\n\
+                    [[bindings]]\ncgroup = \"rk.slice/static\"\nprofile = \"agent\"\n";
+        let policy = rk_policy::net::parse(text, &mut ProfileIds::default()).unwrap();
+        let mut wanted = engine.resolve_bindings(&policy, false).unwrap();
+        let (stale, kept) = engine.add_runtime_bindings(&policy, &mut wanted).unwrap();
+        assert_eq!(stale, vec![u64::MAX - 1]);
+        assert_eq!(kept, BTreeSet::from([ino(&adopted_pod), u64::MAX - 2]));
+        assert!(wanted.contains_key(&ino(&live_agent)));
+        assert_eq!(wanted[&ino(&adopted_pod)].1, 5, "adopted binding unchanged");
+        assert_ne!(wanted[&ino(&static_cg)].1, 6, "the static binding wins");
+        assert!(!wanted.contains_key(&(u64::MAX - 3)));
+        assert!(
+            engine.dry_run(text).is_ok(),
+            "a stale binding blocked the apply"
+        );
+
+        // A live agent still protects its profile.
+        let without_agent =
+            "[profiles.other]\nmode = \"audit\"\n[profiles.other.files]\ninclude = []\n";
+        let e = engine.dry_run(without_agent).unwrap_err().to_string();
+        assert!(e.contains("used by running agent"), "{e}");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// An apply that does not fit the maps is refused before the flip, and
+    /// the dry run refuses it the same way.
+    #[test]
+    fn capacity_is_checked_before_anything_is_written() {
+        let mut live = SlotContents::default();
+        assert!(check_capacity(&live, CAP_NET, 0, 0, 0, CAP_BINDINGS).is_ok());
+        live.deny.push((
+            0,
+            KeyData {
+                scope: 0,
+                addr: [0; 16],
+            },
+        ));
+        let e = check_capacity(&live, CAP_NET, 0, 0, 0, 0)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("network deny") && e.contains("Nothing was changed"),
+            "{e}"
+        );
+        assert!(check_capacity(&live, 0, 0, CAP_EXEC + 1, 0, 0).is_err());
+        assert!(check_capacity(&live, 0, 0, 0, CAP_FILE + 1, 0).is_err());
+        assert!(check_capacity(&live, 0, 0, 0, 0, CAP_BINDINGS + 1).is_err());
+    }
+
+    /// The capacities above must match the maps' `max_entries` in rk-bpf.
+    #[test]
+    fn map_capacities_match_the_bpf_sources() {
+        fn max_entries(src: &str, map: &str) -> usize {
+            let end = src.find(&format!("}} {map} SEC(")).expect(map);
+            let decl = &src[src[..end].rfind("struct {").expect(map)..end];
+            let n = decl.split("max_entries, ").nth(1).expect(map);
+            n[..n.find(')').expect(map)].trim().parse().expect(map)
+        }
+        let common = include_str!("../../rk-bpf/src/common.bpf.h");
+        let net = include_str!("../../rk-bpf/src/net.bpf.c");
+        let exec = include_str!("../../rk-bpf/src/exec.bpf.c");
+        let file = include_str!("../../rk-bpf/src/file.bpf.c");
+        assert_eq!(max_entries(common, MAP_BINDINGS), CAP_BINDINGS);
+        assert_eq!(max_entries(net, MAP_DENY), CAP_NET);
+        assert_eq!(max_entries(net, MAP_ALLOW), CAP_NET);
+        assert_eq!(max_entries(exec, MAP_EXEC), CAP_EXEC);
+        assert_eq!(max_entries(file, MAP_FILE), CAP_FILE);
     }
 
     #[test]

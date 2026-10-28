@@ -80,6 +80,20 @@ reloaded on adoption, accepted only if its pin epoch equals the one in
 file: on adoption it is cleared by scanning the maps for keys whose scope
 carries the inactive slot bit. Then the policy file is applied as usual.
 
+Without a usable state file (missing, corrupt, or from another pin set) the
+engine knows only the kernel's bindings, not which are static and which
+belong to running agents or containers. It keeps every one of them as an
+*adopted* binding, with its path found by walking the cgroup filesystem: an
+apply never removes an adopted binding while its cgroup may exist, a static
+binding or a container rebind (NRI resync) of the same cgroup takes it over,
+and it is dropped once its cgroup is gone. The profile id allocation is lost
+with the file, so an adopted binding keeps the profile id it had, which the
+new policy may give to another profile (or to none: then it fails closed).
+
+A runtime binding whose cgroup no longer exists (an agent or container whose
+unbind never arrived) is stale: it no longer blocks removing its profile,
+and the next apply drops it.
+
 ### 3.4 Incompatible pins
 
 If `rk_meta` differs (another ABI or object), the old pin set is removed and

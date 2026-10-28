@@ -16,9 +16,11 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::auth::{check_launchable_by, check_policy_admin, get_peer_cred, PeerCred};
+use crate::auth::{
+    check_launchable_by, check_policy_admin, get_peer_cred, launch_refusal, PeerCred,
+};
 use crate::cgroup::{create_agent_cgroup, drain_and_remove_cgroup, kill_cgroup, open_cgroup_dir};
-use crate::launcher::spawn_in_cgroup;
+use crate::launcher::{pidfd_open, signal_process, spawn_in_cgroup};
 use crate::protocol::{
     recv_request, send_response, ApplyReportData, CapabilityStatus, DryRunData, Request, Response,
     MAX_MESSAGE_SIZE,
@@ -36,10 +38,14 @@ type ReceivedConnection = (OwnedFd, PeerCred, Option<(Request, Vec<OwnedFd>)>);
 /// indefinitely.
 const RECV_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Maximum number of connections that may be mid-receive simultaneously. Beyond
-/// this, new connections are shed until an in-flight receive completes. This
-/// bounds the blocking-pool threads and descriptors a local flood can tie up; it
-/// does not limit long-lived agents, whose waiters run as separate tasks.
+/// Maximum number of connections being handled at once. A slot is taken when a
+/// connection is accepted and held while its request is received and
+/// dispatched, until its response is sent (for `Run`, until `RunStarted`, which
+/// includes waiting for the policy lock and spawning the agent). Beyond this,
+/// new connections are shed until a slot frees. This bounds the blocking-pool
+/// threads and descriptors a local flood can tie up; it does not limit
+/// long-lived agents, whose waiters run as separate tasks after the slot is
+/// released.
 const MAX_CONCURRENT_RECEIVES: usize = 128;
 
 /// Bounds any single blocking `recvmsg` on `fd` with `SO_RCVTIMEO`. Best-effort:
@@ -130,6 +136,43 @@ pub fn container_cgroup(proc_cgroup: &str, root: &str) -> Result<String> {
     Ok(rel.to_string())
 }
 
+/// Whether a container's cgroup (relative to the cgroupfs root, under the
+/// Kubernetes `root`) names `container_id`: some segment below the root is
+/// the id itself (cgroupfs driver) or contains it as `-<id>` followed by the
+/// end or a `.` (systemd driver: `cri-containerd-<id>.scope`,
+/// `crio-<id>.scope`, `docker-<id>.scope`). This ties a binding to the
+/// container NRI asked about: a pid recycled into another workload resolves to
+/// a cgroup that does not name this container, and is refused.
+pub fn cgroup_names_container(cgroup: &str, root: &str, container_id: &str) -> bool {
+    if container_id.is_empty() {
+        return false;
+    }
+    let Some(below) = cgroup.strip_prefix(root.trim_matches('/')) else {
+        return false;
+    };
+    below.split('/').any(|segment| {
+        segment.match_indices(container_id).any(|(i, _)| {
+            let before = segment[..i].chars().next_back();
+            let after = segment[i + container_id.len()..].chars().next();
+            matches!(before, None | Some('-')) && matches!(after, None | Some('.'))
+        })
+    })
+}
+
+/// Why a just-spawned agent's placement is not confirmed, from the text of its
+/// `/proc/<pid>/cgroup` (`None` when it could not be read), or `None` when it
+/// is in `expected`. Anything but a positive match fails the launch.
+pub fn placement_problem(proc_cgroup: Option<&str>, expected: &str) -> Option<String> {
+    let Some(text) = proc_cgroup else {
+        return Some("its /proc/<pid>/cgroup is unreadable".into());
+    };
+    match text.lines().find_map(|l| l.strip_prefix("0::")) {
+        Some(actual) if actual == expected => None,
+        Some(actual) => Some(format!("it is in cgroup {actual}, not {expected}")),
+        None => Some("its /proc/<pid>/cgroup has no cgroup v2 entry".into()),
+    }
+}
+
 async fn bind_container(
     handler: &Arc<Mutex<dyn PolicyHandler>>,
     registry: &AgentRegistry,
@@ -151,9 +194,34 @@ async fn bind_container(
         .k8s_cgroup_root
         .as_deref()
         .context("this daemon has no Kubernetes cgroup root (start it with --k8s-cgroup-root)")?;
+    if container_id.is_empty() {
+        bail!("container has no id; refusing to start it ungoverned");
+    }
+    // The pid comes from the runtime and may have been recycled by now. Hold
+    // the process with a pidfd while its cgroup is read (checked below), and
+    // require the cgroup to name the container: together they refuse binding
+    // whatever workload now owns the pid. Without pidfd_open (before Linux
+    // 5.3) only the name check applies.
+    let pidfd = pidfd_open(pid as libc::pid_t);
+    if let Err(e) = &pidfd {
+        if e.raw_os_error() == Some(libc::ESRCH) {
+            bail!("container process {pid} has exited; refusing to start it ungoverned");
+        }
+    }
     let text = fs::read_to_string(format!("/proc/{pid}/cgroup"))
         .with_context(|| format!("read /proc/{pid}/cgroup"))?;
     let cgroup = container_cgroup(&text, root)?;
+    if !cgroup_names_container(&cgroup, root, container_id) {
+        bail!(
+            "process {pid} is in cgroup `{cgroup}`, which does not name container \
+             {container_id} (pid reused?); refusing to bind it"
+        );
+    }
+    if let Ok(fd) = &pidfd {
+        if signal_process(pid, Some(fd), 0).is_err() {
+            bail!("container process {pid} exited while its cgroup was read; refusing to bind it");
+        }
+    }
     let id = h.bind_container(&cgroup, &profile)?;
     registry.register_container(
         container_id,
@@ -242,7 +310,7 @@ pub async fn run_server(
     // parks the new task in that worker's LIFO slot, which other workers
     // cannot steal: every request used to wait for the poll timeout (~500 ms,
     // half of rk-nri's budget per NRI call).
-    // Cap how many connections may be mid-receive at once (see the accept loop).
+    // Cap how many connections may be in flight at once (see the accept loop).
     let recv_slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_RECEIVES));
 
     let rt = tokio::runtime::Handle::current();
@@ -284,11 +352,11 @@ pub async fn run_server(
             // pin a handler indefinitely (control-plane DoS).
             set_recv_timeout(client.as_raw_fd(), RECV_TIMEOUT);
 
-            // Shed load: cap how many connections may be mid-receive at once, so a
+            // Shed load: cap how many connections may be in flight at once, so a
             // flood of idle connections cannot exhaust the blocking pool or the
-            // descriptor table. The permit is held only while the connection is
-            // handled up to its response, not for a long-lived Run (whose waiter
-            // runs as a separate task once the permit has already dropped).
+            // descriptor table. The permit covers the whole request, not just
+            // the receive: it is held until the response is sent (for Run, until
+            // RunStarted), and released before a long-lived Run's waiter task.
             let permit = match recv_slots.clone().try_acquire_owned() {
                 Ok(p) => p,
                 Err(_) => {
@@ -468,10 +536,17 @@ async fn handle_connection(
                     || cred.uid == agent.caller_uid
                     || check_policy_admin(&cred).is_ok()
                 {
-                    unsafe {
-                        libc::kill(agent.pid as i32, signal);
+                    // Through the agent's pidfd: once it is reaped the signal
+                    // fails, rather than reaching whatever reused its pid.
+                    match signal_process(agent.pid, agent.pidfd.as_deref(), signal) {
+                        Ok(()) => send_response(client.as_raw_fd(), &Response::SignalSuccess),
+                        Err(e) => send_response(
+                            client.as_raw_fd(),
+                            &Response::Error {
+                                message: format!("cannot signal agent {agent_id}: {e}"),
+                            },
+                        ),
                     }
-                    send_response(client.as_raw_fd(), &Response::SignalSuccess)
                 } else {
                     send_response(
                         client.as_raw_fd(),
@@ -572,24 +647,22 @@ async fn handle_run(
     // 1. Authorisation and validation
     let (_profile_def, rel_cgroup, cgroup_path, cgroup_id, cgroup_dir_fd) = {
         let mut handler_lock = handler.lock().await;
-        let profile_def = match handler_lock.get_profile(&ctx.profile_name) {
+        // An unknown profile and one the caller may not launch are refused
+        // with the same message, so a caller cannot probe which profiles
+        // exist (see `launch_refusal`).
+        let profile_def = match handler_lock
+            .get_profile(&ctx.profile_name)
+            .and_then(|p| check_launchable_by(&ctx.cred, &p).map(|()| p))
+        {
             Ok(p) => p,
             Err(e) => {
                 let resp = Response::Error {
-                    message: format!("{e:#}"),
+                    message: launch_refusal(&ctx.cred, &ctx.profile_name, &e),
                 };
                 send_response(ctx.client.as_raw_fd(), &resp)?;
                 return Ok(());
             }
         };
-
-        if let Err(e) = check_launchable_by(&ctx.cred, &profile_def) {
-            let resp = Response::Error {
-                message: format!("{e:#}"),
-            };
-            send_response(ctx.client.as_raw_fd(), &resp)?;
-            return Ok(());
-        }
 
         // 2. Create agent cgroup directly in cgroupfs
         let uuid = Uuid::new_v4().to_string();
@@ -680,7 +753,7 @@ async fn handle_run(
         env: &ctx.env,
     });
 
-    let (pid, _pidfd) = match spawn_res {
+    let (pid, pidfd) = match spawn_res {
         Ok(res) => res,
         Err(e) => {
             let mut handler_lock = handler.lock().await;
@@ -693,29 +766,28 @@ async fn handle_run(
             return Ok(());
         }
     };
+    let pidfd = pidfd.map(Arc::new);
 
-    // Fail closed: an agent seen outside its cgroup is ungoverned. clone3
-    // guarantees placement, so this only fires on a launcher bug. A child that
-    // already exited cannot be checked and is not treated as misplaced.
-    if let Ok(cg) = fs::read_to_string(format!("/proc/{pid}/cgroup")) {
-        let expected = format!("/{rel_cgroup}");
-        if let Some(actual) = cg.lines().find_map(|l| l.strip_prefix("0::")) {
-            if actual != expected {
-                unsafe {
-                    libc::kill(pid, libc::SIGKILL);
-                    libc::waitpid(pid, std::ptr::null_mut(), 0);
-                }
-                let mut handler_lock = handler.lock().await;
-                let _ = handler_lock.unbind_dynamic(cgroup_id);
-                let _ = fs::remove_dir(&cgroup_path);
-                error!(pid, actual, %expected, "agent started outside its cgroup; killed");
-                let resp = Response::Error {
-                    message: format!("agent started in cgroup {actual}, not {expected}; killed it"),
-                };
-                send_response(ctx.client.as_raw_fd(), &resp)?;
-                return Ok(());
-            }
+    // Fail closed: an agent that cannot be shown to be in its cgroup may be
+    // ungoverned. clone3 guarantees placement, so a mismatch means a launcher
+    // bug. The child is not reaped yet, so even one that already exited still
+    // has a readable /proc/<pid>/cgroup: an unreadable one is a failed launch.
+    let expected = format!("/{rel_cgroup}");
+    let placement = fs::read_to_string(format!("/proc/{pid}/cgroup")).ok();
+    if let Some(problem) = placement_problem(placement.as_deref(), &expected) {
+        unsafe {
+            libc::kill(pid, libc::SIGKILL);
+            libc::waitpid(pid, std::ptr::null_mut(), 0);
         }
+        let mut handler_lock = handler.lock().await;
+        let _ = handler_lock.unbind_dynamic(cgroup_id);
+        let _ = fs::remove_dir(&cgroup_path);
+        error!(pid, %problem, %expected, "agent placement not confirmed; killed");
+        let resp = Response::Error {
+            message: format!("agent placement not confirmed ({problem}); killed it"),
+        };
+        send_response(ctx.client.as_raw_fd(), &resp)?;
+        return Ok(());
     }
 
     let agent_id = rel_cgroup
@@ -736,6 +808,7 @@ async fn handle_run(
         caller_gid: ctx.cred.gid,
         target_uid,
         target_gid,
+        pidfd: pidfd.clone(),
     };
     registry.register(agent);
 
@@ -791,9 +864,7 @@ async fn handle_run(
                 if let Ok(Some((Request::Signal { signal, .. }, _))) =
                     recv_request(client_fd, &mut buf)
                 {
-                    unsafe {
-                        libc::kill(pid, signal);
-                    }
+                    let _ = signal_process(pid as u32, pidfd.as_deref(), signal);
                 }
             }
             if poll_res > 0 && (pollfd.revents & libc::POLLHUP) != 0 {
@@ -803,6 +874,11 @@ async fn handle_run(
 
             std::thread::sleep(Duration::from_millis(5));
         }
+
+        // The agent is reaped: its pid may be reused from now on, so drop the
+        // registry entry at once, before the slower cleanup below, and no
+        // Signal request can be aimed at the pid any more.
+        registry_clone.unregister(&agent_id);
 
         // Cleanup sequence:
         // a. Kill any remaining processes in cgroup
@@ -818,10 +894,7 @@ async fn handle_run(
         // c. Drain and remove cgroup directory
         let _ = drain_and_remove_cgroup(&cgroup_path_clone, Duration::from_secs(2));
 
-        // d. Unregister from active registry
-        registry_clone.unregister(&agent_id);
-
-        // e. Send exit notification to client
+        // d. Send exit notification to client
         let exit_resp = Response::RunExited { exit_code };
         let _ = send_response(client_fd, &exit_resp);
         drop(client);
@@ -857,5 +930,60 @@ mod tests {
             assert!(container_cgroup(bad, root).is_err(), "{bad:?}");
         }
         assert!(container_cgroup(ok, "").is_err());
+    }
+
+    /// A binding is accepted only for a cgroup that names the container, so
+    /// a recycled pid in another workload's cgroup is refused.
+    #[test]
+    fn container_cgroup_must_name_the_container() {
+        let root = "kubepods.slice";
+        let id = "4f1c0a9b7e2d";
+        for ok in [
+            "kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod1.slice/cri-containerd-4f1c0a9b7e2d.scope",
+            "kubepods.slice/kubepods-pod1.slice/crio-4f1c0a9b7e2d.scope",
+            "kubepods.slice/kubepods-pod1.slice/docker-4f1c0a9b7e2d.scope/init",
+            "kubepods.slice/besteffort/pod1/4f1c0a9b7e2d",
+        ] {
+            assert!(cgroup_names_container(ok, root, id), "{ok}");
+        }
+        for bad in [
+            // Another container: the pid was recycled.
+            "kubepods.slice/kubepods-pod1.slice/cri-containerd-0123456789ab.scope",
+            // The id only as part of a longer one.
+            "kubepods.slice/kubepods-pod1.slice/cri-containerd-x4f1c0a9b7e2d.scope",
+            "kubepods.slice/kubepods-pod1.slice/cri-containerd-4f1c0a9b7e2dff.scope",
+            // Only in the root, not below it.
+            "kubepods.slice",
+        ] {
+            assert!(!cgroup_names_container(bad, root, id), "{bad}");
+        }
+        assert!(!cgroup_names_container(
+            "kubepods.slice/kubepods-pod1.slice/cri-containerd-.scope",
+            root,
+            ""
+        ));
+    }
+
+    /// The post-spawn check fails closed: only a positive match passes.
+    #[test]
+    fn placement_check_fails_closed() {
+        let expected = "/rk.slice/agent-1";
+        assert_eq!(
+            placement_problem(Some("0::/rk.slice/agent-1\n"), expected),
+            None
+        );
+        assert_eq!(
+            placement_problem(Some("12:cpu:/x\n0::/rk.slice/agent-1\n"), expected),
+            None
+        );
+        for bad in [
+            Some("0::/system.slice/rk-sensor.service\n"),
+            Some("0::/rk.slice/agent-1/child\n"),
+            Some("12:cpu:/rk.slice/agent-1\n"),
+            Some(""),
+            None,
+        ] {
+            assert!(placement_problem(bad, expected).is_some(), "{bad:?}");
+        }
     }
 }

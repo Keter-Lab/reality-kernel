@@ -190,7 +190,15 @@ A pod selects the profile for all its containers, init containers and
 sidecars included, with the annotation `realitykernel.dev/profile: NAME`.
 `realitykernel.dev/session: ID` links its events to a session. Binding happens
 in NRI `StartContainer`, after the container's process exists and before its
-command runs. If the binding fails, the container doesn't start.
+command runs. If the binding fails, the container doesn't start. While rk-sensor
+is unreachable, rk-nri refuses every container except unannotated pods in the
+Helm `exemptNamespaces` (default `kube-system`, plus the chart's namespace).
+Unannotated pods in those namespaces are never governed (rk-nri starts them
+without asking rk-sensor), so the chart refuses to render if one of them also
+has rules in `namespaces`. Refused containers are retried by kubelet with
+backoff; `kubectl rollout restart` unsticks one that gave up.
+The Helm value `failurePolicy: Ignore` is the one exception, and an explicit
+opt-out of enforcement: it starts such containers **ungoverned**.
 
 Any profile restricts more than none, so on an ordinary namespace an annotation
 is honoured as is. A namespace listed here is always governed:
@@ -208,8 +216,7 @@ allowed = ["research-agent", "strict"]  # what an annotation may name
 
 Unknown profiles and `quarantine` are refused in every namespace. Namespace
 names follow Kubernetes rules (lowercase letters, digits, `-`, at most 63).
-With the Helm chart, set these through the `namespaces` value, which the NRI
-plugin also reads.
+With the Helm chart, set these through the `namespaces` value.
 
 ## Kernels without BPF LSM
 

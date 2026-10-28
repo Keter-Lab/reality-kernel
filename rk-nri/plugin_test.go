@@ -150,23 +150,67 @@ func TestStopAndRemoveUnbind(t *testing.T) {
 	}
 }
 
-// While the daemon is down, only pods that could be governed are refused.
-func TestDaemonDownRefusesOnlyGovernablePods(t *testing.T) {
+// While the daemon is down, only unannotated pods in an exempt namespace
+// start. Every other namespace is refused, including one the plugin has never
+// heard of: its rules may have been added after the plugin started.
+func TestDaemonDownRefusesAllButExemptNamespaces(t *testing.T) {
 	d := &fakeDaemon{err: errors.New("dial: connection refused")}
-	p := &plugin{daemon: d, governed: map[string]bool{"agents": true}}
+	p := &plugin{daemon: d, exempt: namespaceSet("kube-system, reality-kernel")}
 	c := ctr(api.ContainerState_CONTAINER_CREATED)
-	plain := &api.PodSandbox{Id: "pod1", Namespace: "kube-system"}
-	if err := p.StartContainer(context.Background(), plain, c); err != nil {
-		t.Fatalf("unannotated pod in an ungoverned namespace refused: %v", err)
+	for _, ns := range []string{"kube-system", "reality-kernel"} {
+		plain := &api.PodSandbox{Id: "pod1", Namespace: ns}
+		if err := p.StartContainer(context.Background(), plain, c); err != nil {
+			t.Fatalf("unannotated pod in exempt namespace %s refused: %v", ns, err)
+		}
 	}
-	inGoverned := &api.PodSandbox{Id: "pod1", Namespace: "agents"}
-	if err := p.StartContainer(context.Background(), inGoverned, c); err == nil {
-		t.Fatal("pod in a governed namespace started while the daemon was down")
+	for _, ns := range []string{"agents", "default", "added-to-the-policy-later"} {
+		plain := &api.PodSandbox{Id: "pod1", Namespace: ns}
+		err := p.StartContainer(context.Background(), plain, c)
+		if err == nil || !strings.Contains(err.Error(), "not started") {
+			t.Fatalf("unannotated pod in namespace %s started while the daemon was down: %v", ns, err)
+		}
 	}
 	annotated := &api.PodSandbox{Id: "pod1", Namespace: "kube-system",
 		Annotations: map[string]string{profileAnnotation: "strict"}}
 	if err := p.StartContainer(context.Background(), annotated, c); err == nil {
-		t.Fatal("annotated pod started while the daemon was down")
+		t.Fatal("annotated pod in an exempt namespace started while the daemon was down")
+	}
+	// No exempt set: nothing starts while the daemon is down.
+	strict := &plugin{daemon: d}
+	if err := strict.StartContainer(context.Background(), &api.PodSandbox{Id: "pod1", Namespace: "kube-system"}, c); err == nil {
+		t.Fatal("pod started with no exempt namespaces while the daemon was down")
+	}
+}
+
+// An unannotated pod in an exempt namespace starts without a daemon call, so
+// a slow or dead rk-sensor never delays it; an annotated one is still bound.
+func TestExemptPodsNeverWaitOnTheDaemon(t *testing.T) {
+	d := &fakeDaemon{err: errors.New("dial: connection refused")}
+	p := &plugin{daemon: d, exempt: namespaceSet("kube-system")}
+	c := ctr(api.ContainerState_CONTAINER_CREATED)
+	if err := p.StartContainer(context.Background(), &api.PodSandbox{Id: "pod1", Namespace: "kube-system"}, c); err != nil {
+		t.Fatalf("exempt pod refused: %v", err)
+	}
+	if len(d.binds) != 0 {
+		t.Fatalf("exempt pod asked the daemon: %v", d.binds)
+	}
+	annotated := &api.PodSandbox{Id: "pod1", Namespace: "kube-system",
+		Annotations: map[string]string{profileAnnotation: "strict"}}
+	if err := p.StartContainer(context.Background(), annotated, c); err == nil {
+		t.Fatal("annotated pod in an exempt namespace started while the daemon was down")
+	}
+	if len(d.binds) != 1 {
+		t.Fatalf("annotated pod was not sent to the daemon: %v", d.binds)
+	}
+}
+
+func TestNamespaceSet(t *testing.T) {
+	got := namespaceSet(" kube-system,,reality-kernel ,")
+	if len(got) != 2 || !got["kube-system"] || !got["reality-kernel"] {
+		t.Fatalf("namespaceSet = %v", got)
+	}
+	if len(namespaceSet("")) != 0 {
+		t.Fatal("empty list is not empty")
 	}
 }
 
