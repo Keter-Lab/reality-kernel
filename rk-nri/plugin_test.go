@@ -182,6 +182,28 @@ func TestDaemonDownRefusesAllButExemptNamespaces(t *testing.T) {
 	}
 }
 
+// An unannotated pod in an exempt namespace starts without a daemon call, so
+// a slow or dead rk-sensor never delays it; an annotated one is still bound.
+func TestExemptPodsNeverWaitOnTheDaemon(t *testing.T) {
+	d := &fakeDaemon{err: errors.New("dial: connection refused")}
+	p := &plugin{daemon: d, exempt: namespaceSet("kube-system")}
+	c := ctr(api.ContainerState_CONTAINER_CREATED)
+	if err := p.StartContainer(context.Background(), &api.PodSandbox{Id: "pod1", Namespace: "kube-system"}, c); err != nil {
+		t.Fatalf("exempt pod refused: %v", err)
+	}
+	if len(d.binds) != 0 {
+		t.Fatalf("exempt pod asked the daemon: %v", d.binds)
+	}
+	annotated := &api.PodSandbox{Id: "pod1", Namespace: "kube-system",
+		Annotations: map[string]string{profileAnnotation: "strict"}}
+	if err := p.StartContainer(context.Background(), annotated, c); err == nil {
+		t.Fatal("annotated pod in an exempt namespace started while the daemon was down")
+	}
+	if len(d.binds) != 1 {
+		t.Fatalf("annotated pod was not sent to the daemon: %v", d.binds)
+	}
+}
+
 func TestNamespaceSet(t *testing.T) {
 	got := namespaceSet(" kube-system,,reality-kernel ,")
 	if len(got) != 2 || !got["kube-system"] || !got["reality-kernel"] {

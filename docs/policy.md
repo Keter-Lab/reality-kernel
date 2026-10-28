@@ -193,6 +193,10 @@ in NRI `StartContainer`, after the container's process exists and before its
 command runs. If the binding fails, the container doesn't start. While rk-sensor
 is unreachable, rk-nri refuses every container except unannotated pods in the
 Helm `exemptNamespaces` (default `kube-system`, plus the chart's namespace).
+Unannotated pods in those namespaces are never governed (rk-nri starts them
+without asking rk-sensor), so the chart refuses to render if one of them also
+has rules in `namespaces`. Refused containers are retried by kubelet with
+backoff; `kubectl rollout restart` unsticks one that gave up.
 The Helm value `failurePolicy: Ignore` is the one exception, and an explicit
 opt-out of enforcement: it starts such containers **ungoverned**.
 

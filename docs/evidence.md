@@ -283,6 +283,7 @@ Fail closed when the daemon is down: only unannotated pods in exempt namespaces 
 
 - `k8s_daemon_down_fails_closed` (Kubernetes (kind))
 - `TestDaemonDownRefusesAllButExemptNamespaces` (Go test)
+- `TestExemptPodsNeverWaitOnTheDaemon` (Go test)
 
 ### capability-honesty
 

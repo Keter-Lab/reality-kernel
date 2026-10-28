@@ -33,10 +33,16 @@ namespaces: {}
 # `namespaces` for `[kubernetes]` rules.
 extraPolicy: ""
 
-# While rk-sensor is unreachable, rk-nri cannot know the policy, so it refuses
-# every container except unannotated pods in these namespaces (the chart's own
-# namespace is always added, so rk-sensor can restart). Keep this to system
-# namespaces that are never governed; a namespace with rules must not be here.
+# Unannotated pods in these namespaces are never governed: rk-nri starts them
+# without asking rk-sensor, so they also start while it is unreachable (the
+# chart's own namespace is always added, so rk-sensor can restart). Every other
+# container is refused while rk-sensor is unreachable; kubelet retries it with
+# backoff (`kubectl rollout restart` unsticks one that gave up). This list is a
+# bypass, and rk-nri logs a warning for each entry at startup: keep it to
+# node-critical system namespaces, and never list one that has rules. Clusters
+# usually need their network, storage and node agents here too, for example
+# calico-system, tigera-operator, kube-flannel, cattle-system, openshift-*
+# namespaces, or the namespace of a CSI node plugin or log/metrics agent.
 exemptNamespaces:
   - kube-system
 

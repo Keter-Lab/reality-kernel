@@ -113,6 +113,14 @@ and container image. The format follows
   ungoverned, including one given rules after the plugin started.
   `-governed-namespaces` is ignored. `failurePolicy: Ignore` is now logged
   as starting containers UNGOVERNED, at startup and for each container.
+  Unannotated pods in an exempt namespace are never governed and start
+  without a call to rk-sensor, so an outage cannot delay them; rk-nri logs
+  each exempt namespace at startup and each refused container, and the chart
+  refuses to render if an exempt namespace (including its own) has rules in
+  `namespaces`. Upgrading: with rk-sensor down, pods in other namespaces wait
+  for it, retried by kubelet with backoff (`kubectl rollout restart`
+  unsticks one that gave up). List your cluster's network, storage and node
+  agent namespaces in `exemptNamespaces` (see values.yaml).
 
 ### Fixed
 

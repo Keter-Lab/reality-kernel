@@ -325,7 +325,11 @@ t_chart_renders() {
         || fail "rendered chart rejected by the API server"
     helm template rk "$CHART" -n "$NS" --set failurePolicy=Sometimes >/dev/null 2>&1 \
         && fail "schema accepted failurePolicy=Sometimes"
-    echo "lint passes; rendered manifests accepted by the API server; schema rejects bad values"
+    # A namespace with rules must not also be exempt (never governed).
+    helm template rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" \
+        --set 'exemptNamespaces={kube-system,agents}' >/dev/null 2>&1 \
+        && fail "chart accepted a governed namespace in exemptNamespaces"
+    echo "lint passes; rendered manifests accepted by the API server; schema rejects bad values; a governed namespace cannot be exempt"
 }
 
 # --------------------------------------------------------------------------

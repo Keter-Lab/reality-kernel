@@ -46,8 +46,15 @@ func main() {
 			"that should be governed start UNGOVERNED. Use Fail (the default) unless availability " +
 			"must win over enforcement")
 	}
+	exempt := namespaceSet(*exemptList)
+	// Exempt namespaces are a bypass: their unannotated pods are never
+	// governed. Say so for each one, so it is visible in the plugin's log.
+	for _, ns := range sortedKeys(exempt) {
+		log.Printf("WARNING: namespace %s is exempt: its unannotated pods are never governed "+
+			"and start even while rk-sensor is unreachable", ns)
+	}
 	d := socketDaemon{path: *agentd}
-	p := &plugin{daemon: d, failOpen: failOpen, exempt: namespaceSet(*exemptList)}
+	p := &plugin{daemon: d, failOpen: failOpen, exempt: exempt}
 	// A file left by a previous instance must not report readiness.
 	_ = os.Remove(*readyFile)
 

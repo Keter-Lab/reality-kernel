@@ -1,3 +1,9 @@
+{{- /* An exempt namespace's unannotated pods are never governed: one with rules must not be exempt. */}}
+{{- range $ns := append (.Values.exemptNamespaces | default list) .Release.Namespace }}
+{{- if hasKey ($.Values.namespaces | default dict) $ns }}
+{{- fail (printf "namespace %q has rules in `namespaces` but is exempt (exemptNamespaces, or the release namespace): its unannotated pods would never be governed" $ns) }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
