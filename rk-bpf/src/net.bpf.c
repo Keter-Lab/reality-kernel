@@ -11,7 +11,10 @@
 #define RK_AF_INET   2
 #define RK_AF_INET6  10
 #define RK_AF_PACKET 17
-#define RK_SOCK_RAW  3
+#define RK_SOCK_STREAM 1
+#define RK_SOCK_DGRAM  2
+#define RK_SOCK_TYPE_MASK 0xf
+#define RK_IPPROTO_IP  0
 #define RK_IPPROTO_TCP 6
 #define RK_IPPROTO_UDP 17
 #define RK_EPERM 1
@@ -174,9 +177,53 @@ int rk_net_sendmsg6(struct bpf_sock_addr *ctx)
 }
 
 /*
- * Raw (inet) and packet sockets bypass every sock_addr hook, so governed
- * profiles with RK_PROFILE_DENY_RAW_SOCKETS may not create them. LSM hook:
- * runs for every socket() on the host; ungoverned tasks cost one lookup.
+ * Transport classifier for socket creation: 1 when every packet the socket
+ * can send to a remote address passes a cgroup sock_addr hook, 0 when no
+ * egress hook would ever see its traffic.
+ *
+ * The connect4/6 and sendmsg4/6 hooks are not generic socket hooks: they run
+ * from the TCP and UDP protocol code (tcp_v4/v6_pre_connect, udp_pre_connect
+ * and udpv6_pre_connect, and udp_sendmsg/udpv6_sendmsg for unconnected
+ * sends). So for AF_INET/AF_INET6 only plain TCP (SOCK_STREAM with protocol 0
+ * or IPPROTO_TCP) and plain UDP (SOCK_DGRAM with protocol 0 or IPPROTO_UDP)
+ * are observed. Everything else is not, in particular:
+ *  - UDP-Lite (IPPROTO_UDPLITE): shares udp_sendmsg, so an unconnected send
+ *    is checked, but udplite_prot has no pre_connect, so connect() + send()
+ *    is never checked. It must not be whitelisted with UDP;
+ *  - ICMP ping (SOCK_DGRAM, IPPROTO_ICMP/IPPROTO_ICMPV6): ping sendmsg runs no
+ *    cgroup hook, and ping_prot has no pre_connect at all on 5.15;
+ *  - SCTP (IPPROTO_SCTP, SOCK_STREAM or SOCK_SEQPACKET), DCCP (SOCK_DCCP),
+ *    MPTCP (IPPROTO_MPTCP: additional subflows are connected by the kernel
+ *    path manager, not by the task), SOCK_RAW, and any other type/protocol.
+ * Protocol 0 must stay allowed: this hook runs in __sock_create before the
+ * family's create() resolves it, and for both families protocol 0 resolves
+ * to TCP for SOCK_STREAM and UDP for SOCK_DGRAM (the first, permanent protosw
+ * entries). AF_PACKET carries raw frames past every hook. Other address
+ * families are not classified here (docs/threat-model.md lists them).
+ * __sys_socket strips SOCK_NONBLOCK/SOCK_CLOEXEC before calling the hook;
+ * the type mask is only a guard.
+ */
+static __always_inline int rk_sock_observed(int family, int type, int protocol)
+{
+    if (family == RK_AF_PACKET)
+        return 0;
+    if (family != RK_AF_INET && family != RK_AF_INET6)
+        return 1;
+    type &= RK_SOCK_TYPE_MASK;
+    if (type == RK_SOCK_STREAM)
+        return protocol == RK_IPPROTO_IP || protocol == RK_IPPROTO_TCP;
+    if (type == RK_SOCK_DGRAM)
+        return protocol == RK_IPPROTO_IP || protocol == RK_IPPROTO_UDP;
+    return 0;
+}
+
+/*
+ * Sockets whose traffic would bypass every sock_addr hook (see
+ * rk_sock_observed): governed profiles with RK_PROFILE_DENY_RAW_SOCKETS may
+ * not create them. LSM hook: runs for every socket() on the host. Observed
+ * shapes (every TCP and UDP socket, every family but inet and packet) return
+ * before the governance lookup; an unobserved socket from an ungoverned task
+ * costs one lookup.
  */
 SEC("lsm/socket_create")
 int BPF_PROG(rk_net_socket_create, int family, int type, int protocol, int kern, int ret)
@@ -190,7 +237,7 @@ int BPF_PROG(rk_net_socket_create, int family, int type, int protocol, int kern,
         return ret;
     if (kern)
         return 0; /* kernel-internal sockets */
-    if (family != RK_AF_PACKET && !(type == RK_SOCK_RAW && (family == RK_AF_INET || family == RK_AF_INET6)))
+    if (rk_sock_observed(family, type, protocol))
         return 0;
     if (!rk_governance(&g))
         return 0;

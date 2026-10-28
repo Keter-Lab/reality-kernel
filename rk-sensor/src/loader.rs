@@ -175,6 +175,8 @@ fn lsm_hook(program: &str) -> Option<&'static str> {
         "rk_file_link" => Some("inode_link"),
         "rk_file_create" => Some("inode_create"),
         "rk_file_mkdir" => Some("inode_mkdir"),
+        "rk_file_symlink" => Some("inode_symlink"),
+        "rk_file_mknod" => Some("inode_mknod"),
         "rk_file_setattr_v1" => Some("inode_setattr"),
         "rk_file_setattr_v2" => Some("inode_setattr"),
         "rk_guard_bpf" => Some("bpf"),
@@ -292,6 +294,8 @@ mod tests {
         assert_eq!(lsm_hook("rk_file_link"), Some("inode_link"));
         assert_eq!(lsm_hook("rk_file_create"), Some("inode_create"));
         assert_eq!(lsm_hook("rk_file_mkdir"), Some("inode_mkdir"));
+        assert_eq!(lsm_hook("rk_file_symlink"), Some("inode_symlink"));
+        assert_eq!(lsm_hook("rk_file_mknod"), Some("inode_mknod"));
         assert_eq!(lsm_hook("rk_file_setattr_v1"), Some("inode_setattr"));
         assert_eq!(lsm_hook("rk_file_setattr_v2"), Some("inode_setattr"));
         assert_eq!(btf_tracepoint("rk_exec_record"), Some("sched_process_exec"));

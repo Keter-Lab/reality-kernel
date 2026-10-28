@@ -10,6 +10,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 mod doctor;
+mod identity;
 mod init;
 mod safe_write;
 mod suggest;

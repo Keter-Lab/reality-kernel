@@ -55,6 +55,12 @@ tests = ["vm:net_raw_socket_denied", "vm:net_packet_vnet_hdr_denied", "vm:net_io
 
 [[criterion]]
 phase = "2"
+id = "net-unobserved-transports"
+text = "With deny_raw_sockets, no inet socket whose traffic the egress hooks cannot see (ICMP ping, UDP-Lite, SCTP, DCCP, MPTCP, SOCK_SEQPACKET) can be created; TCP and UDP sockets, protocol 0 included, still can"
+tests = ["vm:net_unobserved_transports_denied", "vm:net_unobserved_transports_allowed_without_flag"]
+
+[[criterion]]
+phase = "2"
 id = "net-compiler"
 text = "The compiled kernel lookup always agrees with the reference evaluator"
 tests = ["unit:compiled_lookup_matches_reference"]
@@ -123,6 +129,23 @@ phase = "4"
 id = "file-subtree"
 text = "Subtree rules apply; excessive nesting fails closed"
 tests = ["vm:file_subtree_rule_applies", "vm:file_deep_nesting_fails_closed"]
+
+[[criterion]]
+phase = "4"
+id = "file-create-every-name"
+text = "Every syscall that adds a name to a directory (create, mkdir, rename, link, symlink, mknod) needs that directory's create right, directly or through a subtree rule"
+tests = ["vm:file_create_in_protected_dir_denied", "vm:file_rename_into_protected_dir_denied",
+         "vm:file_link_into_protected_dir_denied", "vm:file_symlink_into_protected_dir_denied",
+         "vm:file_mknod_into_protected_dir_denied", "vm:file_rename_into_protected_subtree_denied",
+         "vm:file_rename_within_unprotected_dir_allowed"]
+
+[[criterion]]
+phase = "4"
+id = "file-identity-superblock"
+text = "File and exec rules, and the executables rk policy suggest learns, resolve to the superblock device the hooks compare (mountinfo), not stat's st_dev, which differs on btrfs subvolumes and snapshots"
+tests = ["unit:identity_parses_mountinfo_lines", "unit:identity_parses_fdinfo_mnt_id",
+         "unit:identity_mount_table_indexes_by_id", "unit:identity_resolves_a_live_path_and_keeps_the_inode",
+         "unit:suggest_identity_parses_mountinfo_and_fdinfo", "unit:suggest_identity_resolves_a_live_file", "unit:exec_allowlist_on_btrfs_is_refused"]
 
 [[criterion]]
 phase = "4"

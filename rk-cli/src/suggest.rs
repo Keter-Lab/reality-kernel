@@ -201,7 +201,13 @@ pub fn kernel_dev(st_dev: u64) -> u64 {
 
 fn identity(path: &Path) -> Option<(u64, u64)> {
     let m = fs::metadata(path).ok()?;
-    m.is_file().then(|| (kernel_dev(m.dev()), m.ino()))
+    if !m.is_file() {
+        return None;
+    }
+    // The superblock device, as audit records carry it: stat's differs on
+    // btrfs subvolumes (crate::identity). Stat's when /proc is unreadable.
+    let dev = crate::identity::superblock_dev(path).unwrap_or_else(|| kernel_dev(m.dev()));
+    Some((dev, m.ino()))
 }
 
 /// (kernel dev, ino) -> path for the files in `dirs` (and below the
