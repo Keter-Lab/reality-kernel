@@ -103,7 +103,7 @@ chain and signatures like `rk audit verify` (refusing on failure unless
 | From | Suggested |
 |---|---|
 | exec records | `exec.allow` with the absolute path of each distinct executed file. Records name the file as passed to `execve` (possibly relative), and an interpreter's record carries the script's name, so files are matched by identity: the record's device and inode against the record's path when absolute, then the `PATH` directories and any `--search DIR`. A file that cannot be located is listed for the human, never guessed; nor is a path that now holds a different file (another device/inode than the one that ran: it was replaced after it ran), which is listed and never learned. Interpreters (`sh`, `bash`, `python3`, `node`, …) are allowed but called out: allowing one allows any script it runs |
-| connect / sendmsg records | `network.allow` with one rule per destination address and protocol, listing the observed ports. Loopback is grouped. The kernel holds at most eight port/protocol ranges per address (docs/policy.md): past that the lowest eight are kept and the rest listed for the human, never widened into one covering range. Public addresses are called out: a SaaS API behind a CDN changes address, and hostname rules arrive in v0.3.0 |
+| connect / sendmsg records | `network.allow` with one rule per destination address and protocol, listing the observed ports. Loopback is grouped. The kernel holds at most eight port/protocol ranges per address (docs/policy.md): past that the lowest eight are kept and the rest listed for the human, never widened into one covering range. Public addresses are called out: a SaaS API behind a CDN changes address, and hostname rules arrive in v0.4.0 |
 | file records | the `files.deny` entries from the starter profile, minus nothing: each one the agent read is listed with how often, so the human decides whether to allow it (a commented-out rule) or keep it denied |
 | raw / packet socket, TUN/TAP records | never allowed automatically; listed for the human |
 
@@ -128,7 +128,7 @@ A fixed, documented list, checked under the launching user's home:
 `~/.kube/config`, `~/.docker/config.json`, `~/.config/gh/hosts.yml`,
 `~/.netrc`, `~/.git-credentials`, `~/.npmrc`, `~/.pypirc`. Only existing
 paths are listed (file rules bind to file identity at apply time). This is
-also the seed of the secret classes v0.4.0 builds on.
+also the seed of the secret classes v0.5.0 builds on.
 
 ### 3.5 Agent runbook
 
@@ -157,7 +157,7 @@ it. Rules it states:
 
 ## 5. Not in scope
 
-- Hostname rules (v0.3.0). Until then suggested public addresses can go
+- Hostname rules (v0.4.0). Until then suggested public addresses can go
   stale, and the output says so.
 - Kubernetes: `install.sh` points to the Helm chart; `suggest` works on pod
   records too, since they carry the profile name, but the walkthrough is

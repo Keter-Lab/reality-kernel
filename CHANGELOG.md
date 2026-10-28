@@ -8,6 +8,33 @@ and container image. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
+A security release. An external white-box review of 0.2.0 confirmed 26
+issues; this release closes them or documents them as residual risks in
+docs/threat-model.md. Upgrade from 0.2.0: it fixes ways enforcement could
+silently do nothing.
+
+### Upgrading from 0.2.0
+
+These changes are incompatible with 0.2.0:
+
+- `rk status` and `rk policy diff` need a policy admin (root or group `rk`).
+- `rk audit verify` fails (exit 2) on an empty log or one with no sealed
+  batch, a signing-key change (pass every legitimate key with `--pubkey`),
+  and removed oldest segments (pass `--allow-pruned` if you pruned them).
+  New batches use trailer `"v":2`; logs written by 0.2.0 still verify.
+- After `dpkg --purge` and a reinstall, the audit log stays off until the
+  old `audit.key.pub` is moved aside (docs/install.md).
+- Profiles with `deny_raw_sockets` (the default) can no longer create ICMP
+  ping, UDP-Lite, SCTP, DCCP or MPTCP sockets.
+- Exec allowlists on btrfs are refused at apply time (they never matched
+  there before, so every exec was denied).
+- Kubernetes: while rk-sensor is unreachable, rk-nri refuses every
+  container except unannotated pods in `exemptNamespaces`, which are never
+  governed. Add your cluster's network, storage and node-agent namespaces
+  there. The chart refuses a namespace that is both exempt and governed.
+
 ### Security
 
 - File and exec rules now resolve to the superblock device the kernel hooks
@@ -253,6 +280,7 @@ listed in [docs/evidence.md](docs/evidence.md).
 - The NRI plugin uses `google.golang.org/grpc` v1.84.0, which fixes the five
   advisories reported by Dependabot on 2026-10-22.
 
-[Unreleased]: https://github.com/Keter-Lab/reality-kernel/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Keter-Lab/reality-kernel/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Keter-Lab/reality-kernel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Keter-Lab/reality-kernel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Keter-Lab/reality-kernel/releases/tag/v0.1.0

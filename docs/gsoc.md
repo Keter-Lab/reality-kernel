@@ -26,7 +26,7 @@ Each project follows the project's usual path: a design note in
 
 ## 1. Hostname rules and DNS query filtering
 
-**Size:** 350 hours · **Difficulty:** hard · **Milestone:** v0.3.0 ([#54](https://github.com/Keter-Lab/reality-kernel/issues/54))
+**Size:** 350 hours · **Difficulty:** hard · **Milestone:** v0.4.0 ([#54](https://github.com/Keter-Lab/reality-kernel/issues/54))
 
 Network rules today are IP prefixes. Agents talk to hostnames
 (`api.example.com`) whose addresses change, so learned policies go stale,
@@ -45,7 +45,7 @@ resolved.
 
 ## 2. A "breakout suite" of agent sandbox escapes
 
-**Size:** 175 hours · **Difficulty:** medium · **Milestone:** v0.4.0 groundwork ([#55](https://github.com/Keter-Lab/reality-kernel/issues/55))
+**Size:** 175 hours · **Difficulty:** medium · **Milestone:** v0.5.0 groundwork ([#55](https://github.com/Keter-Lab/reality-kernel/issues/55))
 
 Known ways agents escape sandboxes (DNS exfiltration, check-then-use races
 on files, abusing an allowed binary's configuration, laundering data

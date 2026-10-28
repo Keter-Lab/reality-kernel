@@ -73,9 +73,9 @@ blocks ([net-audit](evidence.md#net-audit), [exec-audit](evidence.md#exec-audit)
 
 | The agent tries to… | Status |
 |---|---|
-| send data out through DNS lookups via an allowed resolver | **Open.** DNS query filtering is the v0.3.0 milestone ([ROADMAP.md](../ROADMAP.md)) |
-| reach a service whose address changed (CDN) under an IP rule, or be allowed by hostname | Rules are by IP address until hostname rules (v0.3.0) |
-| send data to a destination the policy *allows* | Out of reach of syscall-level rules: the kernel sees where, not what. v0.4.0 narrows it (taint, credential broker); some covert channels cannot be closed in general |
+| send data out through DNS lookups via an allowed resolver | **Open.** DNS query filtering is the v0.4.0 milestone ([ROADMAP.md](../ROADMAP.md)) |
+| reach a service whose address changed (CDN) under an IP rule, or be allowed by hostname | Rules are by IP address until hostname rules (v0.4.0) |
+| send data to a destination the policy *allows* | Out of reach of syscall-level rules: the kernel sees where, not what. v0.5.0 narrows it (taint, credential broker); some covert channels cannot be closed in general |
 | use a TUN/TAP queue that an ungoverned process attached and handed over | Residual risk, needs a cooperating ungoverned process ([ADR-0017](decisions/0017-tun-tap-containment.md)) |
 | exploit a kernel bug | Out of reach of any defense running in the same kernel. Keep kernels patched; for hostile workloads, also use isolation (microVMs) |
 | all of the above on arm64 | Built and unit-tested on arm64; the VM suites run on x86_64 only ([kernel-matrix.md](kernel-matrix.md)) |
