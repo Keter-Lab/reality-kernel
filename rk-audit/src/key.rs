@@ -103,7 +103,10 @@ impl AuditKey {
         match fs::read_to_string(path) {
             Ok(existing) => {
                 let published = parse_public_key(&existing).with_context(|| {
-                    format!("{}: published audit public key is unreadable", path.display())
+                    format!(
+                        "{}: published audit public key is unreadable",
+                        path.display()
+                    )
                 })?;
                 if published != self.public_key() {
                     bail!(

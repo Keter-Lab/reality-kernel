@@ -232,7 +232,10 @@ mod tests {
     #[test]
     fn strings_and_keys_are_escaped() {
         assert_eq!(string("a\"b\\c\u{1}"), "\"a\\\"b\\\\c\\u0001\"");
-        assert_eq!(string("x\u{1b}\u{9b}\u{202e}"), "\"x\\u001B\\u009B\\u202E\"");
+        assert_eq!(
+            string("x\u{1b}\u{9b}\u{202e}"),
+            "\"x\\u001B\\u009B\\u202E\""
+        );
         assert_eq!(comment("a\nb\u{1b}[2J"), "# a b\\x1b[2J");
         assert_eq!(
             toml::from_str::<Table>(&format!("{}\nk = 1\n", comment("\u{7f}\u{9b}")))

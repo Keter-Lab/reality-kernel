@@ -612,8 +612,7 @@ pub fn verify_segments_with(segments: &[(String, Vec<u8>)], expect: &Expect) -> 
     }
     if expect.keys.is_empty() {
         r.warnings.push(
-            "no signing key pinned: the log is checked only against the key it names itself"
-                .into(),
+            "no signing key pinned: the log is checked only against the key it names itself".into(),
         );
     }
     // Chain position after the last batch; None before the first header.
@@ -883,9 +882,9 @@ pub fn verify_segments_with(segments: &[(String, Vec<u8>)], expect: &Expect) -> 
             ),
             None => {
                 let why = match (r.first_seq, head) {
-                    (Some(first), _) if want.next_seq < first => format!(
-                        "it is older than the oldest segment present (batch {first})"
-                    ),
+                    (Some(first), _) if want.next_seq < first => {
+                        format!("it is older than the oldest segment present (batch {first})")
+                    }
                     (_, Some(hd)) if hd.next_seq < want.next_seq => format!(
                         "the chain ends before batch {}: the newest batches are missing",
                         hd.next_seq
@@ -1169,7 +1168,8 @@ mod tests {
         // A segment started under another key continues the chain.
         let mut w = Writer::open(&dir, AuditKey::from_seed([6; 32]), opts()).unwrap();
         let new = w.public_key();
-        w.append(&json!({"class_uid": 4001, "n": "spliced"})).unwrap();
+        w.append(&json!({"class_uid": 4001, "n": "spliced"}))
+            .unwrap();
         drop(w);
 
         let r = verify_dir(&dir, None).unwrap();
