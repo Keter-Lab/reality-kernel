@@ -12,10 +12,14 @@
 //! {"rk_batch":{"seq":12,"records":2,"prev":"<hex>","hash":"<hex>","sig":"<hex>","key_id":".."}}
 //! ```
 //!
-//! `hash = SHA-256("rk-audit-v1" ‖ prev ‖ seq as 8 bytes big-endian ‖ the
-//! batch's record lines exactly as written, newlines included)`, and `sig`
-//! is the Ed25519 signature of `hash`. Hashing the bytes on disk means
-//! nothing is ever re-serialised, so there is no canonical form to get wrong.
+//! `hash = SHA-256("rk-audit-v2" ‖ prev ‖ seq as 8 bytes big-endian ‖
+//! records as 8 bytes big-endian ‖ the batch's record lines exactly as
+//! written, newlines included)`, and `sig` is the Ed25519 signature of
+//! `hash`. Hashing the bytes on disk means nothing is ever re-serialised, so
+//! there is no canonical form to get wrong. Trailers written by rk 0.2 and
+//! earlier carry no `v` and use `"rk-audit-v1"` without the record count;
+//! they still verify. Changing a trailer's `v` changes the hash its
+//! signature must match, so a batch cannot be moved to the other form.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write as _};
@@ -30,10 +34,14 @@ use sha2::{Digest as _, Sha256};
 use crate::key::{self, AuditKey};
 
 const DOMAIN: &[u8] = b"rk-audit-v1";
+const DOMAIN_V2: &[u8] = b"rk-audit-v2";
+/// Trailer version this writer produces.
+const TRAILER_V2: u8 = 2;
 
 /// Hash of the chain position before the first batch.
 pub const GENESIS: [u8; 32] = [0; 32];
 
+/// The hash of a batch in rk 0.2's form (trailers without `v`).
 pub fn batch_hash(prev: &[u8; 32], seq: u64, records: &[u8]) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(DOMAIN);
@@ -41,6 +49,29 @@ pub fn batch_hash(prev: &[u8; 32], seq: u64, records: &[u8]) -> [u8; 32] {
     h.update(seq.to_be_bytes());
     h.update(records);
     h.finalize().into()
+}
+
+/// The hash of a batch in the current form: the record count is signed too.
+pub fn batch_hash_v2(prev: &[u8; 32], seq: u64, count: u64, records: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(DOMAIN_V2);
+    h.update(prev);
+    h.update(seq.to_be_bytes());
+    h.update(count.to_be_bytes());
+    h.update(records);
+    h.finalize().into()
+}
+
+/// The hash `t`'s signature must be over, for the batch `records` after
+/// `prev`. `None` for a trailer no writer produces: an unknown version, or a
+/// current-form trailer marked `recovered` (only rk 0.2 wrote that marker, and
+/// outside its hash, so on a current trailer it was added by someone else).
+fn trailer_hash(prev: &[u8; 32], t: &Trailer, records: &[u8]) -> Option<[u8; 32]> {
+    match t.v {
+        0 => Some(batch_hash(prev, t.seq, records)),
+        TRAILER_V2 if !t.recovered => Some(batch_hash_v2(prev, t.seq, t.records, records)),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,9 +92,18 @@ pub struct Trailer {
     pub key_id: String,
     /// Sealed at startup by rk 0.2 and earlier: records a previous writer
     /// wrote but did not seal. No longer written (they are set aside, see
-    /// [`Discarded`]); still read so old logs verify. Outside the hash.
+    /// [`Discarded`]); still read so old logs verify. Outside rk 0.2's hash,
+    /// so on those logs it can be removed undetected (docs/audit.md).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub recovered: bool,
+    /// Form of the hash: absent (0) for rk 0.2's, [`TRAILER_V2`] for the
+    /// current one, which also signs the record count.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub v: u8,
+}
+
+fn is_zero(v: &u8) -> bool {
+    *v == 0
 }
 
 /// The control lines, as they appear in a segment.
@@ -146,10 +186,17 @@ pub struct Discarded {
     /// Complete lines set aside (a torn last line is included, not counted).
     pub lines: u64,
     pub bytes: u64,
+    /// Not a crash leftover: a header, trailer or control line after the last
+    /// batch that verified, written by someone else. The segment was left as
+    /// it is (`path` is the segment), or, holding no batch that verified,
+    /// moved whole to `<segment>.forged`.
+    pub forged: bool,
 }
 
 /// Marks files of [`Discarded`] lines.
 const DISCARDED_MARK: &str = ".jsonl.unsealed";
+/// Marks segments moved aside whole because they held forged control lines.
+const FORGED_MARK: &str = ".jsonl.forged";
 
 #[derive(Debug, Clone, Copy)]
 pub struct WriterOptions {
@@ -329,7 +376,7 @@ fn control_line(c: &Control) -> Result<Vec<u8>> {
 }
 
 fn sign_batch(key: &AuditKey, head: Head, records: &[u8], count: u64) -> Trailer {
-    let hash = batch_hash(&head.hash, head.next_seq, records);
+    let hash = batch_hash_v2(&head.hash, head.next_seq, count, records);
     Trailer {
         seq: head.next_seq,
         records: count,
@@ -338,6 +385,7 @@ fn sign_batch(key: &AuditKey, head: Head, records: &[u8], count: u64) -> Trailer
         sig: hex::encode(key.sign(&hash)),
         key_id: key.key_id(),
         recovered: false,
+        v: TRAILER_V2,
     }
 }
 
@@ -372,6 +420,19 @@ fn start_segment(dir: &Path, key: &AuditKey, head: Head) -> Result<(BufWriter<Fi
 /// ends sealed and the chain continues without this writer signing bytes it
 /// did not write. A segment with no complete line is moved aside whole and
 /// `None` returned.
+///
+/// Only what verification would accept moves the chain position: the header
+/// on line 1, naming this file's first batch, then each batch whose sequence,
+/// chaining, record count, hash and signature check out under that header's
+/// key. A crash leaves only records and a torn line after the last batch; a
+/// header, trailer or malformed control line there was written by someone
+/// else (appended, it would otherwise choose where the chain continues, and a
+/// header naming this segment's first batch would get it truncated). Then
+/// nothing is cut: the segment stays as it is, so verification reports the
+/// forgery, and the chain continues from the last batch that verified. If no
+/// batch in it verified, its name is the next segment's, so it is moved
+/// aside whole to `<segment>.forged`, which verification reports as a
+/// problem, and `None` is returned.
 fn recover(path: &Path, discarded: &mut Vec<Discarded>) -> Result<Option<Head>> {
     let data = fs::read(path).with_context(|| format!("read {}", path.display()))?;
     if data.is_empty() {
@@ -379,50 +440,115 @@ fn recover(path: &Path, discarded: &mut Vec<Discarded>) -> Result<Option<Head>> 
         fs::remove_file(path).with_context(|| format!("remove {}", path.display()))?;
         return Ok(None);
     }
-    let mut head = None;
-    // Bytes up to the end of the last header or trailer, and the complete
-    // lines after it.
+    let mut head: Option<Head> = None;
+    let mut key: Option<[u8; 32]> = None;
+    // Bytes up to the end of the last trusted header or batch, and the
+    // complete lines after it.
     let mut sealed_end = 0usize;
     let mut unsealed_lines = 0u64;
+    let mut batches = 0u64;
+    let mut pending: Vec<u8> = Vec::new();
+    let mut pending_records = 0u64;
+    let mut forged = false;
     let mut offset = 0usize;
-    for line in data.split_inclusive(|&b| b == b'\n') {
+    for (i, line) in data.split_inclusive(|&b| b == b'\n').enumerate() {
         offset += line.len();
         let Some(body) = line.strip_suffix(b"\n") else {
             // Torn final line: set aside with the rest.
             break;
         };
-        match classify(body) {
-            Line::Segment(h) => {
-                let hash = hex32(&h.prev).context("segment header: bad prev")?;
+        match (classify(body), head) {
+            (Line::Segment(h), None) if i == 0 => {
+                let prev = hex32(&h.prev).context("segment header: bad prev")?;
+                let pk = key::parse_public_key(&h.public_key)
+                    .context("segment header: bad public key")?;
+                if path.file_name() != Some(std::ffi::OsStr::new(&segment_name(h.seq))) {
+                    bail!(
+                        "{}: its header names batch {}; refusing to guess the chain position",
+                        path.display(),
+                        h.seq
+                    );
+                }
                 head = Some(Head {
                     next_seq: h.seq,
-                    hash,
+                    hash: prev,
                 });
+                key = Some(pk);
                 sealed_end = offset;
-                unsealed_lines = 0;
             }
-            Line::Batch(t) => {
-                let hash = hex32(&t.hash).context("batch trailer: bad hash")?;
+            (Line::Batch(t), Some(hd)) => {
+                let Some(computed) = trailer_hash(&hd.hash, &t, &pending) else {
+                    forged = true;
+                    break;
+                };
+                let signed = match (key, hex64(&t.sig)) {
+                    (Some(k), Some(sig)) => key::verify(&k, &computed, &sig),
+                    _ => false,
+                };
+                if !signed
+                    || t.seq != hd.next_seq
+                    || hex32(&t.prev) != Some(hd.hash)
+                    || t.records != pending_records
+                    || hex32(&t.hash) != Some(computed)
+                {
+                    forged = true;
+                    break;
+                }
                 head = Some(Head {
                     next_seq: t.seq + 1,
-                    hash,
+                    hash: computed,
                 });
                 sealed_end = offset;
                 unsealed_lines = 0;
+                batches += 1;
+                pending.clear();
+                pending_records = 0;
             }
-            Line::Record | Line::Invalid(_) => unsealed_lines += 1,
+            (Line::Record, Some(_)) => {
+                pending.extend_from_slice(line);
+                pending_records += 1;
+                unsealed_lines += 1;
+            }
+            // No header on line 1: refused below.
+            (_, None) => break,
+            // A header past line 1, or a malformed control line.
+            (Line::Segment(_) | Line::Invalid(_), Some(_)) => {
+                forged = true;
+                break;
+            }
         }
     }
     if head.is_none() && data.contains(&b'\n') {
         bail!(
-            "{}: no segment header; refusing to guess the chain position",
+            "{}: no segment header on its first line; refusing to guess the chain position",
             path.display()
         );
     }
     if sealed_end == data.len() {
         return Ok(head);
     }
-    let aside = discarded_path(path);
+    if forged {
+        if batches == 0 {
+            let aside = discarded_path(path, ".forged");
+            fs::rename(path, &aside)
+                .with_context(|| format!("move {} aside", path.display()))?;
+            discarded.push(Discarded {
+                path: aside,
+                lines: data.iter().filter(|&&b| b == b'\n').count() as u64,
+                bytes: data.len() as u64,
+                forged: true,
+            });
+            return Ok(None);
+        }
+        discarded.push(Discarded {
+            path: path.to_path_buf(),
+            lines: data[sealed_end..].iter().filter(|&&b| b == b'\n').count() as u64,
+            bytes: (data.len() - sealed_end) as u64,
+            forged: true,
+        });
+        return Ok(head);
+    }
+    let aside = discarded_path(path, ".unsealed");
     let mut f = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -444,16 +570,18 @@ fn recover(path: &Path, discarded: &mut Vec<Discarded>) -> Result<Option<Head>> 
         path: aside,
         lines: unsealed_lines,
         bytes: (data.len() - sealed_end) as u64,
+        forged: false,
     });
     Ok(head)
 }
 
-/// `<segment>.unsealed`, or `<segment>.unsealed.N` when that is taken.
-fn discarded_path(segment: &Path) -> PathBuf {
+/// `<segment><suffix>` (`.unsealed` or `.forged`), or `<segment><suffix>.N`
+/// when that is taken.
+fn discarded_path(segment: &Path, suffix: &str) -> PathBuf {
     let mut n = 0u32;
     loop {
         let mut name = segment.as_os_str().to_owned();
-        name.push(".unsealed");
+        name.push(suffix);
         if n > 0 {
             name.push(format!(".{n}"));
         }
@@ -554,7 +682,7 @@ pub fn verify_dir_with(dir: &Path, expect: &Expect) -> Result<Report> {
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            if !name.contains(DISCARDED_MARK) {
+            if !name.contains(DISCARDED_MARK) && !name.contains(FORGED_MARK) {
                 return None;
             }
             Some((name, e.metadata().ok()?.len()))
@@ -562,10 +690,22 @@ pub fn verify_dir_with(dir: &Path, expect: &Expect) -> Result<Report> {
         .collect();
     aside.sort();
     for (name, len) in aside {
-        r.warnings.push(format!(
-            "{name}: {len} bytes a previous writer left unsealed, set aside at startup and not \
-             part of the verified chain"
-        ));
+        if name.contains(FORGED_MARK) {
+            global_problem(
+                &mut r,
+                format!(
+                    "{name}: {len} bytes of a segment holding a header or trailer that does not \
+                     verify, moved aside at startup: someone else wrote to the log"
+                ),
+            );
+            r.head_seq = None;
+            r.head_hash = None;
+        } else {
+            r.warnings.push(format!(
+                "{name}: {len} bytes a previous writer left unsealed, set aside at startup and \
+                 not part of the verified chain"
+            ));
+        }
     }
     Ok(r)
 }
@@ -785,10 +925,22 @@ pub fn verify_segments_with(segments: &[(String, Vec<u8>)], expect: &Expect) -> 
                         ));
                     }
                     let stated = hex32(&t.hash);
-                    let computed = batch_hash(&hd.hash, t.seq, &pending);
-                    if stated != Some(computed) {
-                        bad.push("content does not match its hash (modified, inserted or removed records)".into());
-                    }
+                    let computed = match trailer_hash(&hd.hash, &t, &pending) {
+                        Some(c) => {
+                            if stated != Some(c) {
+                                bad.push("content does not match its hash (modified, inserted or removed records)".into());
+                            }
+                            c
+                        }
+                        None => {
+                            bad.push(format!(
+                                "trailer form no writer produces (version {}{}): edited",
+                                t.v,
+                                if t.recovered { ", marked recovered" } else { "" }
+                            ));
+                            batch_hash(&hd.hash, t.seq, &pending)
+                        }
+                    };
                     let signed = match (key, stated, hex64(&t.sig)) {
                         (Some(k), Some(h), Some(sig)) => key::verify(&k, &h, &sig),
                         _ => false,
@@ -897,6 +1049,23 @@ pub fn verify_segments_with(segments: &[(String, Vec<u8>)], expect: &Expect) -> 
                 );
             }
         }
+    }
+    // Headers are not signed: a log of headers alone (every batch removed,
+    // or none ever sealed) proves nothing.
+    if r.batches == 0 {
+        global_problem(
+            &mut r,
+            "no batch verified: a log without a sealed, signed batch proves nothing (emptied, \
+             or nothing sealed yet)"
+                .into(),
+        );
+    }
+    // The head is what an operator records as the trust anchor for later
+    // runs: never report one from a log that failed, where it may be the
+    // position a forged batch states for itself.
+    if !r.problems.is_empty() {
+        r.head_seq = None;
+        r.head_hash = None;
     }
     r
 }
@@ -1267,6 +1436,116 @@ mod tests {
         assert!(r.ok());
         assert_eq!(r.unsealed_tail, 1);
         drop(w);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Appended lines that look like a header or a trailer are not trusted
+    /// by recovery: the signed batches stay, the forgery stays for verify to
+    /// report, and the chain continues from the last batch that verified.
+    #[test]
+    fn recovery_never_trusts_appended_control_lines() {
+        let dir = tempdir("forged-control");
+        drop(write(&dir, 6));
+        let newest = segments(&dir).unwrap().pop().unwrap();
+        let before = fs::read(&newest).unwrap();
+        // The segment's own header again: trusted, it would restart the chain
+        // at batch 0 and the next segment would truncate this one.
+        let header = before.split_inclusive(|&b| b == b'\n').next().unwrap().to_vec();
+        let mut f = OpenOptions::new().append(true).open(&newest).unwrap();
+        f.write_all(&header).unwrap();
+        drop(f);
+
+        let w = Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap();
+        assert_eq!(w.head().next_seq, 2);
+        assert!(w.discarded().len() == 1 && w.discarded()[0].forged, "{:?}", w.discarded());
+        drop(w);
+        let after = fs::read(&newest).unwrap();
+        assert_eq!(after, [before.as_slice(), header.as_slice()].concat());
+        assert_eq!(segments(&dir).unwrap().len(), 2);
+        let r = verify_dir(&dir, None).unwrap();
+        assert!(!r.ok() && r.head_seq.is_none());
+        assert!(r
+            .problems
+            .iter()
+            .any(|p| p.what.contains("segment header inside a segment")));
+
+        let _ = fs::remove_dir_all(&dir);
+
+        // A segment with no batch that verifies is moved aside whole, and
+        // verify reports it.
+        let dir = tempdir("forged-empty");
+        drop(write(&dir, 3));
+        drop(Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap());
+        let segs = segments(&dir).unwrap();
+        assert_eq!(segs.len(), 2);
+        let trailer = fs::read_to_string(&segs[0])
+            .unwrap()
+            .lines()
+            .next_back()
+            .unwrap()
+            .to_string();
+        let mut f = OpenOptions::new().append(true).open(&segs[1]).unwrap();
+        f.write_all(format!("{trailer}\n").as_bytes()).unwrap();
+        drop(f);
+        let w = Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap();
+        assert_eq!(w.head().next_seq, 1);
+        assert!(w.discarded()[0].forged);
+        assert!(w.discarded()[0].path.to_string_lossy().contains(FORGED_MARK));
+        drop(w);
+        let r = verify_dir(&dir, None).unwrap();
+        assert!(!r.ok());
+        assert!(r.problems.iter().any(|p| p.what.contains(FORGED_MARK)), "{:?}", r.problems);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Headers are not signed: a log with no batch that verifies (here, a
+    /// writer that sealed nothing) does not verify, and no head is reported.
+    #[test]
+    fn a_log_of_headers_alone_does_not_verify() {
+        let dir = tempdir("headers-only");
+        drop(Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap());
+        assert_eq!(segments(&dir).unwrap().len(), 1);
+        let r = verify_dir(&dir, None).unwrap();
+        assert!(!r.ok());
+        assert!(r.problems.iter().any(|p| p.what.contains("no batch verified")));
+        assert!(r.head_seq.is_none() && r.head_hash.is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The head is the trust anchor an operator records: a failed run
+    /// reports none.
+    #[test]
+    fn a_failed_verification_reports_no_head() {
+        let dir = tempdir("no-head");
+        drop(write(&dir, 6));
+        let mut segs = load(&dir);
+        assert!(verify_segments(&segs, None).head_hash.is_some());
+        edit(&mut segs, "\"n\":4", "\"n\":5");
+        let r = verify_segments(&segs, None);
+        assert!(!r.ok());
+        assert!(r.head_seq.is_none() && r.head_hash.is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The record count is signed, and the `recovered` marker (rk 0.2's,
+    /// outside its hash) cannot be put on a current trailer, nor a current
+    /// trailer turned into rk 0.2's form.
+    #[test]
+    fn trailer_fields_cannot_be_edited() {
+        let dir = tempdir("trailer");
+        drop(write(&dir, 3));
+        let segs = load(&dir);
+        assert!(verify_segments(&segs, None).ok());
+
+        let mut marked = segs.clone();
+        edit(&mut marked, "\"v\":2", "\"recovered\":true,\"v\":2");
+        let r = verify_segments(&marked, None);
+        assert!(!r.ok());
+        assert!(r.problems[0].what.contains("trailer form"), "{:?}", r.problems);
+
+        let mut downgraded = segs.clone();
+        edit(&mut downgraded, ",\"v\":2", "");
+        assert!(!verify_segments(&downgraded, None).ok());
         let _ = fs::remove_dir_all(&dir);
     }
 }

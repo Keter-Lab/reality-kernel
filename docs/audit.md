@@ -40,7 +40,9 @@ $ rk audit verify --pubkey /var/lib/rk/audit.key.pub --head 412:4c1d9a0be2f7a311
 evidence of tampering (each problem names the segment, line and batch), and
 1 when it cannot run. It fails (exit 2):
 
-- on an empty audit directory;
+- on an empty audit directory, or one with no batch that verifies (headers
+  are not signed, so headers alone prove nothing);
+- when a segment was moved aside as `<segment>.jsonl.forged` (below);
 - when the chain does not start at batch 0 (the oldest segments were
   removed), unless you pass `--allow-pruned` because you removed them;
 - when the signing key changes between segments. With `--pubkey`, every
@@ -57,7 +59,8 @@ with the key they name. Trust needs two things recorded off the host:
   first starts, and passed with `--pubkey`;
 - **the chain head**, recorded from time to time: the sensor exports it as
   `rk_audit_head_seq` and the `head_hash` label of `rk_audit_info`, and
-  `rk audit verify` prints it as `head: SEQ:HASH`. `--head SEQ:HASH` (the
+  `rk audit verify` prints it as `head: SEQ:HASH`, only when the log
+  verifies. `--head SEQ:HASH` (the
   full 64-digit hash) then proves the chain still reaches it, so removing
   the newest batches, or rewriting the chain up to that point, fails.
 
@@ -84,13 +87,17 @@ each batch closed by a trailer line:
 {"rk_segment":{"seq":12,"prev":"<64 hex>","key_id":"8f2c51d07a6e9b13","public_key":"<64 hex>"}}
 { ...OCSF record... }
 { ...OCSF record... }
-{"rk_batch":{"seq":12,"records":2,"prev":"<64 hex>","hash":"<64 hex>","sig":"<128 hex>","key_id":"8f2c51d07a6e9b13"}}
+{"rk_batch":{"seq":12,"records":2,"prev":"<64 hex>","hash":"<64 hex>","sig":"<128 hex>","key_id":"8f2c51d07a6e9b13","v":2}}
 ```
 
 - A batch is sealed every second or every 256 records, whichever comes
   first, and fsynced when sealed.
-- `hash = SHA-256("rk-audit-v1" ‖ prev ‖ seq as 8 bytes big-endian ‖ the
-  batch's record lines exactly as written, newlines included)`.
+- `hash = SHA-256("rk-audit-v2" ‖ prev ‖ seq as 8 bytes big-endian ‖
+  records as 8 bytes big-endian ‖ the batch's record lines exactly as
+  written, newlines included)`. Trailers written by rk 0.2.0 and earlier
+  have no `v` and use `"rk-audit-v1"` without the record count; they still
+  verify. Changing a trailer's `v` changes the hash its signature must
+  match, so it fails verification.
 - `sig` is the Ed25519 signature of `hash` by the audit key; `key_id` is the
   first 8 bytes of SHA-256 of the public key.
 - `prev` is the previous batch's hash, across segments and restarts; the
@@ -105,9 +112,23 @@ that crashed, or lines someone else appended) is moved to
 logs a warning: it never signs records it did not write itself. Those
 records are lost from the verified chain (at most one batch interval of a
 crashed run); the file is kept for inspection and `rk audit verify` lists
-it as a warning. Logs written by rk 0.2.0 and earlier may hold batches
-marked `"recovered": true`, sealed at startup from such leftovers; they
-still verify, with a warning that their records are not authenticated.
+it as a warning.
+
+Recovery trusts only what verification would accept: the header on the
+segment's first line, then batches whose sequence, chaining, record count,
+hash and signature verify. A crash leaves only records and a torn line; a
+header, trailer or malformed control line after the last batch that
+verifies was written by someone else. Then nothing is cut: the segment is
+left as it is, so `rk audit verify` reports the forged line, and the chain
+continues in a new segment from the last batch that verified. A segment in
+which no batch verified is moved aside whole to `<segment>.jsonl.forged`,
+which `rk audit verify` reports as a problem.
+
+Logs written by rk 0.2.0 and earlier may hold batches marked
+`"recovered": true`, sealed at startup from such leftovers; they still
+verify, with a warning that their records are not authenticated. In those
+logs the marker sits outside the signed hash, so someone who can write the
+log can remove it undetected; current batches can carry no such marker.
 
 ### What verification detects, and what it cannot
 

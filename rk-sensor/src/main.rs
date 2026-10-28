@@ -693,13 +693,24 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
                 Ok(w) => {
                     info!(dir, key_id = %w.key_id(), next_batch = w.head().next_seq, "audit log open");
                     for d in w.discarded() {
-                        warn!(
-                            file = %d.path.display(),
-                            lines = d.lines,
-                            bytes = d.bytes,
-                            "audit log: lines after the last sealed batch (a crash mid-batch, or \
-                             written by someone else) were set aside unsigned, not sealed"
-                        );
+                        if d.forged {
+                            warn!(
+                                file = %d.path.display(),
+                                lines = d.lines,
+                                bytes = d.bytes,
+                                "audit log: a header or trailer after the last batch that \
+                                 verifies was written by someone else; left for rk audit verify \
+                                 to report, and the chain continues from that batch"
+                            );
+                        } else {
+                            warn!(
+                                file = %d.path.display(),
+                                lines = d.lines,
+                                bytes = d.bytes,
+                                "audit log: lines after the last sealed batch (a crash mid-batch, \
+                                 or written by someone else) were set aside unsigned, not sealed"
+                            );
+                        }
                     }
                     Some(w)
                 }

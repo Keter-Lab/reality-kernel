@@ -17,6 +17,15 @@ and container image. The format follows
   `rk audit verify` lists the file. A crash mid-batch therefore loses that
   batch (at most one second of records) from the verified chain instead of
   sealing it.
+- Audit recovery trusts only lines that verify: a header or trailer
+  appended to the newest segment can no longer choose where the chain
+  continues (or get the segment's signed batches truncated). Such a segment
+  is left in place for `rk audit verify` to report, or, holding no batch
+  that verifies, moved aside to `<segment>.jsonl.forged`, which fails
+  verification.
+- Audit batches now sign their record count (trailer `"v":2`, hash domain
+  `rk-audit-v2`), and a current trailer cannot carry the `recovered` marker.
+  Logs from rk 0.2.0 still verify.
 - The sensor no longer rewrites a published `audit.key.pub`. If it does not
   match the private key, or exists without it (as after `dpkg --purge` and a
   reinstall), the audit log is not opened and the error says why: move the
@@ -30,14 +39,16 @@ and container image. The format follows
 ### Changed
 
 - `rk audit verify` exits 2 (verification failed) in cases it used to pass
-  with a warning or silently: an empty audit directory, a change of signing
+  with a warning or silently: an empty audit directory or one with no batch
+  that verifies (a header alone is not signed), a change of signing
   key between segments, and a chain that does not start at batch 0. Repeat
   `--pubkey` to accept a key rotation, and pass `--allow-pruned` if you
   removed old segments on purpose. `rk policy suggest` refuses such a log
   too (or use `--no-verify`).
 - `rk audit verify --head SEQ:HASH` checks that the chain still passes
   through a head recorded earlier (`rk_audit_head_seq` and the `head_hash`
-  label of `rk_audit_info`, or the new `head:` line of `rk audit verify`), so
+  label of `rk_audit_info`, or the new `head:` line of `rk audit verify`,
+  printed only when the log verifies), so
   removal of the newest batches is detected. docs/audit.md and the threat
   model now say that trust in the log rests on the pinned key and a recorded
   head kept off the host.
