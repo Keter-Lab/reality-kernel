@@ -163,3 +163,106 @@ def test_releases_sort_after_phases():
     assert sorted(phases, key=tr.phase_key) == ["2", "5b", "16", "v0.2.0", "v0.3.0", "v0.10.0"]
     assert tr.phase_title("v0.2.0") == "Release v0.2.0"
     assert tr.phase_title("5b") == "Phase 5b"
+
+
+# A test that exists but never runs proves nothing (Strix review: an
+# #[ignore]d unit test and an emptied CI job both passed the static check).
+
+RUNS = """
+[[criterion]]
+phase = "2"
+id = "runs"
+text = "runs"
+tests = ["unit:demo_unit", "py:test_demo", "ci:demo"]
+"""
+
+WORKFLOW = """name: demo
+on:
+  push:
+  pull_request:
+
+jobs:
+  demo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0000000000000000000000000000000000000000 # v1
+      - name: test
+        run: |
+          # the real work
+          cargo test --workspace
+"""
+
+
+def runs_tree(tmp_path, rust="#[test]\nfn demo_unit() {}\n", py="def test_demo():\n    pass\n",
+              workflow=WORKFLOW):
+    root = tree(tmp_path, RUNS)
+    (root / "lib.rs").write_text(rust)
+    (root / "tests" / "test_demo.py").write_text(py)
+    (root / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+    (root / ".github" / "workflows" / "demo.yml").write_text(workflow)
+    return root
+
+
+def test_static_accepts_tests_that_run(tmp_path):
+    assert tr.check_static(runs_tree(tmp_path / "plain"))[1] == []
+    rust = ("/// doc\n#[tokio::test(flavor = \"current_thread\")]\n#[should_panic]\n"
+            "async fn demo_unit() {}\n")
+    assert tr.check_static(runs_tree(tmp_path / "tokio", rust=rust))[1] == []
+    py = ("import pytest\n\n@pytest.mark.skipif(False, reason='x')\n"
+          "@pytest.mark.parametrize('a', [1])\ndef test_demo(a):\n    pass\n")
+    assert tr.check_static(runs_tree(tmp_path / "skipif", py=py))[1] == []
+
+
+@pytest.mark.parametrize("rust,expect", [
+    ("#[test]\n#[ignore]\nfn demo_unit() {}\n", "unit:demo_unit is #[ignore]d"),
+    ("#[test]\n#[ignore = \"slow\"]\nfn demo_unit() {}\n", "unit:demo_unit is #[ignore]d"),
+    ("#[cfg_attr(not(feature = \"x\"), ignore)]\n#[test]\nfn demo_unit() {}\n",
+     "unit:demo_unit is #[ignore]d"),
+    ("fn demo_unit() {}\n", "unit:demo_unit is not a #[test] function"),
+])
+def test_static_flags_an_ignored_or_non_test_rust_fn(tmp_path, rust, expect):
+    _, failures = tr.check_static(runs_tree(tmp_path, rust=rust))
+    assert any(expect in f for f in failures), failures
+
+
+@pytest.mark.parametrize("py,expect", [
+    ("import pytest\n\n@pytest.mark.skip(reason='later')\ndef test_demo():\n    pass\n",
+     "py:test_demo is marked skip or xfail"),
+    ("import pytest\n\n@pytest.mark.xfail\ndef test_demo():\n    pass\n",
+     "py:test_demo is marked skip or xfail"),
+])
+def test_static_flags_a_skipped_python_test(tmp_path, py, expect):
+    _, failures = tr.check_static(runs_tree(tmp_path, py=py))
+    assert any(expect in f for f in failures), failures
+
+
+@pytest.mark.parametrize("steps,expect", [
+    # Emptied: only checkout and no-ops left.
+    ("      - uses: actions/checkout@0000000000000000000000000000000000000000\n"
+     "      - run: true\n"
+     "      - run: |\n          # gone\n          echo skipped\n",
+     "ci:demo has no step that does anything"),
+    # The real step disabled.
+    ("      - name: test\n        if: false\n        run: cargo test --workspace\n",
+     "ci:demo has no step that does anything"),
+])
+def test_static_flags_an_emptied_ci_job(tmp_path, steps, expect):
+    workflow = WORKFLOW.split("    steps:\n")[0] + "    steps:\n" + steps
+    _, failures = tr.check_static(runs_tree(tmp_path, workflow=workflow))
+    assert any(expect in f for f in failures), failures
+
+
+def test_static_flags_a_disabled_ci_job(tmp_path):
+    workflow = WORKFLOW.replace("    runs-on:", "    if: ${{ false }}\n    runs-on:")
+    _, failures = tr.check_static(runs_tree(tmp_path, workflow=workflow))
+    assert any("ci:demo is disabled" in f for f in failures), failures
+
+
+def test_static_ci_reference_must_be_a_job(tmp_path):
+    # `push:` under `on:` has the shape of a job key but is not one.
+    toml = RUNS.replace("ci:demo", "ci:push")
+    root = runs_tree(tmp_path)
+    (root / "tests" / "traceability.toml").write_text(toml)
+    write_evidence(root)
+    _, failures = tr.check_static(root)
+    assert any("ci:push is not a job" in f for f in failures), failures

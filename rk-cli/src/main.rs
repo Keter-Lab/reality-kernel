@@ -11,6 +11,7 @@ use std::time::Duration;
 
 mod doctor;
 mod init;
+mod safe_write;
 mod suggest;
 mod toml_out;
 

@@ -16,6 +16,7 @@ use rk_agentd::client::{ApplyOutcome, Client};
 use toml::{Table, Value};
 
 use crate::doctor;
+use crate::safe_write;
 use crate::toml_out::{self, Comments};
 
 /// Profile name of the starter policy.
@@ -278,17 +279,14 @@ pub fn run(opts: &Options) -> Result<()> {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
-        let backup = PathBuf::from(format!("{}.bak.{stamp}", opts.policy.display()));
-        fs::copy(&opts.policy, &backup)
-            .with_context(|| format!("back up {}", opts.policy.display()))?;
+        let backup = back_up(&opts.policy, stamp)?;
         eprintln!("Saved the previous policy as {}", backup.display());
     }
     if let Some(dir) = opts.policy.parent() {
         fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
     }
-    let tmp = opts.policy.with_extension("toml.rk-init");
-    fs::write(&tmp, &text).with_context(|| format!("write {}", tmp.display()))?;
-    fs::rename(&tmp, &opts.policy).with_context(|| format!("replace {}", opts.policy.display()))?;
+    // Staged under a fresh name and renamed into place; never through a link.
+    safe_write::replace(&opts.policy, text.as_bytes(), 0o644)?;
     println!("Wrote {}", opts.policy.display());
     if !lsm {
         println!("BPF LSM is not active: the profile is network-only (see `rk doctor`).");
@@ -316,6 +314,32 @@ pub fn run(opts: &Options) -> Result<()> {
          sudo rk policy suggest --profile {PROFILE} --out {PROFILE}.toml"
     );
     Ok(())
+}
+
+/// Copies `policy` to a new `POLICY.bak.STAMP` (`.1`, `.2`, ... when taken),
+/// created exclusively: a name someone planted, a link included, is skipped,
+/// never written through. Private to root, as the copy may outlive the
+/// policy it was.
+fn back_up(policy: &Path, stamp: u64) -> Result<PathBuf> {
+    let old = fs::read(policy).with_context(|| format!("back up {}", policy.display()))?;
+    for n in 0..100u32 {
+        let backup = PathBuf::from(if n == 0 {
+            format!("{}.bak.{stamp}", policy.display())
+        } else {
+            format!("{}.bak.{stamp}.{n}", policy.display())
+        });
+        match safe_write::create_new(&backup, &old, 0o600) {
+            Ok(()) => return Ok(backup),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => {
+                return Err(e).with_context(|| format!("back up {}", policy.display()));
+            }
+        }
+    }
+    bail!(
+        "back up {}: every backup name for this second is taken",
+        policy.display()
+    )
 }
 
 #[cfg(test)]
@@ -387,6 +411,30 @@ mod tests {
         assert!(defines_profiles(&path).unwrap());
         fs::write(&path, "not toml [").unwrap();
         assert!(defines_profiles(&path).unwrap());
+    }
+
+    /// A link planted at the predictable backup name is not followed: the
+    /// backup goes to the next name and the link's target is untouched.
+    #[test]
+    fn backup_never_follows_a_planted_symlink() {
+        let dir = scratch("backup");
+        let policy = dir.join("policy.toml");
+        fs::write(&policy, "[profiles.x]\nmode = \"audit\"\n").unwrap();
+        let victim = dir.join("victim");
+        fs::write(&victim, "precious\n").unwrap();
+        std::os::unix::fs::symlink(&victim, dir.join("policy.toml.bak.7")).unwrap();
+
+        let backup = back_up(&policy, 7).unwrap();
+        assert_eq!(backup, dir.join("policy.toml.bak.7.1"));
+        assert_eq!(fs::read(&backup).unwrap(), fs::read(&policy).unwrap());
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "precious\n");
+
+        // The policy itself is never written through a link either.
+        let linked = dir.join("linked.toml");
+        std::os::unix::fs::symlink(&victim, &linked).unwrap();
+        assert!(safe_write::replace(&linked, b"# starter\n", 0o644).is_err());
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "precious\n");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
