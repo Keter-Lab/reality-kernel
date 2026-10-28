@@ -29,12 +29,22 @@ profiles: |
 #     allowed: [restricted]
 namespaces: {}
 
-# Extra policy TOML appended verbatim (bindings, more profiles). Do not put
-# `[kubernetes]` rules here: use `namespaces`, which rk-nri also needs.
+# Extra policy TOML appended verbatim (bindings, more profiles). Prefer
+# `namespaces` for `[kubernetes]` rules.
 extraPolicy: ""
 
-# What rk-nri does when rk-sensor is unreachable and a pod could be governed:
-# Fail refuses the container (secure default); Ignore starts it ungoverned.
+# While rk-sensor is unreachable, rk-nri cannot know the policy, so it refuses
+# every container except unannotated pods in these namespaces (the chart's own
+# namespace is always added, so rk-sensor can restart). Keep this to system
+# namespaces that are never governed; a namespace with rules must not be here.
+exemptNamespaces:
+  - kube-system
+
+# What rk-nri does when rk-sensor is unreachable and a container is not exempt
+# (above). Fail refuses the container: the secure default, and what the docs
+# promise ("if the binding fails, the container doesn't start"). Ignore starts
+# it UNGOVERNED, with a warning in the rk-nri log for each one: an explicit
+# opt-out of enforcement for clusters that put availability first.
 failurePolicy: Fail
 
 # Seconds without the sensor's heartbeat before governed ENFORCE workloads

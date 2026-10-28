@@ -293,14 +293,20 @@ t_daemon_down_fails_closed() {
     [ -n "$pid" ] || fail "rk-sensor process not found on $NODE"
     docker exec "$NODE" kill -STOP "$pid"
     pod down1 default '{"realitykernel.dev/profile":"k8s-net"}' noop
-    pod down2 default '{}' connect "$DENY" notdenied
+    # Not exempt: the plugin cannot know whether `default` has rules now.
+    pod down2 default '{}' noop
+    # kube-system is exempt (chart default), so it can still heal.
+    pod down3 kube-system '{}' noop
+    local out2 rc2=0 phase3
     out="$(expect_refused down1 default "not started")" || rc=1
-    local phase2
-    phase2="$(wait_done down2 default)"
+    out2="$(expect_refused down2 default "not started")" || rc2=1
+    phase3="$(wait_done down3 kube-system)"
     docker exec "$NODE" kill -CONT "$pid"
+    kubectl -n kube-system delete pod down3 --wait=false >/dev/null 2>&1 || true
     [ "$rc" -eq 0 ] || fail "annotated pod: $out"
-    [ "$phase2" = Succeeded ] || fail "unannotated pod in an ordinary namespace did not start: $phase2 $(pod_messages down2 default)"
-    echo "daemon stopped: annotated pod refused, unannotated pod started ($out)"
+    [ "$rc2" -eq 0 ] || fail "unannotated pod in a non-exempt namespace: $out2"
+    [ "$phase3" = Succeeded ] || fail "unannotated pod in exempt kube-system did not start: $phase3 $(pod_messages down3 kube-system)"
+    echo "daemon stopped: annotated and non-exempt pods refused, exempt kube-system pod started ($out)"
 }
 
 t_daemon_replies_fast() {

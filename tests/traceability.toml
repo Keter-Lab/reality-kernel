@@ -203,8 +203,8 @@ tests = ["k8s:k8s_container_removal_unbinds", "k8s:k8s_configmap_update_applies"
 [[criterion]]
 phase = "5b"
 id = "k8s-fail-closed"
-text = "Fail closed when the daemon is down, without blocking ungovernable pods"
-tests = ["k8s:k8s_daemon_down_fails_closed", "go:TestDaemonDownRefusesOnlyGovernablePods"]
+text = "Fail closed when the daemon is down: only unannotated pods in exempt namespaces start"
+tests = ["k8s:k8s_daemon_down_fails_closed", "go:TestDaemonDownRefusesAllButExemptNamespaces"]
 
 [[criterion]]
 phase = "5b"

@@ -121,8 +121,8 @@ spec:
             - {{ .Values.nri.pluginIndex | quote }}
             - -failure-policy
             - {{ .Values.failurePolicy | quote }}
-            - -governed-namespaces
-            - {{ keys .Values.namespaces | sortAlpha | join "," | quote }}
+            - -exempt-namespaces
+            - {{ append (.Values.exemptNamespaces | default list) .Release.Namespace | uniq | sortAlpha | join "," | quote }}
           # Ready only once registered with NRI: before that, containers on
           # this node start without passing through rk-nri.
           readinessProbe:

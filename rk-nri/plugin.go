@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,12 +23,17 @@ type plugin struct {
 	daemon daemon
 	// failOpen starts containers whose binding failed because the daemon was
 	// unreachable (Helm failurePolicy: Ignore). Policy refusals always fail.
+	// It is an explicit opt-out of enforcement, logged loudly at startup and
+	// on every container it lets through.
 	failOpen bool
-	// governed lists the namespaces with rules in the policy (rendered from
-	// the same Helm values). While the daemon is unreachable, a pod that is
-	// neither annotated nor in one of them could not be governed anyway, so it
-	// starts: otherwise a daemon crash would stop kube-system from healing.
-	governed map[string]bool
+	// exempt lists the namespaces whose unannotated pods may start while the
+	// daemon is unreachable (Helm exemptNamespaces plus the chart's own
+	// namespace), so a daemon crash cannot stop kube-system or rk-sensor
+	// itself from healing. Every other namespace is refused while the daemon
+	// is unreachable: the plugin cannot know the current policy, and a
+	// namespace given rules after this plugin started must not start
+	// ungoverned.
+	exempt map[string]bool
 	// resync tracks background rebinds started by Synchronize.
 	resync sync.WaitGroup
 }
@@ -61,11 +67,13 @@ func (p *plugin) bind(pod *api.PodSandbox, ctr *api.Container) error {
 		log.Printf("WARNING: slow rk-sensor reply for %s: %s", where, took)
 	}
 	if err != nil {
-		if _, annotated := req.Annotations[profileAnnotation]; !annotated && !p.governed[req.Namespace] {
+		// Fail closed: only an unannotated pod in an exempt namespace starts.
+		// Any other namespace may have rules this plugin does not know about.
+		if _, annotated := req.Annotations[profileAnnotation]; !annotated && p.exempt[req.Namespace] {
 			return nil
 		}
 		if p.failOpen {
-			log.Printf("WARNING: starting %s ungoverned (failurePolicy Ignore): %v", where, err)
+			log.Printf("WARNING: starting %s UNGOVERNED: rk-sensor is unreachable and failurePolicy is Ignore: %v", where, err)
 			return nil
 		}
 		return fmt.Errorf("reality-kernel: %s not started (after %s): %w", where, took, err)
@@ -140,4 +148,15 @@ func (p *plugin) StopContainer(_ context.Context, _ *api.PodSandbox, ctr *api.Co
 func (p *plugin) RemoveContainer(_ context.Context, _ *api.PodSandbox, ctr *api.Container) error {
 	p.unbind(ctr)
 	return nil
+}
+
+// namespaceSet parses a comma-separated namespace list.
+func namespaceSet(list string) map[string]bool {
+	set := map[string]bool{}
+	for _, ns := range strings.Split(list, ",") {
+		if ns = strings.TrimSpace(ns); ns != "" {
+			set[ns] = true
+		}
+	}
+	return set
 }
