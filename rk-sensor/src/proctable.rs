@@ -163,10 +163,9 @@ impl ProcTable {
 
         if let Some(e) = self.cache.get(&tgid).cloned() {
             let live_start = live.as_ref().and_then(|s| s.start);
-            let same_as_live = match (e.start, live_start) {
-                (Some(a), Some(b)) => a == b,
-                _ => live.is_some(),
-            };
+            // Identity needs both start times: an entry whose start is unknown
+            // cannot be told apart from an earlier process that held the tgid.
+            let same_as_live = matches!((e.start, live_start), (Some(a), Some(b)) if a == b);
             let usable = match &live {
                 // The entry must be the live process's.
                 Some(_) if live_decided => same_as_live,
@@ -175,8 +174,8 @@ impl ProcTable {
                 Some(_) => {
                     matches!((e.start, live_start), (Some(a), Some(b)) if a != b && self.start_ns(a) <= ts_ns)
                 }
-                // Exited: usable unless known to have started too late.
-                None => e.start.is_none_or(|a| self.start_ns(a) <= ts_ns),
+                // Exited: usable only if known to have existed at the decision.
+                None => e.start.is_some_and(|a| self.start_ns(a) <= ts_ns),
             };
             if usable {
                 let ppid = if e.ppid_tried {
@@ -227,16 +226,17 @@ impl ProcTable {
 mod tests {
     use super::*;
 
-    /// A fake procfs with one process.
+    /// A fake procfs with one process, started at clock tick 1.
     fn fake_proc(name: &str, pid: u32, exe: &str, ppid: u32) -> PathBuf {
         let root = std::env::temp_dir().join(format!("rk-proc-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let dir = root.join(pid.to_string());
         fs::create_dir_all(&dir).unwrap();
         std::os::unix::fs::symlink(exe, dir.join("exe")).unwrap();
+        let fill = ["0"; 17].join(" ");
         fs::write(
             dir.join("stat"),
-            format!("{pid} (my (odd) comm) S {ppid} 1 1 0 -1"),
+            format!("{pid} (my (odd) comm) S {ppid} {fill} 1 0 0"),
         )
         .unwrap();
         root
@@ -252,8 +252,9 @@ mod tests {
     fn exec_records_fill_the_table_and_procfs_adds_the_parent() {
         let root = fake_proc("exec", 50, "/usr/bin/python3", 1);
         let mut t = ProcTable::new(8, &root);
-        t.record_exec(50, "/opt/agent/bin/run".into(), 0);
-        let info = t.lookup(50, 0);
+        let ts = 10 * t.ns_per_tick;
+        t.record_exec(50, "/opt/agent/bin/run".into(), ts);
+        let info = t.lookup(50, ts);
         assert_eq!(info.source, Source::ExecRecord);
         assert_eq!(info.exe.as_deref(), Some("/opt/agent/bin/run"));
         assert_eq!(info.ppid, Some(1));
@@ -264,7 +265,8 @@ mod tests {
     fn misses_fall_back_to_procfs_and_exited_processes_are_unavailable() {
         let root = fake_proc("miss", 60, "/usr/bin/curl", 59);
         let mut t = ProcTable::new(8, &root);
-        let info = t.lookup(60, 0);
+        let ts = 10 * t.ns_per_tick;
+        let info = t.lookup(60, ts);
         assert_eq!(
             info,
             ProcInfo {
@@ -273,7 +275,7 @@ mod tests {
                 source: Source::Procfs,
             }
         );
-        assert_eq!(t.lookup(61, 0).source, Source::Unavailable);
+        assert_eq!(t.lookup(61, ts).source, Source::Unavailable);
         assert_eq!(t.len(), 1, "unavailable lookups are not cached");
         let _ = fs::remove_dir_all(&root);
     }
@@ -285,8 +287,28 @@ mod tests {
             t.record_exec(pid, format!("/bin/p{pid}"), 0);
         }
         assert_eq!(t.len(), 3);
-        assert_eq!(t.lookup(10, 0).exe.as_deref(), Some("/bin/p10"));
+        assert!(t.cache.contains(&10) && !t.cache.contains(&1));
         assert_eq!(t.lookup(1, 0).source, Source::Unavailable);
+    }
+
+    /// An entry whose start time could not be read is never used: it cannot
+    /// be told apart from an earlier process that held the same pid.
+    #[test]
+    fn an_entry_of_unknown_start_is_not_used() {
+        // No procfs entry when the exec is recorded: start unknown.
+        let root = std::env::temp_dir().join(format!("rk-proc-{}-nostart", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let mut t = ProcTable::new(8, &root);
+        let ts = 500 * t.ns_per_tick;
+        t.record_exec(80, "/old".into(), ts);
+        // Exited: unavailable, not the cached executable.
+        assert_eq!(t.lookup(80, ts).source, Source::Unavailable);
+        // Another process now holds the pid: its own executable, from procfs.
+        set_proc(&root, 80, "/usr/bin/new", 1);
+        let info = t.lookup(80, ts);
+        assert_eq!(info.exe.as_deref(), Some("/usr/bin/new"));
+        assert_eq!(info.source, Source::Procfs);
+        let _ = fs::remove_dir_all(&root);
     }
 
     /// Replaces the fake process `pid` under `root` (a new process reusing

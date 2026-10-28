@@ -137,7 +137,8 @@ and container image. The format follows
   recycled pid cannot bind another workload's cgroup.
 - Audit enrichment checks process start times, so after pid reuse a decision
   is recorded with `enrichment: unavailable` instead of naming another
-  process's executable.
+  process's executable. A cached entry whose start time could not be read
+  is not used either.
 - A sensor restart that adopts pins without a usable state file keeps every
   cgroup binding in the kernel instead of removing all that the policy file
   does not name, which unbound every running agent and container.
