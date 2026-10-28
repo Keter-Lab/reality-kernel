@@ -241,15 +241,16 @@ fn index(dirs: &[PathBuf], deep: &[PathBuf]) -> HashMap<(u64, u64), PathBuf> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Located {
     pub path: String,
-    pub note: Option<String>,
 }
 
 /// Absolute paths for the executed files, by identity. Returns the located
-/// files and descriptions of those that could not be found.
+/// files, descriptions of those that could not be found, and of those whose
+/// path now holds another file (never learned: the file there is not the
+/// one that ran, and may be a payload put in its place).
 pub fn locate(
     execs: &BTreeMap<(u64, u64), ExecSeen>,
     search: &[PathBuf],
-) -> (Vec<Located>, Vec<String>) {
+) -> (Vec<Located>, Vec<String>, Vec<String>) {
     let mut dirs: Vec<PathBuf> = std::env::var("PATH")
         .unwrap_or_default()
         .split(':')
@@ -260,6 +261,7 @@ pub fn locate(
     let mut idx: Option<HashMap<(u64, u64), PathBuf>> = None;
     let mut found = Vec::new();
     let mut missing = Vec::new();
+    let mut replaced = Vec::new();
     for (&(dev, ino), seen) in execs {
         // The name it ran under, when that still names the same file.
         let direct = seen
@@ -268,30 +270,31 @@ pub fn locate(
             .filter(|n| n.starts_with('/'))
             .find(|n| identity(Path::new(n)) == Some((dev, ino)));
         if let Some(path) = direct {
-            found.push(Located {
-                path: path.clone(),
-                note: None,
-            });
+            found.push(Located { path: path.clone() });
             continue;
         }
         let idx = idx.get_or_insert_with(|| index(&dirs, search));
         if let Some(path) = idx.get(&(dev, ino)) {
             found.push(Located {
                 path: path.to_string_lossy().into_owned(),
-                note: None,
             });
             continue;
         }
-        // The path still exists but holds another file now.
-        if let Some(path) = seen
+        // The path still exists but holds another file now: not learned.
+        let changed: Vec<&str> = seen
             .names
             .iter()
-            .find(|n| n.starts_with('/') && Path::new(n).is_file())
-        {
-            found.push(Located {
-                path: path.clone(),
-                note: Some("the file at this path changed after the agent ran it; check it".into()),
-            });
+            .filter(|n| n.starts_with('/') && Path::new(n).is_file())
+            .map(String::as_str)
+            .collect();
+        if !changed.is_empty() {
+            replaced.push(format!(
+                "{}: the agent ran another file there (device {dev}, inode {ino}, {} time(s)); \
+                 the file now at this path was put in its place after it ran. Not learned: \
+                 check the file, and add it to exec.allow by hand if the agent needs it",
+                changed.join(", "),
+                seen.count
+            ));
             continue;
         }
         let names: Vec<&str> = seen.names.iter().map(String::as_str).collect();
@@ -303,7 +306,7 @@ pub fn locate(
     }
     found.sort_by(|a, b| a.path.cmp(&b.path));
     found.dedup_by(|a, b| a.path == b.path);
-    (found, missing)
+    (found, missing, replaced)
 }
 
 fn is_interpreter(path: &str) -> bool {
@@ -408,11 +411,12 @@ pub fn build_profile(
         r.1 += count;
         r.2 |= is_public(&ip);
     }
-    // Ranges per address, across protocols, are limited in the kernel.
-    let mut per_cidr: BTreeMap<String, usize> = BTreeMap::new();
-    for ((cidr, _), (ports, _, _)) in &rules {
-        *per_cidr.entry(cidr.clone()).or_default() += port_ranges(ports).len();
-    }
+    // The kernel holds at most MAX_RANGES port/protocol ranges per address,
+    // across protocols. Past that the lowest are kept and the rest reported,
+    // never widened into one covering range: that would allow ports the
+    // agent never used.
+    let mut room: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut left_out: Vec<String> = Vec::new();
     let network = sub_table(&mut p, "network");
     network.insert("default".into(), s("deny"));
     let allow = network
@@ -427,10 +431,20 @@ pub fn build_profile(
     let mut public = 0;
     for ((cidr, proto), (ports, count, is_pub)) in &rules {
         let mut ranges = port_ranges(ports);
-        let collapsed = per_cidr[cidr] > MAX_RANGES;
-        if collapsed {
-            let (lo, hi) = (ranges[0].0, ranges[ranges.len() - 1].1);
-            ranges = vec![(lo, hi)];
+        let left = room.entry(cidr.as_str()).or_insert(MAX_RANGES);
+        let dropped = ranges.split_off((*left).min(ranges.len()));
+        *left -= ranges.len();
+        let cut = !dropped.is_empty();
+        if cut {
+            let text: Vec<String> = dropped.into_iter().map(range_text).collect();
+            left_out.push(format!(
+                "  {cidr} {}: {}",
+                proto_name(*proto),
+                text.join(", ")
+            ));
+        }
+        if ranges.is_empty() {
+            continue;
         }
         let mut rule = Table::new();
         rule.insert("cidr".into(), s(cidr));
@@ -440,8 +454,8 @@ pub fn build_profile(
             Value::Array(ranges.into_iter().map(|r| s(&range_text(r))).collect()),
         );
         let mut c = format!("learned: {count} connection(s)");
-        if collapsed {
-            c.push_str("; too many ports for one address, widened to one range: narrow it");
+        if cut {
+            c.push_str("; more ports were seen than the kernel holds for one address: see the header");
         }
         if *is_pub {
             public += 1;
@@ -458,6 +472,14 @@ pub fn build_profile(
             "{public} rule(s) allow public addresses. A service behind a CDN changes address, \
              and the rule then goes stale; hostname rules arrive in v0.3.0 (ROADMAP.md)."
         ));
+    }
+    if !left_out.is_empty() {
+        notes.push(format!(
+            "Ports seen but left out, not allowed: the kernel holds {MAX_RANGES} port ranges \
+             per address, and they are never widened into one range. Allow the ones the agent \
+             needs by hand, within the limit:"
+        ));
+        notes.extend(left_out);
     }
 
     // Exec: only when the profile has exec rules (BPF LSM hosts).
@@ -480,21 +502,15 @@ pub fn build_profile(
             }
         }
         for (i, path) in list.iter().enumerate().skip(existing) {
-            let located = execs.iter().find(|l| &l.path == path);
-            let mut c = Vec::new();
-            if is_interpreter(path) {
-                c.push("interpreter: allows any script it runs".to_string());
-            }
-            if let Some(note) = located.and_then(|l| l.note.clone()) {
-                c.push(note);
-            }
-            if c.is_empty() {
-                c.push("learned".to_string());
-            }
+            let c = if is_interpreter(path) {
+                "interpreter: allows any script it runs"
+            } else {
+                "learned"
+            };
             comments.add(
                 &format!("{path_prefix}.exec.allow", path_prefix = path_of(name)),
                 i,
-                c.join("; "),
+                c.to_string(),
             );
         }
         if !list.is_empty() {
@@ -697,15 +713,19 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
             opts.profile
         );
     }
-    let (located, missing) = if base.contains_key("exec") {
+    let (located, missing, replaced) = if base.contains_key("exec") {
         locate(&obs.execs, &opts.search)
     } else {
-        (Vec::new(), Vec::new())
+        (Vec::new(), Vec::new(), Vec::new())
     };
     let (profile, comments, mut notes) = build_profile(&opts.profile, &base, &obs, &located);
     if !missing.is_empty() {
         notes.push("Executables the agent ran that could not be located:".to_string());
         notes.extend(missing.iter().map(|m| format!("  {m}")));
+    }
+    if !replaced.is_empty() {
+        notes.push("Executables replaced after the agent ran them, not learned:".to_string());
+        notes.extend(replaced.iter().map(|m| format!("  {m}")));
     }
 
     let profile_text = toml_out::profile(&opts.profile, &profile, &comments);
@@ -766,11 +786,12 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
         .context("internal error: the suggested policy does not validate")?;
 
     let summary = format!(
-        "{} records: {} destination(s), {} executable(s) ({} not located), {} protected file(s) read",
+        "{} records: {} destination(s), {} executable(s) ({} not located, {} replaced since and not learned), {} protected file(s) read",
         obs.records,
         obs.net.len(),
         located.len(),
         missing.len(),
+        replaced.len(),
         obs.secrets.len()
     );
     Ok((text, summary))
@@ -779,8 +800,11 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
 pub fn run(opts: &Options) -> Result<()> {
     let (text, summary) = suggest(opts)?;
     match &opts.out {
+        // Often run under sudo in a directory the user (or the agent) can
+        // write: an existing file is replaced by rename, a link there is
+        // refused, never written through.
         Some(path) => {
-            fs::write(path, &text).with_context(|| format!("write {}", path.display()))?;
+            crate::safe_write::replace(path, text.as_bytes(), 0o644)?;
             eprintln!("Wrote {}: {summary}", path.display());
             eprintln!("Next: rk policy diff {}", path.display());
         }
@@ -1026,6 +1050,120 @@ network.default = "allow"
         let (_, opts) = setup("empty", &[]);
         let err = suggest(&opts).unwrap_err().to_string();
         assert!(err.contains("no decision records"), "{err}");
+    }
+
+    /// More port ranges than the kernel holds for one address: the first
+    /// eight are kept as seen and the rest reported, never widened into one
+    /// covering range (nine ports once produced 22-65535).
+    #[test]
+    fn observed_port_ranges_are_never_widened() {
+        let ports = [22, 80, 443, 3000, 5432, 6379, 8080, 9000, 65535];
+        let mut records: Vec<Json> = ports
+            .iter()
+            .map(|&p| {
+                record(
+                    connect("127.0.0.1", p, 6),
+                    Verdict::AuditWouldDeny,
+                    "agent",
+                    None,
+                )
+            })
+            .collect();
+        // Same address, another protocol: no room left, reported too.
+        records.push(record(
+            connect("127.0.0.1", 53, 17),
+            Verdict::AuditWouldDeny,
+            "agent",
+            None,
+        ));
+        let (_, opts) = setup("ports", &records);
+        let (text, _) = suggest(&opts).unwrap();
+        let t: Table = toml::from_str(&text).unwrap();
+        let allow = t["profiles"]["agent"]["network"]["allow"]
+            .as_array()
+            .unwrap();
+        assert_eq!(allow.len(), 1, "{text}");
+        let kept: Vec<&str> = allow[0]["ports"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            kept,
+            ["22", "80", "443", "3000", "5432", "6379", "8080", "9000"],
+            "{text}"
+        );
+        assert!(!text.contains("22-65535"), "{text}");
+        assert!(text.contains("127.0.0.0/8 tcp: 65535"), "{text}");
+        assert!(text.contains("127.0.0.0/8 udp: 53"), "{text}");
+    }
+
+    /// An executed path whose file is no longer the one that ran (another
+    /// device/inode there now) is reported, never added to exec.allow.
+    #[test]
+    fn a_replaced_executable_is_not_learned() {
+        let dir = scratch("replaced-bin");
+        let bin = dir.join("tool");
+        fs::write(&bin, "#!/bin/true\n").unwrap();
+        let m = fs::metadata(&bin).unwrap();
+        // Keep the original inode alive (so it is not reused) and put
+        // another file at the path the agent ran.
+        fs::rename(&bin, dir.join("ran")).unwrap();
+        fs::write(&bin, "#!/bin/sh\necho payload\n").unwrap();
+        assert_ne!(fs::metadata(&bin).unwrap().ino(), m.ino());
+        let bin_path = bin.to_string_lossy().into_owned();
+        let records = vec![record(
+            Activity::Exec {
+                path: Some(&bin_path),
+                argv: None,
+                dev: kernel_dev(m.dev()),
+                ino: m.ino(),
+                committed: false,
+            },
+            Verdict::AuditWouldDeny,
+            "agent",
+            None,
+        )];
+        let (_, opts) = setup("replaced", &records);
+        let (text, summary) = suggest(&opts).unwrap();
+        let t: Table = toml::from_str(&text).unwrap();
+        assert!(
+            t["profiles"]["agent"]["exec"].get("allow").is_none(),
+            "{text}"
+        );
+        assert!(text.contains("replaced after the agent ran them"), "{text}");
+        assert!(
+            text.contains(&format!("{bin_path}: the agent ran another file")),
+            "{text}"
+        );
+        assert!(summary.contains("1 replaced"), "{summary}");
+    }
+
+    /// `--out` onto a planted symbolic link is refused; the link's target is
+    /// not overwritten.
+    #[test]
+    fn out_never_writes_through_a_planted_symlink() {
+        let records = vec![record(
+            connect("127.0.0.1", 80, 6),
+            Verdict::AuditWouldDeny,
+            "agent",
+            None,
+        )];
+        let (dir, mut opts) = setup("out-link", &records);
+        let victim = dir.join("victim");
+        fs::write(&victim, "precious\n").unwrap();
+        let out = dir.join("agent.toml");
+        std::os::unix::fs::symlink(&victim, &out).unwrap();
+        opts.out = Some(out.clone());
+        let err = run(&opts).unwrap_err().to_string();
+        assert!(err.contains("symbolic link"), "{err}");
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "precious\n");
+        // A regular file there is replaced with the suggestion.
+        fs::remove_file(&out).unwrap();
+        fs::write(&out, "old\n").unwrap();
+        run(&opts).unwrap();
+        crate::init::validate(&fs::read_to_string(&out).unwrap()).unwrap();
     }
 
     #[test]
