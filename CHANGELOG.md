@@ -53,7 +53,8 @@ and container image. The format follows
 - `rk audit tail` escapes control characters (C0, C1, ESC, DEL) and Unicode
   bidi overrides in what it prints, so a governed process cannot rewrite the
   operator's terminal through a path or argument; `rk audit verify` and the
-  comments of `rk policy suggest` do the same.
+  comments of `rk policy suggest` do the same. `rk audit tail --json` writes
+  them as `\uXXXX` escapes, so its lines are the same JSON values as stored.
 
 ### Changed
 

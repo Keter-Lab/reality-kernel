@@ -284,7 +284,7 @@ fn audit_line(
         return None;
     }
     Some(if json {
-        line.to_string()
+        rk_audit::tail::escape_json_line(line).into_owned()
     } else {
         rk_audit::tail::render(&v)
     })

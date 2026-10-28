@@ -399,6 +399,7 @@ Tampering with a stored audit batch is detected by verification; so are an empti
 - `expected_head_must_be_on_the_chain` (Rust test)
 - `published_public_key_is_never_rewritten` (Rust test)
 - `tail_escapes_terminal_control_sequences` (Rust test)
+- `tail_json_escapes_terminal_control_sequences` (Rust test)
 - `recovery_never_trusts_appended_control_lines` (Rust test)
 - `a_log_of_headers_alone_does_not_verify` (Rust test)
 - `a_failed_verification_reports_no_head` (Rust test)

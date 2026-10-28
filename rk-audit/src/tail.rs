@@ -94,6 +94,28 @@ pub fn escape_control(text: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// A stored JSON line, safe to print to a terminal and still the same JSON
+/// value: every [`is_unsafe_char`] inside a string becomes a `\uXXXX`
+/// escape. In a valid line the only ones outside a string are tab and
+/// carriage return used as whitespace, which become spaces; all of them are
+/// in the Basic Multilingual Plane, so four hex digits suffice.
+pub fn escape_json_line(line: &str) -> Cow<'_, str> {
+    if !line.chars().any(is_unsafe_char) {
+        return Cow::Borrowed(line);
+    }
+    let mut out = String::with_capacity(line.len() + 8);
+    for c in line.chars() {
+        if !is_unsafe_char(c) {
+            out.push(c);
+        } else if c == '\t' || c == '\r' {
+            out.push(' ');
+        } else {
+            let _ = write!(out, "\\u{:04x}", c as u32);
+        }
+    }
+    Cow::Owned(out)
+}
+
 /// One human-readable line for a record, safe to print to a terminal: see
 /// [`escape_control`].
 pub fn render(v: &Value) -> String {
@@ -237,5 +259,20 @@ mod tests {
         assert_eq!(format_time(0), "1970-01-01T00:00:00.000Z");
         assert_eq!(format_time(951_782_400_123), "2000-02-29T00:00:00.123Z");
         assert_eq!(format_time(1_792_627_200_000), "2026-10-22T00:00:00.000Z");
+    }
+
+    /// `--json` output: no character a terminal acts on, and the same JSON
+    /// value as stored.
+    #[test]
+    fn tail_json_escapes_terminal_control_sequences() {
+        let stored = "{\"path\":\"/tmp/x\u{202e}gpj.exe\",\"arg\":\"a\u{7f}b\u{9b}c\",\t\"n\":1}";
+        let out = escape_json_line(stored);
+        assert!(!out.chars().any(is_unsafe_char), "{out}");
+        assert!(out.contains("\\u202e") && out.contains("\\u007f") && out.contains("\\u009b"));
+        let a: Value = serde_json::from_str(stored).unwrap();
+        let b: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(a, b);
+        let plain = "{\"n\":1}";
+        assert!(matches!(escape_json_line(plain), Cow::Borrowed(s) if s == plain));
     }
 }
