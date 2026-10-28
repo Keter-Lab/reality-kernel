@@ -398,6 +398,23 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
     resolve_exec_in(entries, &mut MountTable::new())
 }
 
+/// Refuses an exec allowlist entry whose (device, inode) key would not name
+/// one file. On btrfs every subvolume shares the superblock device the hooks
+/// compare, and inode numbers are unique only within a subvolume, so a file
+/// in another subvolume with the same inode number would be allowed too.
+/// Deny rules keep that key (a collision only denies more); an allow rule
+/// must not, until the kernel key includes the subvolume (docs/policy.md).
+fn refuse_ambiguous_exec(path: &str, fstype: &str) -> Result<()> {
+    if fstype == "btrfs" {
+        anyhow::bail!(
+            "exec allowlist: `{path}` is on btrfs, where a file's (device, inode) key is shared \
+             with same-numbered files in every other subvolume, so allowing it would allow them \
+             too; exec allowlists are not supported on btrfs yet (docs/policy.md)"
+        );
+    }
+    Ok(())
+}
+
 fn resolve_exec_in(entries: &[CompiledExec], mounts: &mut MountTable) -> Result<Vec<ResolvedExec>> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
@@ -423,6 +440,7 @@ fn resolve_exec_in(entries: &[CompiledExec], mounts: &mut MountTable) -> Result<
                 if !id.meta.is_file() {
                     anyhow::bail!("exec allowlist: `{}` is not a regular file", e.path);
                 }
+                refuse_ambiguous_exec(&e.path, &id.fstype)?;
                 identity::warn_if_uncertain("exec", &e.path, &id);
                 push(e.profile, e.rule_id, &id, &mut out);
             }
@@ -456,6 +474,7 @@ fn resolve_exec_in(entries: &[CompiledExec], mounts: &mut MountTable) -> Result<
                             })
                         }
                     };
+                    refuse_ambiguous_exec(&path.to_string_lossy(), &id.fstype)?;
                     push(e.profile, e.rule_id, &id, &mut out);
                 }
             }
@@ -1723,5 +1742,19 @@ mod tests {
         let fname = pin.file_name().unwrap().to_string_lossy();
         assert!(!fname.contains('.'));
         assert_eq!(fname, "rk_net_connect4@rk_slice");
+    }
+
+    /// On btrfs the (superblock device, inode) key is shared across
+    /// subvolumes, so an exec allowlist entry there would allow other files
+    /// too: refused. Other filesystems are unaffected.
+    #[test]
+    fn exec_allowlist_on_btrfs_is_refused() {
+        let err = refuse_ambiguous_exec("/usr/bin/git", "btrfs")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("/usr/bin/git") && err.contains("btrfs"), "{err}");
+        for fstype in ["ext4", "xfs", "overlay", "tmpfs"] {
+            assert!(refuse_ambiguous_exec("/usr/bin/git", fstype).is_ok());
+        }
     }
 }

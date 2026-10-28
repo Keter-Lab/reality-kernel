@@ -17,7 +17,9 @@ and container image. The format follows
   matched there. A rule path whose mount cannot be found now fails the apply;
   a path on another filesystem whose `stat` device differs (for example
   overlayfs) is logged as a warning. `rk policy suggest` matches the
-  executables it learns the same way, so it finds them on btrfs too.
+  executables it learns the same way, so it finds them on btrfs too. Exec
+  allowlists on btrfs are refused at apply time: inode numbers repeat across
+  subvolumes, so an entry would also allow another subvolume's file.
 - `network.deny_raw_sockets` (on by default) now also denies every inet
   socket the connect and send hooks cannot see: ICMP ping, UDP-Lite, SCTP,
   DCCP, MPTCP, `SOCK_SEQPACKET` and any non-TCP stream or non-UDP datagram

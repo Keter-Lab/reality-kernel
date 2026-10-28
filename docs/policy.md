@@ -133,6 +133,13 @@ Rule fields:
   subvolumes and snapshots. A path whose mount cannot be found fails the
   apply. On a filesystem other than btrfs where the two differ (for example
   overlayfs), the daemon logs a warning: the inode number may not match.
+- On btrfs, inode numbers are unique only within a subvolume, and every
+  subvolume shares the superblock device. A file rule there also covers a
+  file with the same inode number in another subvolume, which only denies
+  more. An exec allowlist entry would allow that other file too, so exec
+  allowlists on btrfs are refused at apply time until the kernel key
+  includes the subvolume. (Before this, they never matched on btrfs, so
+  every exec was denied.)
 - `create` on a directory covers every way to add a name to it: `open` with
   `O_CREAT`, `mkdir`, `mknod` (including binding a Unix socket to a path),
   `symlink`, and the destination of `link` and `rename` (including a rename

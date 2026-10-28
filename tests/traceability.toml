@@ -145,7 +145,7 @@ id = "file-identity-superblock"
 text = "File and exec rules, and the executables rk policy suggest learns, resolve to the superblock device the hooks compare (mountinfo), not stat's st_dev, which differs on btrfs subvolumes and snapshots"
 tests = ["unit:identity_parses_mountinfo_lines", "unit:identity_parses_fdinfo_mnt_id",
          "unit:identity_mount_table_indexes_by_id", "unit:identity_resolves_a_live_path_and_keeps_the_inode",
-         "unit:suggest_identity_parses_mountinfo_and_fdinfo", "unit:suggest_identity_resolves_a_live_file"]
+         "unit:suggest_identity_parses_mountinfo_and_fdinfo", "unit:suggest_identity_resolves_a_live_file", "unit:exec_allowlist_on_btrfs_is_refused"]
 
 [[criterion]]
 phase = "4"

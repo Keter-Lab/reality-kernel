@@ -184,6 +184,7 @@ File and exec rules, and the executables rk policy suggest learns, resolve to th
 - `identity_resolves_a_live_path_and_keeps_the_inode` (Rust test)
 - `suggest_identity_parses_mountinfo_and_fdinfo` (Rust test)
 - `suggest_identity_resolves_a_live_file` (Rust test)
+- `exec_allowlist_on_btrfs_is_refused` (Rust test)
 
 ### file-protect-allowlist
 
