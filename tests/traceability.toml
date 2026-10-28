@@ -142,9 +142,10 @@ tests = ["vm:file_create_in_protected_dir_denied", "vm:file_rename_into_protecte
 [[criterion]]
 phase = "4"
 id = "file-identity-superblock"
-text = "File and exec rules resolve to the superblock device the hooks compare (mountinfo), not stat's st_dev, which differs on btrfs subvolumes and snapshots"
+text = "File and exec rules, and the executables rk policy suggest learns, resolve to the superblock device the hooks compare (mountinfo), not stat's st_dev, which differs on btrfs subvolumes and snapshots"
 tests = ["unit:identity_parses_mountinfo_lines", "unit:identity_parses_fdinfo_mnt_id",
-         "unit:identity_mount_table_indexes_by_id", "unit:identity_resolves_a_live_path_and_keeps_the_inode"]
+         "unit:identity_mount_table_indexes_by_id", "unit:identity_resolves_a_live_path_and_keeps_the_inode",
+         "unit:suggest_identity_parses_mountinfo_and_fdinfo", "unit:suggest_identity_resolves_a_live_file"]
 
 [[criterion]]
 phase = "4"
@@ -300,8 +301,10 @@ tests = ["unit:no_object_path_flag"]
 [[criterion]]
 phase = "8"
 id = "traceability"
-text = "Every acceptance criterion maps to named tests that exist and passed on every kernel"
-tests = ["py:test_repository_index_is_complete", "py:test_reports_flag_missing_kernel", "ci:traceability"]
+text = "Every acceptance criterion maps to named tests that exist, would run (no #[ignore]d or non-test Rust fn, no skipped Python test, no disabled or emptied CI job), and passed on every kernel"
+tests = ["py:test_repository_index_is_complete", "py:test_reports_flag_missing_kernel", "ci:traceability",
+         "py:test_static_flags_an_ignored_or_non_test_rust_fn", "py:test_static_flags_a_skipped_python_test",
+         "py:test_static_flags_an_emptied_ci_job", "py:test_static_flags_a_disabled_ci_job"]
 
 [[criterion]]
 phase = "8"
@@ -336,8 +339,8 @@ tests = ["vm:audit_every_decision_logged", "vm:audit_records_loss", "unit:deny_a
 [[criterion]]
 phase = "9"
 id = "audit_tamper"
-text = "Tampering with a stored audit batch is detected by verification"
-tests = ["vm:audit_tamper_detected", "unit:audit_verify_detects_modified_record", "unit:audit_verify_detects_deleted_batch", "unit:audit_verify_detects_reordered_batches", "unit:audit_verify_detects_inserted_batch", "unit:audit_verify_detects_bad_signature_and_pinned_key", "unit:deleting_the_middle_segment_is_detected", "unit:reopening_continues_the_chain_and_seals_leftovers"]
+text = "Tampering with a stored audit batch is detected by verification; so are an emptied log, removed oldest segments, a change of signing key, and (given a recorded chain head) removed newest batches; startup recovery never signs records the writer did not write, and the published public key is never rewritten; rk audit tail escapes terminal control characters a governed process put in a record"
+tests = ["vm:audit_tamper_detected", "unit:audit_verify_detects_modified_record", "unit:audit_verify_detects_deleted_batch", "unit:audit_verify_detects_reordered_batches", "unit:audit_verify_detects_inserted_batch", "unit:audit_verify_detects_bad_signature_and_pinned_key", "unit:deleting_the_middle_segment_is_detected", "unit:reopening_continues_the_chain_and_sets_leftovers_aside", "unit:recovery_does_not_sign_appended_records", "unit:empty_audit_dir_fails_verification", "unit:signing_key_change_fails_unless_both_keys_are_pinned", "unit:expected_head_must_be_on_the_chain", "unit:published_public_key_is_never_rewritten", "unit:tail_escapes_terminal_control_sequences", "unit:tail_json_escapes_terminal_control_sequences", "unit:recovery_never_trusts_appended_control_lines", "unit:a_log_of_headers_alone_does_not_verify", "unit:a_failed_verification_reports_no_head", "unit:trailer_fields_cannot_be_edited"]
 
 [[criterion]]
 phase = "9"
@@ -469,3 +472,11 @@ tests = ["vm:adoption_round_trip", "pkg:pkg_fresh_install_enforces", "pkg:pkg_in
          "unit:starter_with_bpf_lsm_learns_network_exec_and_secrets", "unit:starter_without_bpf_lsm_is_network_only",
          "unit:a_policy_in_use_is_never_replaced", "unit:suggests_an_enforce_profile_from_would_denies",
          "unit:a_log_that_does_not_verify_is_refused", "unit:no_records_is_an_error_not_an_empty_allow_list"]
+
+[[criterion]]
+phase = "v0.2.0"
+id = "cli-cannot-be-steered"
+text = "rk init and rk policy suggest --out, run as root, never write through a symbolic link planted at the policy, staging, backup or output path; suggest keeps the observed port ranges (at most eight per address, the rest reported) instead of widening them, and never learns an executable whose file was replaced after it ran"
+tests = ["unit:root_writes_never_follow_a_planted_symlink", "unit:replace_overwrites_a_regular_file_atomically",
+         "unit:backup_never_follows_a_planted_symlink", "unit:out_never_writes_through_a_planted_symlink",
+         "unit:observed_port_ranges_are_never_widened", "unit:a_replaced_executable_is_not_learned"]

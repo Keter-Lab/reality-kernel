@@ -10,7 +10,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 mod doctor;
+mod identity;
 mod init;
+mod safe_write;
 mod suggest;
 mod toml_out;
 
@@ -112,9 +114,18 @@ enum AuditCommands {
         #[arg(long, default_value = rk_audit::DEFAULT_DIR)]
         dir: PathBuf,
         /// Require this signing key: hex public key, or a file holding it
-        /// (e.g. /var/lib/rk/audit.key.pub)
+        /// (e.g. /var/lib/rk/audit.key.pub). Repeat it to accept a key
+        /// rotation; without it a change of key fails
         #[arg(long)]
-        pubkey: Option<String>,
+        pubkey: Vec<String>,
+        /// Require the chain to pass through this head, recorded earlier
+        /// from the sensor's metrics: SEQ:HASH, with SEQ from
+        /// rk_audit_head_seq and HASH the head_hash label of rk_audit_info
+        #[arg(long, value_name = "SEQ:HASH")]
+        head: Option<String>,
+        /// Accept a log whose oldest segments were removed on purpose
+        #[arg(long)]
+        allow_pruned: bool,
         /// Emit machine-readable JSON output
         #[arg(long)]
         json: bool,
@@ -242,8 +253,15 @@ fn main() -> ExitCode {
             }
         },
         Commands::Audit {
-            command: AuditCommands::Verify { dir, pubkey, json },
-        } => match run_audit_verify(&dir, pubkey.as_deref(), json) {
+            command:
+                AuditCommands::Verify {
+                    dir,
+                    pubkey,
+                    head,
+                    allow_pruned,
+                    json,
+                },
+        } => match run_audit_verify(&dir, &pubkey, head.as_deref(), allow_pruned, json) {
             Ok(true) => ExitCode::SUCCESS,
             Ok(false) => ExitCode::from(2),
             Err(e) => {
@@ -267,7 +285,7 @@ fn audit_line(
         return None;
     }
     Some(if json {
-        line.to_string()
+        rk_audit::tail::escape_json_line(line).into_owned()
     } else {
         rk_audit::tail::render(&v)
     })
@@ -364,16 +382,36 @@ pub(crate) fn read_public_key(p: &str) -> Result<[u8; 32]> {
     rk_audit::key::parse_public_key(&text)
 }
 
-fn run_audit_verify(dir: &Path, pubkey: Option<&str>, json: bool) -> Result<bool> {
-    let pinned = pubkey.map(read_public_key).transpose()?;
-    let r = rk_audit::chain::verify_dir(dir, pinned)?;
+fn run_audit_verify(
+    dir: &Path,
+    pubkeys: &[String],
+    head: Option<&str>,
+    allow_pruned: bool,
+    json: bool,
+) -> Result<bool> {
+    let expect = rk_audit::chain::Expect {
+        keys: pubkeys
+            .iter()
+            .map(String::as_str)
+            .map(read_public_key)
+            .collect::<Result<_>>()?,
+        head: head
+            .map(rk_audit::chain::Head::parse)
+            .transpose()
+            .context("--head")?,
+        allow_pruned,
+    };
+    let r = rk_audit::chain::verify_dir_with(dir, &expect)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&r)?);
         return Ok(r.ok());
     }
+    // Segment names and problem texts come from the files: never print them
+    // raw to a terminal.
+    let safe = rk_audit::tail::escape_control;
     println!(
         "audit log {}: {} segments, {} batches, {} records ({} recovered batches)",
-        dir.display(),
+        safe(&dir.display().to_string()),
         r.segments,
         r.batches,
         r.records,
@@ -386,19 +424,28 @@ fn run_audit_verify(dir: &Path, pubkey: Option<&str>, json: bool) -> Result<bool
             &hash[..16.min(hash.len())],
             r.key_ids.join(", ")
         );
+        // Recorded off the host, this is what a later --head checks.
+        println!("head: {head}:{hash}");
+    }
+    if r.head_anchored && r.ok() {
+        println!("passes through the expected head");
     }
     if r.unsealed_tail > 0 {
         println!("open batch: {} records not sealed yet", r.unsealed_tail);
     }
     for w in &r.warnings {
-        println!("warning: {w}");
+        println!("warning: {}", safe(w));
     }
     if r.ok() {
         println!("VERIFIED");
     } else {
         println!("FAILED: {} problem(s)", r.problems.len());
         for p in &r.problems {
-            println!("  {} line {}: {}", p.segment, p.line, p.what);
+            if p.segment.is_empty() {
+                println!("  {}", safe(&p.what));
+            } else {
+                println!("  {} line {}: {}", safe(&p.segment), p.line, safe(&p.what));
+            }
         }
     }
     Ok(r.ok())

@@ -1,5 +1,8 @@
 //! One-line rendering of audit records for `rk audit tail`.
 
+use std::borrow::Cow;
+use std::fmt::Write as _;
+
 use serde_json::Value;
 
 use crate::ocsf::rk_fields;
@@ -59,8 +62,67 @@ fn str_at<'a>(v: &'a Value, pointer: &str) -> Option<&'a str> {
     v.pointer(pointer).and_then(Value::as_str)
 }
 
-/// One human-readable line for a record.
+/// Characters a terminal acts on rather than shows: C0 and C1 controls
+/// (ESC among them), DEL, and the Unicode bidirectional formatting
+/// characters, which reorder what is displayed.
+pub fn is_unsafe_char(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        )
+}
+
+/// `text` with every [`is_unsafe_char`] written as a visible escape (`\x1b`,
+/// `\u{202e}`), for printing text a governed process chose (paths,
+/// arguments) to a terminal: otherwise it could move the cursor and redraw
+/// its own DENY as an ALLOW.
+pub fn escape_control(text: &str) -> Cow<'_, str> {
+    if !text.chars().any(is_unsafe_char) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() + 8);
+    for c in text.chars() {
+        if !is_unsafe_char(c) {
+            out.push(c);
+        } else if (c as u32) < 0x80 {
+            let _ = write!(out, "\\x{:02x}", c as u32);
+        } else {
+            let _ = write!(out, "\\u{{{:x}}}", c as u32);
+        }
+    }
+    Cow::Owned(out)
+}
+
+/// A stored JSON line, safe to print to a terminal and still the same JSON
+/// value: every [`is_unsafe_char`] inside a string becomes a `\uXXXX`
+/// escape. In a valid line the only ones outside a string are tab and
+/// carriage return used as whitespace, which become spaces; all of them are
+/// in the Basic Multilingual Plane, so four hex digits suffice.
+pub fn escape_json_line(line: &str) -> Cow<'_, str> {
+    if !line.chars().any(is_unsafe_char) {
+        return Cow::Borrowed(line);
+    }
+    let mut out = String::with_capacity(line.len() + 8);
+    for c in line.chars() {
+        if !is_unsafe_char(c) {
+            out.push(c);
+        } else if c == '\t' || c == '\r' {
+            out.push(' ');
+        } else {
+            let _ = write!(out, "\\u{:04x}", c as u32);
+        }
+    }
+    Cow::Owned(out)
+}
+
+/// One human-readable line for a record, safe to print to a terminal: see
+/// [`escape_control`].
 pub fn render(v: &Value) -> String {
+    escape_control(&render_raw(v)).into_owned()
+}
+
+fn render_raw(v: &Value) -> String {
     let time = v
         .get("time")
         .and_then(Value::as_i64)
@@ -162,6 +224,24 @@ mod tests {
     }
 
     #[test]
+    fn tail_escapes_terminal_control_sequences() {
+        // A governed process names its executable so that printing it
+        // erases the line and redraws it as an ALLOW.
+        let mut v = record(Verdict::Deny);
+        v["actor"]["process"]["file"]["path"] =
+            Value::from("/tmp/x\u{1b}[2K\r\u{9b}1A ALLOW \u{7f}\u{202e}fdp.exe");
+        let line = render(&v);
+        assert!(!line.chars().any(is_unsafe_char), "{line:?}");
+        assert!(line.contains("DENY"));
+        assert!(
+            line.contains("/tmp/x\\x1b[2K\\x0d\\u{9b}1A ALLOW \\x7f\\u{202e}fdp.exe"),
+            "{line}"
+        );
+        assert_eq!(escape_control("plain /usr/bin/curl"), "plain /usr/bin/curl");
+        assert!(matches!(escape_control("ok"), Cow::Borrowed(_)));
+    }
+
+    #[test]
     fn filters_by_verdict_and_session() {
         let deny = record(Verdict::Deny);
         assert!(matches(&deny, Some("deny"), Some("s1")));
@@ -179,5 +259,20 @@ mod tests {
         assert_eq!(format_time(0), "1970-01-01T00:00:00.000Z");
         assert_eq!(format_time(951_782_400_123), "2000-02-29T00:00:00.123Z");
         assert_eq!(format_time(1_792_627_200_000), "2026-10-22T00:00:00.000Z");
+    }
+
+    /// `--json` output: no character a terminal acts on, and the same JSON
+    /// value as stored.
+    #[test]
+    fn tail_json_escapes_terminal_control_sequences() {
+        let stored = "{\"path\":\"/tmp/x\u{202e}gpj.exe\",\"arg\":\"a\u{7f}b\u{9b}c\",\t\"n\":1}";
+        let out = escape_json_line(stored);
+        assert!(!out.chars().any(is_unsafe_char), "{out}");
+        assert!(out.contains("\\u202e") && out.contains("\\u007f") && out.contains("\\u009b"));
+        let a: Value = serde_json::from_str(stored).unwrap();
+        let b: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(a, b);
+        let plain = "{\"n\":1}";
+        assert!(matches!(escape_json_line(plain), Cow::Borrowed(s) if s == plain));
     }
 }
