@@ -10,6 +10,25 @@ and container image. The format follows
 
 ### Security
 
+- `rk init` and `rk policy suggest --out` no longer write through a
+  symbolic link. Run as root in a directory the user or the governed agent
+  can write, a link planted at the output path (or at `rk init`'s fixed
+  staging name or predictable backup name) made root overwrite the file it
+  pointed to. Files are now staged under a fresh name created with
+  `O_EXCL|O_NOFOLLOW` and renamed into place; an existing regular file at
+  `--out` is still replaced, a symbolic link there is refused. The
+  `--force` backup is created exclusively, mode 0600.
+- `rk policy suggest` no longer widens more than eight observed port ranges
+  for one address into one covering range (nine ports produced
+  `22-65535`). It keeps the lowest eight, the most the kernel holds per
+  address, and lists the rest in the header, not allowed.
+- `rk policy suggest` no longer learns an executable whose path now holds a
+  different file (device and inode differ from what the audit record shows
+  ran); it is listed in the header instead.
+- The traceability check now fails when a referenced Rust test is
+  `#[ignore]`d or not a `#[test]`, a referenced Python test is marked skip
+  or xfail (or would not be collected), or a referenced CI job is disabled
+  or has no step left that does anything.
 - Audit log: startup recovery no longer signs records it finds after the
   last sealed batch. They were sealed with the live key, so anyone who could
   write the log could get records of their own signed. They are now moved,

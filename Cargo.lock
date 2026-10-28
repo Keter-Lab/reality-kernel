@@ -1233,6 +1233,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
+ "libc",
  "rk-agentd",
  "rk-audit",
  "rk-policy",
