@@ -330,11 +330,15 @@ Zero event loss at a defined sustained rate; loss beyond it counted and reported
 
 ### traceability
 
-Every acceptance criterion maps to named tests that exist and passed on every kernel
+Every acceptance criterion maps to named tests that exist, would run (no #[ignore]d or non-test Rust fn, no skipped Python test, no disabled or emptied CI job), and passed on every kernel
 
 - `test_repository_index_is_complete` (Python test)
 - `test_reports_flag_missing_kernel` (Python test)
 - `traceability` (CI job)
+- `test_static_flags_an_ignored_or_non_test_rust_fn` (Python test)
+- `test_static_flags_a_skipped_python_test` (Python test)
+- `test_static_flags_an_emptied_ci_job` (Python test)
+- `test_static_flags_a_disabled_ci_job` (Python test)
 
 ### conformance
 
@@ -580,3 +584,14 @@ One command installs a verified release (a tampered package is refused); rk init
 - `suggests_an_enforce_profile_from_would_denies` (Rust test)
 - `a_log_that_does_not_verify_is_refused` (Rust test)
 - `no_records_is_an_error_not_an_empty_allow_list` (Rust test)
+
+### cli-cannot-be-steered
+
+rk init and rk policy suggest --out, run as root, never write through a symbolic link planted at the policy, staging, backup or output path; suggest keeps the observed port ranges (at most eight per address, the rest reported) instead of widening them, and never learns an executable whose file was replaced after it ran
+
+- `root_writes_never_follow_a_planted_symlink` (Rust test)
+- `replace_overwrites_a_regular_file_atomically` (Rust test)
+- `backup_never_follows_a_planted_symlink` (Rust test)
+- `out_never_writes_through_a_planted_symlink` (Rust test)
+- `observed_port_ranges_are_never_widened` (Rust test)
+- `a_replaced_executable_is_not_learned` (Rust test)
