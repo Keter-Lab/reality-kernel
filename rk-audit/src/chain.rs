@@ -530,8 +530,7 @@ fn recover(path: &Path, discarded: &mut Vec<Discarded>) -> Result<Option<Head>> 
     if forged {
         if batches == 0 {
             let aside = discarded_path(path, ".forged");
-            fs::rename(path, &aside)
-                .with_context(|| format!("move {} aside", path.display()))?;
+            fs::rename(path, &aside).with_context(|| format!("move {} aside", path.display()))?;
             discarded.push(Discarded {
                 path: aside,
                 lines: data.iter().filter(|&&b| b == b'\n').count() as u64,
@@ -936,7 +935,11 @@ pub fn verify_segments_with(segments: &[(String, Vec<u8>)], expect: &Expect) -> 
                             bad.push(format!(
                                 "trailer form no writer produces (version {}{}): edited",
                                 t.v,
-                                if t.recovered { ", marked recovered" } else { "" }
+                                if t.recovered {
+                                    ", marked recovered"
+                                } else {
+                                    ""
+                                }
                             ));
                             batch_hash(&hd.hash, t.seq, &pending)
                         }
@@ -1450,14 +1453,22 @@ mod tests {
         let before = fs::read(&newest).unwrap();
         // The segment's own header again: trusted, it would restart the chain
         // at batch 0 and the next segment would truncate this one.
-        let header = before.split_inclusive(|&b| b == b'\n').next().unwrap().to_vec();
+        let header = before
+            .split_inclusive(|&b| b == b'\n')
+            .next()
+            .unwrap()
+            .to_vec();
         let mut f = OpenOptions::new().append(true).open(&newest).unwrap();
         f.write_all(&header).unwrap();
         drop(f);
 
         let w = Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap();
         assert_eq!(w.head().next_seq, 2);
-        assert!(w.discarded().len() == 1 && w.discarded()[0].forged, "{:?}", w.discarded());
+        assert!(
+            w.discarded().len() == 1 && w.discarded()[0].forged,
+            "{:?}",
+            w.discarded()
+        );
         drop(w);
         let after = fs::read(&newest).unwrap();
         assert_eq!(after, [before.as_slice(), header.as_slice()].concat());
@@ -1490,11 +1501,18 @@ mod tests {
         let w = Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap();
         assert_eq!(w.head().next_seq, 1);
         assert!(w.discarded()[0].forged);
-        assert!(w.discarded()[0].path.to_string_lossy().contains(FORGED_MARK));
+        assert!(w.discarded()[0]
+            .path
+            .to_string_lossy()
+            .contains(FORGED_MARK));
         drop(w);
         let r = verify_dir(&dir, None).unwrap();
         assert!(!r.ok());
-        assert!(r.problems.iter().any(|p| p.what.contains(FORGED_MARK)), "{:?}", r.problems);
+        assert!(
+            r.problems.iter().any(|p| p.what.contains(FORGED_MARK)),
+            "{:?}",
+            r.problems
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1507,7 +1525,10 @@ mod tests {
         assert_eq!(segments(&dir).unwrap().len(), 1);
         let r = verify_dir(&dir, None).unwrap();
         assert!(!r.ok());
-        assert!(r.problems.iter().any(|p| p.what.contains("no batch verified")));
+        assert!(r
+            .problems
+            .iter()
+            .any(|p| p.what.contains("no batch verified")));
         assert!(r.head_seq.is_none() && r.head_hash.is_none());
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1541,7 +1562,11 @@ mod tests {
         edit(&mut marked, "\"v\":2", "\"recovered\":true,\"v\":2");
         let r = verify_segments(&marked, None);
         assert!(!r.ok());
-        assert!(r.problems[0].what.contains("trailer form"), "{:?}", r.problems);
+        assert!(
+            r.problems[0].what.contains("trailer form"),
+            "{:?}",
+            r.problems
+        );
 
         let mut downgraded = segs.clone();
         edit(&mut downgraded, ",\"v\":2", "");
