@@ -73,14 +73,8 @@ fn unlink_at(dir: &File, name: &CStr) {
 
 fn rename_at(dir: &File, from: &CStr, to: &CStr) -> io::Result<()> {
     // SAFETY: as in `create_at`.
-    let rc = unsafe {
-        libc::renameat(
-            dir.as_raw_fd(),
-            from.as_ptr(),
-            dir.as_raw_fd(),
-            to.as_ptr(),
-        )
-    };
+    let rc =
+        unsafe { libc::renameat(dir.as_raw_fd(), from.as_ptr(), dir.as_raw_fd(), to.as_ptr()) };
     if rc < 0 {
         return Err(io::Error::last_os_error());
     }
@@ -211,7 +205,10 @@ mod tests {
             .map(|e| e.unwrap().file_name())
             .collect();
         assert_eq!(names, [std::ffi::OsString::from("agent.toml")]);
-        assert!(replace(&dir, b"x", 0o644).is_err(), "a directory is refused");
+        assert!(
+            replace(&dir, b"x", 0o644).is_err(),
+            "a directory is refused"
+        );
 
         create_new(&dir.join("new"), b"n\n", 0o600).unwrap();
         assert_eq!(fs::read_to_string(dir.join("new")).unwrap(), "n\n");

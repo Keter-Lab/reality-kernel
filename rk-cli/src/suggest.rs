@@ -455,7 +455,9 @@ pub fn build_profile(
         );
         let mut c = format!("learned: {count} connection(s)");
         if cut {
-            c.push_str("; more ports were seen than the kernel holds for one address: see the header");
+            c.push_str(
+                "; more ports were seen than the kernel holds for one address: see the header",
+            );
         }
         if *is_pub {
             public += 1;
