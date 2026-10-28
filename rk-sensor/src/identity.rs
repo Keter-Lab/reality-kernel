@@ -96,7 +96,10 @@ impl MountTable {
         let meta = file.metadata()?;
         let fdinfo = fs::read_to_string(format!("/proc/self/fdinfo/{}", file.as_raw_fd()))?;
         let mnt_id = parse_fdinfo_mnt_id(&fdinfo).ok_or_else(|| {
-            std::io::Error::other(format!("{}: no mnt_id in /proc/self/fdinfo", path.display()))
+            std::io::Error::other(format!(
+                "{}: no mnt_id in /proc/self/fdinfo",
+                path.display()
+            ))
         })?;
         let mount = self
             .mount(mnt_id)
@@ -163,7 +166,8 @@ mod tests {
 
     #[test]
     fn identity_parses_mountinfo_lines() {
-        let ext4 = "36 35 98:0 /mnt1 /mnt/parent rw,noatime master:1 - ext3 /dev/root rw,errors=continue";
+        let ext4 =
+            "36 35 98:0 /mnt1 /mnt/parent rw,noatime master:1 - ext3 /dev/root rw,errors=continue";
         assert_eq!(
             parse_mountinfo_line(ext4),
             Some((
@@ -175,7 +179,8 @@ mod tests {
             ))
         );
         // No optional fields; btrfs subvolume mount with an anonymous device.
-        let btrfs = "29 1 0:26 /@home /home rw,relatime - btrfs /dev/vda2 rw,subvolid=257,subvol=/@home";
+        let btrfs =
+            "29 1 0:26 /@home /home rw,relatime - btrfs /dev/vda2 rw,subvolid=257,subvol=/@home";
         assert_eq!(
             parse_mountinfo_line(btrfs),
             Some((
@@ -189,7 +194,10 @@ mod tests {
         // Several optional fields, escaped space in the mount point.
         let shared = "120 29 259:3 / /mnt/a\\040b rw shared:5 master:2 - xfs /dev/nvme0n1p3 rw";
         let (id, m) = parse_mountinfo_line(shared).unwrap();
-        assert_eq!((id, m.dev, m.fstype.as_str()), (120, (259 << 20) | 3, "xfs"));
+        assert_eq!(
+            (id, m.dev, m.fstype.as_str()),
+            (120, (259 << 20) | 3, "xfs")
+        );
         // Malformed lines are skipped, not misread.
         assert_eq!(parse_mountinfo_line(""), None);
         assert_eq!(parse_mountinfo_line("1 2 nodev / / rw - ext4 x rw"), None);

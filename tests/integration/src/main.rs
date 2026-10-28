@@ -741,21 +741,29 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
             after >= before + 12,
             "socket_create deny counter moved {before} -> {after}, expected at least 12 denials"
         );
-        Ok("ping, UDP-Lite, SCTP, DCCP, MPTCP and SOCK_SEQPACKET inet sockets denied with EPERM \
+        Ok(
+            "ping, UDP-Lite, SCTP, DCCP, MPTCP and SOCK_SEQPACKET inet sockets denied with EPERM \
             and counted; TCP and UDP sockets (protocol 0 or explicit, with type flags) created"
-            .into())
+                .into(),
+        )
     });
 
-    run_test(checks, "net_unobserved_transports_allowed_without_flag", || {
-        spawn_child(
-            "/sys/fs/cgroup/rk.slice/rawok",
-            "unobserved_sockets",
-            &["ok"],
-        )?;
-        Ok("with network.deny_raw_sockets = false no unobserved inet socket is refused with \
+    run_test(
+        checks,
+        "net_unobserved_transports_allowed_without_flag",
+        || {
+            spawn_child(
+                "/sys/fs/cgroup/rk.slice/rawok",
+                "unobserved_sockets",
+                &["ok"],
+            )?;
+            Ok(
+                "with network.deny_raw_sockets = false no unobserved inet socket is refused with \
             EPERM, and UDP-Lite is created"
-            .into())
-    });
+                    .into(),
+            )
+        },
+    );
 
     // Phase 16: TUN/TAP (docs/design/phase-16.md). Interfaces: rktun0 is
     // created and dropped by single attempts; rktun1 is persistent and owned

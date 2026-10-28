@@ -157,35 +157,32 @@ fn resolve_files(entries: &[CompiledFile]) -> Result<(Vec<ResolvedFile>, Vec<Str
     let mut exec_targets = Vec::new();
     for e in entries {
         match e.target {
-            FileTarget::Path { subtree, optional } => {
-                match mounts.identity(Path::new(&e.path)) {
-                    Ok(id) => {
-                        identity::warn_if_uncertain("file", &e.path, &id);
-                        add(ResolvedFile {
-                            profile: e.profile,
-                            rule_id: e.rule_id,
-                            dev: id.dev,
-                            ino: id.ino,
-                            deny_mask: e.deny_mask,
-                            subtree: subtree && id.meta.is_dir(),
-                        })
-                    }
-                    Err(err)
-                        if optional
-                            && matches!(
-                                err.kind(),
-                                std::io::ErrorKind::NotFound
-                                    | std::io::ErrorKind::PermissionDenied
-                            ) =>
-                    {
-                        skipped.push(format!("{} ({err})", e.path));
-                    }
-                    Err(err) => {
-                        return Err(err)
-                            .with_context(|| format!("file rule: cannot resolve `{}`", e.path))
-                    }
+            FileTarget::Path { subtree, optional } => match mounts.identity(Path::new(&e.path)) {
+                Ok(id) => {
+                    identity::warn_if_uncertain("file", &e.path, &id);
+                    add(ResolvedFile {
+                        profile: e.profile,
+                        rule_id: e.rule_id,
+                        dev: id.dev,
+                        ino: id.ino,
+                        deny_mask: e.deny_mask,
+                        subtree: subtree && id.meta.is_dir(),
+                    })
                 }
-            }
+                Err(err)
+                    if optional
+                        && matches!(
+                            err.kind(),
+                            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+                        ) =>
+                {
+                    skipped.push(format!("{} ({err})", e.path));
+                }
+                Err(err) => {
+                    return Err(err)
+                        .with_context(|| format!("file rule: cannot resolve `{}`", e.path))
+                }
+            },
             FileTarget::Exec(kind) => exec_targets.push((
                 CompiledExec {
                     profile: e.profile,
@@ -401,26 +398,22 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
     resolve_exec_in(entries, &mut MountTable::new())
 }
 
-fn resolve_exec_in(
-    entries: &[CompiledExec],
-    mounts: &mut MountTable,
-) -> Result<Vec<ResolvedExec>> {
+fn resolve_exec_in(entries: &[CompiledExec], mounts: &mut MountTable) -> Result<Vec<ResolvedExec>> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     let mut dir_files: BTreeMap<u32, usize> = BTreeMap::new();
-    let mut push =
-        |profile: u32, rule_id: u32, id: &FileIdentity, out: &mut Vec<ResolvedExec>| {
-            let r = ResolvedExec {
-                profile,
-                rule_id,
-                dev: id.dev,
-                ino: id.ino,
-            };
-            // First rule wins for the same file in the same profile.
-            if seen.insert((r.profile, r.dev, r.ino)) {
-                out.push(r);
-            }
+    let mut push = |profile: u32, rule_id: u32, id: &FileIdentity, out: &mut Vec<ResolvedExec>| {
+        let r = ResolvedExec {
+            profile,
+            rule_id,
+            dev: id.dev,
+            ino: id.ino,
         };
+        // First rule wins for the same file in the same profile.
+        if seen.insert((r.profile, r.dev, r.ino)) {
+            out.push(r);
+        }
+    };
     for e in entries {
         match e.kind {
             ExecPathKind::File => {

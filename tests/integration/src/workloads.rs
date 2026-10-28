@@ -264,30 +264,115 @@ fn handle_packet_socket() -> i32 {
 /// (rk_sock_observed in net.bpf.c). Literal values, so the test does not
 /// depend on which constants the libc crate exports.
 const UNOBSERVED_SOCKETS: [(&str, i32, i32, i32); 12] = [
-    ("ping (AF_INET, SOCK_DGRAM, IPPROTO_ICMP)", libc::AF_INET, 2, 1),
-    ("ping (AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6)", libc::AF_INET6, 2, 58),
-    ("UDP-Lite (AF_INET, SOCK_DGRAM, IPPROTO_UDPLITE)", libc::AF_INET, 2, 136),
-    ("UDP-Lite (AF_INET6, SOCK_DGRAM, IPPROTO_UDPLITE)", libc::AF_INET6, 2, 136),
-    ("SCTP (AF_INET, SOCK_STREAM, IPPROTO_SCTP)", libc::AF_INET, 1, 132),
-    ("SCTP (AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP)", libc::AF_INET, 5, 132),
-    ("SCTP (AF_INET6, SOCK_STREAM, IPPROTO_SCTP)", libc::AF_INET6, 1, 132),
-    ("DCCP (AF_INET, SOCK_DCCP, IPPROTO_DCCP)", libc::AF_INET, 6, 33),
+    (
+        "ping (AF_INET, SOCK_DGRAM, IPPROTO_ICMP)",
+        libc::AF_INET,
+        2,
+        1,
+    ),
+    (
+        "ping (AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6)",
+        libc::AF_INET6,
+        2,
+        58,
+    ),
+    (
+        "UDP-Lite (AF_INET, SOCK_DGRAM, IPPROTO_UDPLITE)",
+        libc::AF_INET,
+        2,
+        136,
+    ),
+    (
+        "UDP-Lite (AF_INET6, SOCK_DGRAM, IPPROTO_UDPLITE)",
+        libc::AF_INET6,
+        2,
+        136,
+    ),
+    (
+        "SCTP (AF_INET, SOCK_STREAM, IPPROTO_SCTP)",
+        libc::AF_INET,
+        1,
+        132,
+    ),
+    (
+        "SCTP (AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP)",
+        libc::AF_INET,
+        5,
+        132,
+    ),
+    (
+        "SCTP (AF_INET6, SOCK_STREAM, IPPROTO_SCTP)",
+        libc::AF_INET6,
+        1,
+        132,
+    ),
+    (
+        "DCCP (AF_INET, SOCK_DCCP, IPPROTO_DCCP)",
+        libc::AF_INET,
+        6,
+        33,
+    ),
     ("DCCP (AF_INET6, SOCK_DCCP, 0)", libc::AF_INET6, 6, 0),
-    ("MPTCP (AF_INET, SOCK_STREAM, IPPROTO_MPTCP)", libc::AF_INET, 1, 262),
+    (
+        "MPTCP (AF_INET, SOCK_STREAM, IPPROTO_MPTCP)",
+        libc::AF_INET,
+        1,
+        262,
+    ),
     ("SOCK_SEQPACKET (AF_INET, protocol 0)", libc::AF_INET, 5, 0),
-    ("UDP protocol on a stream (AF_INET, SOCK_STREAM, IPPROTO_UDP)", libc::AF_INET, 1, 17),
+    (
+        "UDP protocol on a stream (AF_INET, SOCK_STREAM, IPPROTO_UDP)",
+        libc::AF_INET,
+        1,
+        17,
+    ),
 ];
 
 /// Inet socket shapes the sock_addr hooks observe: always allowed, including
 /// protocol 0 (resolved by the kernel after the LSM hook) and the type flags.
 const OBSERVED_SOCKETS: [(&str, i32, i32, i32); 7] = [
-    ("TCP (AF_INET, SOCK_STREAM, 0)", libc::AF_INET, libc::SOCK_STREAM, 0),
-    ("TCP (AF_INET, SOCK_STREAM, IPPROTO_TCP)", libc::AF_INET, libc::SOCK_STREAM, 6),
-    ("TCP (AF_INET6, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)", libc::AF_INET6, libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC, 0),
-    ("UDP (AF_INET, SOCK_DGRAM, 0)", libc::AF_INET, libc::SOCK_DGRAM, 0),
-    ("UDP (AF_INET, SOCK_DGRAM, IPPROTO_UDP)", libc::AF_INET, libc::SOCK_DGRAM, 17),
-    ("UDP (AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP)", libc::AF_INET6, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 17),
-    ("AF_UNIX (SOCK_STREAM, 0)", libc::AF_UNIX, libc::SOCK_STREAM, 0),
+    (
+        "TCP (AF_INET, SOCK_STREAM, 0)",
+        libc::AF_INET,
+        libc::SOCK_STREAM,
+        0,
+    ),
+    (
+        "TCP (AF_INET, SOCK_STREAM, IPPROTO_TCP)",
+        libc::AF_INET,
+        libc::SOCK_STREAM,
+        6,
+    ),
+    (
+        "TCP (AF_INET6, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)",
+        libc::AF_INET6,
+        libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
+        0,
+    ),
+    (
+        "UDP (AF_INET, SOCK_DGRAM, 0)",
+        libc::AF_INET,
+        libc::SOCK_DGRAM,
+        0,
+    ),
+    (
+        "UDP (AF_INET, SOCK_DGRAM, IPPROTO_UDP)",
+        libc::AF_INET,
+        libc::SOCK_DGRAM,
+        17,
+    ),
+    (
+        "UDP (AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP)",
+        libc::AF_INET6,
+        libc::SOCK_DGRAM | libc::SOCK_CLOEXEC,
+        17,
+    ),
+    (
+        "AF_UNIX (SOCK_STREAM, 0)",
+        libc::AF_UNIX,
+        libc::SOCK_STREAM,
+        0,
+    ),
 ];
 
 /// Creates one socket; Ok(()) on success (the descriptor is closed).
