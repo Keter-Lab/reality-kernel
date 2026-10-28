@@ -692,6 +692,15 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             match opened {
                 Ok(w) => {
                     info!(dir, key_id = %w.key_id(), next_batch = w.head().next_seq, "audit log open");
+                    for d in w.discarded() {
+                        warn!(
+                            file = %d.path.display(),
+                            lines = d.lines,
+                            bytes = d.bytes,
+                            "audit log: lines after the last sealed batch (a crash mid-batch, or \
+                             written by someone else) were set aside unsigned, not sealed"
+                        );
+                    }
                     Some(w)
                 }
                 Err(e) => {

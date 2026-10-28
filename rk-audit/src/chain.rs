@@ -59,7 +59,9 @@ pub struct Trailer {
     pub hash: String,
     pub sig: String,
     pub key_id: String,
-    /// Sealed at startup: records a previous writer wrote but did not seal.
+    /// Sealed at startup by rk 0.2 and earlier: records a previous writer
+    /// wrote but did not seal. No longer written (they are set aside, see
+    /// [`Discarded`]); still read so old logs verify. Outside the hash.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub recovered: bool,
 }
@@ -116,6 +118,39 @@ pub struct Head {
     pub hash: [u8; 32],
 }
 
+impl Head {
+    /// Parses `SEQ:HASH`, the chain head as the sensor exports it:
+    /// `rk_audit_head_seq` and the `head_hash` label of `rk_audit_info`
+    /// (64 hex digits).
+    pub fn parse(text: &str) -> Result<Self> {
+        let (seq, hash) = text
+            .trim()
+            .split_once(':')
+            .context("expected SEQ:HASH (rk_audit_head_seq and rk_audit_info's head_hash)")?;
+        Ok(Self {
+            next_seq: seq
+                .parse::<u64>()
+                .with_context(|| format!("head sequence {seq:?} is not a number"))?,
+            hash: hex32(hash).context("head hash must be 64 hex digits")?,
+        })
+    }
+}
+
+/// Lines a previous writer left after its last sealed batch, found when a
+/// [`Writer`] opened the directory. They are moved to `path` (named
+/// `<segment>.unsealed`, which is not a segment) instead of being sealed:
+/// sealing them would sign whatever anyone had appended to the log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Discarded {
+    pub path: PathBuf,
+    /// Complete lines set aside (a torn last line is included, not counted).
+    pub lines: u64,
+    pub bytes: u64,
+}
+
+/// Marks files of [`Discarded`] lines.
+const DISCARDED_MARK: &str = ".jsonl.unsealed";
+
 #[derive(Debug, Clone, Copy)]
 pub struct WriterOptions {
     /// A batch is sealed once it holds this many records...
@@ -164,16 +199,20 @@ pub struct Writer {
     pending: Vec<u8>,
     pending_records: u64,
     batch_started: Option<Instant>,
+    discarded: Vec<Discarded>,
 }
 
 impl Writer {
-    /// Opens `dir` (created 0750 if needed). Continues the chain of the
-    /// newest segment, first sealing any records a previous writer left
-    /// unsealed, then starts a new segment for this writer.
+    /// Opens `dir` (created 0750 if needed). Continues the chain from the
+    /// last sealed batch of the newest segment, then starts a new segment for
+    /// this writer. Anything after that batch (the open batch of a writer
+    /// that crashed, or lines someone else appended) is moved aside
+    /// unsigned, never sealed: see [`Writer::discarded`].
     pub fn open(dir: &Path, key: AuditKey, opts: WriterOptions) -> Result<Self> {
         fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
         fs::set_permissions(dir, fs::Permissions::from_mode(0o750))?;
         let mut existing = segments(dir)?;
+        let mut discarded = Vec::new();
         let head = loop {
             match existing.pop() {
                 None => {
@@ -182,11 +221,13 @@ impl Writer {
                         hash: GENESIS,
                     }
                 }
-                Some(last) => match recover(&last, &key)? {
-                    Some(head) => break head,
-                    // Empty after cutting a torn line: nothing verifiable.
-                    None => fs::remove_file(&last)?,
-                },
+                Some(last) => {
+                    // Otherwise nothing verifiable was left in it: continue
+                    // from the segment before.
+                    if let Some(head) = recover(&last, &mut discarded)? {
+                        break head;
+                    }
+                }
             }
         };
         let (out, segment_len) = start_segment(dir, &key, head)?;
@@ -200,7 +241,14 @@ impl Writer {
             pending: Vec::new(),
             pending_records: 0,
             batch_started: None,
+            discarded,
         })
+    }
+
+    /// What [`Writer::open`] set aside: report it, the lines are not part of
+    /// the verified chain.
+    pub fn discarded(&self) -> &[Discarded] {
+        &self.discarded
     }
 
     pub fn head(&self) -> Head {
@@ -246,13 +294,7 @@ impl Writer {
         if self.pending_records == 0 {
             return Ok(());
         }
-        let trailer = sign_batch(
-            &self.key,
-            self.head,
-            &self.pending,
-            self.pending_records,
-            false,
-        );
+        let trailer = sign_batch(&self.key, self.head, &self.pending, self.pending_records);
         let line = control_line(&Control::Batch(trailer.clone()))?;
         self.out.write_all(&line)?;
         self.out.flush()?;
@@ -286,7 +328,7 @@ fn control_line(c: &Control) -> Result<Vec<u8>> {
     Ok(line)
 }
 
-fn sign_batch(key: &AuditKey, head: Head, records: &[u8], count: u64, recovered: bool) -> Trailer {
+fn sign_batch(key: &AuditKey, head: Head, records: &[u8], count: u64) -> Trailer {
     let hash = batch_hash(&head.hash, head.next_seq, records);
     Trailer {
         seq: head.next_seq,
@@ -295,14 +337,14 @@ fn sign_batch(key: &AuditKey, head: Head, records: &[u8], count: u64, recovered:
         hash: hex::encode(hash),
         sig: hex::encode(key.sign(&hash)),
         key_id: key.key_id(),
-        recovered,
+        recovered: false,
     }
 }
 
 fn start_segment(dir: &Path, key: &AuditKey, head: Head) -> Result<(BufWriter<File>, u64)> {
     // A segment of this name exists only if it holds a header and nothing
     // else (no batch was sealed in it, or its first seq would be behind us;
-    // leftovers would have been sealed by `recover`), so it is replaced.
+    // leftovers were moved aside by `recover`), so it is replaced.
     let path = dir.join(segment_name(head.next_seq));
     let file = OpenOptions::new()
         .write(true)
@@ -323,31 +365,41 @@ fn start_segment(dir: &Path, key: &AuditKey, head: Head) -> Result<(BufWriter<Fi
     Ok((out, header.len() as u64))
 }
 
-/// Reads the chain head from the newest segment. A torn final line (a crash
-/// mid-write) is cut off; records after the last trailer are sealed into a
-/// batch marked `recovered`. `None` when nothing is left of the segment.
-fn recover(path: &Path, key: &AuditKey) -> Result<Option<Head>> {
-    let mut data = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    if let Some(end) = data.iter().rposition(|&b| b == b'\n') {
-        if end + 1 != data.len() {
-            data.truncate(end + 1);
-            let f = OpenOptions::new().write(true).open(path)?;
-            f.set_len(data.len() as u64)?;
-        }
-    } else {
+/// Reads the chain head from the newest segment: its last sealed batch, or
+/// its header. Whatever follows (a torn line from a crash mid-write, the
+/// open batch of a writer that crashed, or lines appended by someone else)
+/// is moved to a `.unsealed` file next to it and cut off, so the segment
+/// ends sealed and the chain continues without this writer signing bytes it
+/// did not write. A segment with no complete line is moved aside whole and
+/// `None` returned.
+fn recover(path: &Path, discarded: &mut Vec<Discarded>) -> Result<Option<Head>> {
+    let data = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    if data.is_empty() {
+        // Created, header not yet written: nothing to keep.
+        fs::remove_file(path).with_context(|| format!("remove {}", path.display()))?;
         return Ok(None);
     }
     let mut head = None;
-    let mut unsealed = Vec::new();
-    let mut unsealed_records = 0u64;
+    // Bytes up to the end of the last header or trailer, and the complete
+    // lines after it.
+    let mut sealed_end = 0usize;
+    let mut unsealed_lines = 0u64;
+    let mut offset = 0usize;
     for line in data.split_inclusive(|&b| b == b'\n') {
-        match classify(&line[..line.len() - 1]) {
+        offset += line.len();
+        let Some(body) = line.strip_suffix(b"\n") else {
+            // Torn final line: set aside with the rest.
+            break;
+        };
+        match classify(body) {
             Line::Segment(h) => {
                 let hash = hex32(&h.prev).context("segment header: bad prev")?;
                 head = Some(Head {
                     next_seq: h.seq,
                     hash,
                 });
+                sealed_end = offset;
+                unsealed_lines = 0;
             }
             Line::Batch(t) => {
                 let hash = hex32(&t.hash).context("batch trailer: bad hash")?;
@@ -355,32 +407,62 @@ fn recover(path: &Path, key: &AuditKey) -> Result<Option<Head>> {
                     next_seq: t.seq + 1,
                     hash,
                 });
-                unsealed.clear();
-                unsealed_records = 0;
+                sealed_end = offset;
+                unsealed_lines = 0;
             }
-            Line::Record | Line::Invalid(_) => {
-                unsealed.extend_from_slice(line);
-                unsealed_records += 1;
-            }
+            Line::Record | Line::Invalid(_) => unsealed_lines += 1,
         }
     }
-    let Some(mut head) = head else {
+    if head.is_none() && data.contains(&b'\n') {
         bail!(
             "{}: no segment header; refusing to guess the chain position",
             path.display()
         );
-    };
-    if unsealed_records > 0 {
-        let trailer = sign_batch(key, head, &unsealed, unsealed_records, true);
-        let mut f = OpenOptions::new().append(true).open(path)?;
-        f.write_all(&control_line(&Control::Batch(trailer.clone()))?)?;
-        f.sync_data()?;
-        head = Head {
-            next_seq: head.next_seq + 1,
-            hash: hex32(&trailer.hash).expect("own hash is valid hex"),
-        };
     }
-    Ok(Some(head))
+    if sealed_end == data.len() {
+        return Ok(head);
+    }
+    let aside = discarded_path(path);
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o640)
+        .open(&aside)
+        .with_context(|| format!("create {}", aside.display()))?;
+    f.write_all(&data[sealed_end..])?;
+    f.sync_all()?;
+    // Durable copy first: a crash from here on finds the lines again and
+    // sets them aside again, to a second file.
+    if head.is_some() {
+        let seg = OpenOptions::new().write(true).open(path)?;
+        seg.set_len(sealed_end as u64)?;
+        seg.sync_all()?;
+    } else {
+        fs::remove_file(path).with_context(|| format!("remove {}", path.display()))?;
+    }
+    discarded.push(Discarded {
+        path: aside,
+        lines: unsealed_lines,
+        bytes: (data.len() - sealed_end) as u64,
+    });
+    Ok(head)
+}
+
+/// `<segment>.unsealed`, or `<segment>.unsealed.N` when that is taken.
+fn discarded_path(segment: &Path) -> PathBuf {
+    let mut n = 0u32;
+    loop {
+        let mut name = segment.as_os_str().to_owned();
+        name.push(".unsealed");
+        if n > 0 {
+            name.push(format!(".{n}"));
+        }
+        let path = PathBuf::from(name);
+        if !path.exists() {
+            return path;
+        }
+        n += 1;
+    }
 }
 
 /// A verification failure: evidence of tampering or corruption.
@@ -409,6 +491,8 @@ pub struct Report {
     /// Records after the last batch of the newest segment: the writer's open
     /// batch, not yet sealed. Not a failure.
     pub unsealed_tail: u64,
+    /// An expected head was given and the chain passes through it.
+    pub head_anchored: bool,
     pub warnings: Vec<String>,
     pub problems: Vec<Problem>,
 }
@@ -419,9 +503,40 @@ impl Report {
     }
 }
 
+/// What verification is told from outside the log. The files alone can
+/// only show that they are consistent with themselves; these anchor them.
+#[derive(Debug, Clone, Default)]
+pub struct Expect {
+    /// Keys the segments may be signed by (more than one across a key
+    /// rotation). Empty: the key named by the first segment present is
+    /// taken on trust, and any later change of key is a problem.
+    pub keys: Vec<[u8; 32]>,
+    /// A chain head recorded earlier (the sensor exports it in its metrics):
+    /// the chain must pass through it, so removing the newest batches, or
+    /// rewriting the chain up to it, fails.
+    pub head: Option<Head>,
+    /// Accept a chain whose oldest segments were removed. Without it a chain
+    /// that does not start at batch 0 fails.
+    pub allow_pruned: bool,
+}
+
+impl Expect {
+    pub fn pinned(key: Option<[u8; 32]>) -> Self {
+        Self {
+            keys: key.into_iter().collect(),
+            ..Self::default()
+        }
+    }
+}
+
 /// Verifies the segments of `dir`. With `pinned`, every segment must be
 /// signed by that key.
 pub fn verify_dir(dir: &Path, pinned: Option<[u8; 32]>) -> Result<Report> {
+    verify_dir_with(dir, &Expect::pinned(pinned))
+}
+
+/// Verifies the segments of `dir` against what `expect` says.
+pub fn verify_dir_with(dir: &Path, expect: &Expect) -> Result<Report> {
     let mut loaded = Vec::new();
     for path in segments(dir)? {
         let name = path
@@ -433,18 +548,78 @@ pub fn verify_dir(dir: &Path, pinned: Option<[u8; 32]>) -> Result<Report> {
             fs::read(&path).with_context(|| format!("read {}", path.display()))?,
         ));
     }
-    Ok(verify_segments(&loaded, pinned))
+    let mut r = verify_segments_with(&loaded, expect);
+    let mut aside: Vec<(String, u64)> = fs::read_dir(dir)
+        .with_context(|| format!("read {}", dir.display()))?
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if !name.contains(DISCARDED_MARK) {
+                return None;
+            }
+            Some((name, e.metadata().ok()?.len()))
+        })
+        .collect();
+    aside.sort();
+    for (name, len) in aside {
+        r.warnings.push(format!(
+            "{name}: {len} bytes a previous writer left unsealed, set aside at startup and not \
+             part of the verified chain"
+        ));
+    }
+    Ok(r)
 }
 
 /// Verifies segments given as `(name, contents)` in chain order.
 pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>) -> Report {
+    verify_segments_with(segments, &Expect::pinned(pinned))
+}
+
+/// A problem with the log as a whole rather than with one line.
+fn global_problem(r: &mut Report, what: String) {
+    r.problems.push(Problem {
+        segment: String::new(),
+        line: 0,
+        seq: None,
+        what,
+    });
+}
+
+/// Notes that the chain reached position `at`, for the expected head check:
+/// `Some(true)` once `at` is the expected head, `Some(false)` if the same
+/// position was reached with another hash.
+fn note_position(expected: Option<Head>, at: Head, seen: &mut Option<bool>) {
+    if let Some(want) = expected {
+        if want.next_seq == at.next_seq {
+            *seen = Some(seen.unwrap_or(true) && want.hash == at.hash);
+        }
+    }
+}
+
+/// Verifies segments given as `(name, contents)` in chain order against
+/// what `expect` says.
+pub fn verify_segments_with(segments: &[(String, Vec<u8>)], expect: &Expect) -> Report {
     let mut r = Report {
         segments: segments.len(),
         ..Report::default()
     };
+    if segments.is_empty() {
+        global_problem(
+            &mut r,
+            "no audit segments: an empty log proves nothing (removed, or never written)".into(),
+        );
+        return r;
+    }
+    if expect.keys.is_empty() {
+        r.warnings.push(
+            "no signing key pinned: the log is checked only against the key it names itself"
+                .into(),
+        );
+    }
     // Chain position after the last batch; None before the first header.
     let mut head: Option<Head> = None;
     let mut last_key: Option<[u8; 32]> = None;
+    let mut anchor_seen: Option<bool> = None;
 
     for (index, (name, data)) in segments.iter().enumerate() {
         let newest = index + 1 == segments.len();
@@ -504,20 +679,30 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
                         );
                         continue;
                     };
-                    if let Some(pin) = pinned {
-                        if pk != pin {
+                    if !expect.keys.is_empty() {
+                        if !expect.keys.contains(&pk) {
                             problem(
                                 &mut r,
                                 lineno,
                                 Some(h.seq),
-                                format!("signed by key {}, not the pinned key", key::key_id(&pk)),
+                                format!("signed by key {}, not a pinned key", key::key_id(&pk)),
                             );
                         }
-                    } else if last_key.is_some_and(|k| k != pk) {
-                        r.warnings.push(format!(
-                            "{name}: signing key changed to {}",
-                            key::key_id(&pk)
-                        ));
+                    } else if let Some(before) = last_key.filter(|k| *k != pk) {
+                        // Whoever can write the directory can start a
+                        // segment under a key of their own; only a key the
+                        // verifier was given is a rotation.
+                        problem(
+                            &mut r,
+                            lineno,
+                            Some(h.seq),
+                            format!(
+                                "signing key changed from {} to {}: pin every legitimate key to \
+                                 accept a rotation",
+                                key::key_id(&before),
+                                key::key_id(&pk)
+                            ),
+                        );
                     }
                     let id = key::key_id(&pk);
                     if !r.key_ids.contains(&id) {
@@ -529,15 +714,37 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
                         None => {
                             r.first_seq = Some(h.seq);
                             if h.seq != 0 {
-                                r.warnings.push(format!(
+                                let what = format!(
                                     "chain starts at batch {}: earlier segments are not present",
                                     h.seq
-                                ));
+                                );
+                                if expect.allow_pruned {
+                                    r.warnings.push(what);
+                                } else {
+                                    problem(
+                                        &mut r,
+                                        lineno,
+                                        Some(h.seq),
+                                        format!(
+                                            "{what} (removed by retention or by tampering; \
+                                             accept it only if you pruned them)"
+                                        ),
+                                    );
+                                }
+                            } else if prev != GENESIS {
+                                problem(
+                                    &mut r,
+                                    lineno,
+                                    Some(h.seq),
+                                    "batch 0 does not start from the genesis hash".into(),
+                                );
                             }
-                            head = Some(Head {
+                            let at = Head {
                                 next_seq: h.seq,
                                 hash: prev,
-                            });
+                            };
+                            note_position(expect.head, at, &mut anchor_seen);
+                            head = Some(at);
                         }
                         Some(hd) if hd.next_seq != h.seq || hd.hash != prev => problem(
                             &mut r,
@@ -596,6 +803,14 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
                         if t.recovered {
                             r.recovered_batches += 1;
                         }
+                        note_position(
+                            expect.head,
+                            Head {
+                                next_seq: t.seq + 1,
+                                hash: computed,
+                            },
+                            &mut anchor_seen,
+                        );
                     } else {
                         problem(
                             &mut r,
@@ -646,6 +861,43 @@ pub fn verify_segments(segments: &[(String, Vec<u8>)], pinned: Option<[u8; 32]>)
     if let Some(hd) = head {
         r.head_seq = Some(hd.next_seq);
         r.head_hash = Some(hex::encode(hd.hash));
+    }
+    if r.recovered_batches > 0 {
+        r.warnings.push(format!(
+            "{} batches were sealed by startup recovery (rk 0.2 and earlier): the writer that \
+             signed them did not write them, so their records are not authenticated",
+            r.recovered_batches
+        ));
+    }
+    if let Some(want) = expect.head {
+        let short = hex::encode(&want.hash[..8]);
+        match anchor_seen {
+            Some(true) => r.head_anchored = true,
+            Some(false) => global_problem(
+                &mut r,
+                format!(
+                    "the chain does not pass through the expected head {}:{short}: the batches \
+                     before it were rewritten",
+                    want.next_seq
+                ),
+            ),
+            None => {
+                let why = match (r.first_seq, head) {
+                    (Some(first), _) if want.next_seq < first => format!(
+                        "it is older than the oldest segment present (batch {first})"
+                    ),
+                    (_, Some(hd)) if hd.next_seq < want.next_seq => format!(
+                        "the chain ends before batch {}: the newest batches are missing",
+                        hd.next_seq
+                    ),
+                    _ => "it is not on the verified chain".to_string(),
+                };
+                global_problem(
+                    &mut r,
+                    format!("expected head {}:{short} not reached: {why}", want.next_seq),
+                );
+            }
+        }
     }
     r
 }
@@ -783,7 +1035,7 @@ mod tests {
             hash: hex32(&last.hash).unwrap(),
         };
         let forged = b"{\"class_uid\":4001,\"n\":99}\n".to_vec();
-        let t = sign_batch(&other, head, &forged, 1, false);
+        let t = sign_batch(&other, head, &forged, 1);
         let mut data = segs[0].1.clone();
         data.extend_from_slice(&forged);
         data.extend_from_slice(&control_line(&Control::Batch(t)).unwrap());
@@ -816,11 +1068,23 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// Files of lines set aside by `recover`, in name order.
+    fn set_aside(dir: &Path) -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.to_string_lossy().contains(DISCARDED_MARK))
+            .collect();
+        out.sort();
+        out
+    }
+
     #[test]
-    fn reopening_continues_the_chain_and_seals_leftovers() {
+    fn reopening_continues_the_chain_and_sets_leftovers_aside() {
         let dir = tempdir("reopen");
         let mut w = write(&dir, 4);
-        // An unsealed record and a torn line, as after a crash.
+        // An unsealed record and a torn line, as after a crash mid-batch.
         w.append(&json!({"class_uid": 4001, "n": "late"})).unwrap();
         w.out.flush().unwrap();
         std::mem::forget(w);
@@ -829,12 +1093,139 @@ mod tests {
         f.write_all(b"{\"class_uid\":40").unwrap();
         drop(f);
 
+        let w = Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap();
+        assert_eq!(w.discarded().len(), 1, "{:?}", w.discarded());
+        assert_eq!(w.discarded()[0].lines, 1);
+        drop(w);
         drop(write(&dir, 2));
         let r = verify_dir(&dir, None).unwrap();
         assert!(r.ok(), "{:?}", r.problems);
         assert_eq!(r.segments, 2);
-        assert_eq!(r.recovered_batches, 1);
-        assert_eq!(r.records, 7);
+        assert_eq!(r.recovered_batches, 0);
+        // The crashed writer's open batch is not part of the chain.
+        assert_eq!(r.records, 6);
+        assert!(r.warnings.iter().any(|w| w.contains("set aside")));
+        let aside = set_aside(&dir);
+        assert_eq!(aside.len(), 1);
+        let kept = fs::read_to_string(&aside[0]).unwrap();
+        assert!(kept.contains("\"late\"") && kept.ends_with("{\"class_uid\":40"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn recovery_does_not_sign_appended_records() {
+        let dir = tempdir("oracle");
+        drop(write(&dir, 3));
+        // Someone who can write the log appends a record of their own after
+        // the last sealed batch, then waits for the writer to restart.
+        let newest = segments(&dir).unwrap().pop().unwrap();
+        let forged = "{\"class_uid\":4001,\"forged\":true}\n";
+        let mut f = OpenOptions::new().append(true).open(&newest).unwrap();
+        f.write_all(forged.as_bytes()).unwrap();
+        drop(f);
+
+        let w = Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap();
+        assert_eq!(w.discarded().len(), 1);
+        drop(w);
+        for seg in segments(&dir).unwrap() {
+            let text = fs::read_to_string(&seg).unwrap();
+            assert!(!text.contains("forged"), "{}: {text}", seg.display());
+        }
+        assert_eq!(fs::read_to_string(&set_aside(&dir)[0]).unwrap(), forged);
+        let r = verify_dir(&dir, None).unwrap();
+        assert!(r.ok(), "{:?}", r.problems);
+        assert_eq!((r.records, r.unsealed_tail), (3, 0));
+
+        // Restarting again, after another crash mid-batch, does not wedge:
+        // the chain keeps verifying and every set-aside file is kept.
+        let mut w = Writer::open(&dir, AuditKey::from_seed([5; 32]), opts()).unwrap();
+        w.append(&json!({"class_uid": 4001, "n": "crash"})).unwrap();
+        w.out.flush().unwrap();
+        std::mem::forget(w);
+        drop(write(&dir, 3));
+        let r = verify_dir(&dir, None).unwrap();
+        assert!(r.ok(), "{:?}", r.problems);
+        assert_eq!(r.records, 6);
+        assert_eq!(set_aside(&dir).len(), 2);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn empty_audit_dir_fails_verification() {
+        let dir = tempdir("empty");
+        fs::create_dir_all(&dir).unwrap();
+        let r = verify_dir(&dir, None).unwrap();
+        assert!(!r.ok());
+        assert!(r.problems[0].what.contains("no audit segments"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn signing_key_change_fails_unless_both_keys_are_pinned() {
+        let dir = tempdir("keychange");
+        let first = write(&dir, 3);
+        let old = first.public_key();
+        drop(first);
+        // A segment started under another key continues the chain.
+        let mut w = Writer::open(&dir, AuditKey::from_seed([6; 32]), opts()).unwrap();
+        let new = w.public_key();
+        w.append(&json!({"class_uid": 4001, "n": "spliced"})).unwrap();
+        drop(w);
+
+        let r = verify_dir(&dir, None).unwrap();
+        assert!(!r.ok());
+        assert!(r
+            .problems
+            .iter()
+            .any(|p| p.what.contains("signing key changed")));
+        assert!(!verify_dir(&dir, Some(old)).unwrap().ok());
+        assert!(!verify_dir(&dir, Some(new)).unwrap().ok());
+        let rotated = Expect {
+            keys: vec![old, new],
+            ..Expect::default()
+        };
+        let r = verify_dir_with(&dir, &rotated).unwrap();
+        assert!(r.ok(), "{:?}", r.problems);
+        assert_eq!(r.records, 4);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn expected_head_must_be_on_the_chain() {
+        let dir = tempdir("anchor");
+        let w = write(&dir, 6);
+        let head = w.head();
+        drop(w);
+        assert_eq!(head.next_seq, 2);
+        let text = format!("{}:{}", head.next_seq, hex::encode(head.hash));
+        assert_eq!(Head::parse(&text).unwrap(), head);
+        assert!(Head::parse("2").is_err());
+        assert!(Head::parse("x:00").is_err());
+
+        let expect = |h: Head| Expect {
+            head: Some(h),
+            ..Expect::default()
+        };
+        // The chain grew past the anchor: it still passes through it.
+        drop(write(&dir, 3));
+        let r = verify_dir_with(&dir, &expect(head)).unwrap();
+        assert!(r.ok() && r.head_anchored, "{:?}", r.problems);
+
+        // The newest batches removed: the anchor is beyond the end.
+        let later = Head {
+            next_seq: 9,
+            hash: head.hash,
+        };
+        let r = verify_dir_with(&dir, &expect(later)).unwrap();
+        assert!(!r.ok() && !r.head_anchored);
+        assert!(r.problems[0].what.contains("newest batches are missing"));
+
+        // A rewritten chain reaches the same position with another hash.
+        let mut other = head;
+        other.hash[0] ^= 1;
+        let r = verify_dir_with(&dir, &expect(other)).unwrap();
+        assert!(!r.ok());
+        assert!(r.problems[0].what.contains("rewritten"));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -851,8 +1242,16 @@ mod tests {
             .problems
             .iter()
             .any(|p| p.what.contains("does not continue the chain")));
-        // Retention removing the oldest is reported, not a failure.
+        // Removing the oldest fails, unless the verifier is told the log
+        // was pruned on purpose.
         let r = verify_segments(&segs[1..], None);
+        assert!(!r.ok());
+        assert!(r.problems[0].what.contains("chain starts at batch 1"));
+        let pruned = Expect {
+            allow_pruned: true,
+            ..Expect::default()
+        };
+        let r = verify_segments_with(&segs[1..], &pruned);
         assert!(r.ok(), "{:?}", r.problems);
         assert_eq!(r.first_seq, Some(1));
         let _ = fs::remove_dir_all(&dir);
