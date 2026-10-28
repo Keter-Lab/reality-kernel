@@ -25,14 +25,26 @@ commands, and a runbook a coding agent can follow
   to review and apply
 - `docs/agents.md` and `llms.txt` for coding agents
 
-## v0.3.0 — Egress by name
+## v0.3.0 — Security hardening
+
+Every issue an external white-box review confirmed was closed or written
+up as a residual risk ([CHANGELOG.md](CHANGELOG.md),
+[threat model](docs/threat-model.md)): file and exec rules on btrfs, network
+transports no hook could see, names planted in protected directories,
+control-plane denial of service, an audit verifier that trusted the log it
+checked, launch and restart paths that could leave workloads ungoverned, and
+fail-closed Kubernetes binding. Still open, and next in line: governance
+that follows a workload into a child cgroup (privileged and delegated
+workloads), and exec allowlists on btrfs.
+
+## v0.4.0 — Egress by name
 
 Network rules by hostname (`api.example.com`), so policies survive CDN
 address changes, and DNS query filtering, so a governed agent can only
 resolve names its profile allows. That also closes DNS tunnelling as an
 exfiltration channel.
 
-## v0.4.0 — Information-flow containment
+## v0.5.0 — Information-flow containment
 
 Contain what an agent does with data, not only where it connects:
 

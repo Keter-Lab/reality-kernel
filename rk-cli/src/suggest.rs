@@ -478,7 +478,7 @@ pub fn build_profile(
     if public > 0 {
         notes.push(format!(
             "{public} rule(s) allow public addresses. A service behind a CDN changes address, \
-             and the rule then goes stale; hostname rules arrive in v0.3.0 (ROADMAP.md)."
+             and the rule then goes stale; hostname rules arrive in v0.4.0 (ROADMAP.md)."
         ));
     }
     if !left_out.is_empty() {

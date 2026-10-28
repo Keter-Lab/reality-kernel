@@ -108,7 +108,7 @@ and suggest again.
 
 ## Limits to tell the user
 
-- Rules are by IP address until hostname rules arrive (v0.3.0,
+- Rules are by IP address until hostname rules arrive (v0.4.0,
   [ROADMAP.md](../ROADMAP.md)): a service behind a CDN can change address and
   break a learned rule.
 - Reality Kernel enforces inside the kernel the agent runs on. An agent with
