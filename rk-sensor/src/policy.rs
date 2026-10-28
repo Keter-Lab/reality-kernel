@@ -1752,7 +1752,10 @@ mod tests {
         let err = refuse_ambiguous_exec("/usr/bin/git", "btrfs")
             .unwrap_err()
             .to_string();
-        assert!(err.contains("/usr/bin/git") && err.contains("btrfs"), "{err}");
+        assert!(
+            err.contains("/usr/bin/git") && err.contains("btrfs"),
+            "{err}"
+        );
         for fstype in ["ext4", "xfs", "overlay", "tmpfs"] {
             assert!(refuse_ambiguous_exec("/usr/bin/git", fstype).is_ok());
         }
