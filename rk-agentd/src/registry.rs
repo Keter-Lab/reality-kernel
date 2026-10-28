@@ -1,6 +1,7 @@
 //! Registry tracking active agents and session linkages.
 
 use std::collections::{HashMap, VecDeque};
+use std::os::unix::io::OwnedFd;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
@@ -21,6 +22,10 @@ pub struct ActiveAgent {
     pub caller_gid: u32,
     pub target_uid: u32,
     pub target_gid: u32,
+    /// Names exactly this process (clone3 `CLONE_PIDFD`, or `pidfd_open`), so
+    /// a `Signal` can never reach a process that later reused `pid`. `None`
+    /// only on kernels without pidfds.
+    pub pidfd: Option<Arc<OwnedFd>>,
 }
 
 /// Session mappings kept after their agent exits, so events still queued in
@@ -184,6 +189,7 @@ mod tests {
             caller_gid: 0,
             target_uid: 65534,
             target_gid: 65534,
+            pidfd: None,
         }
     }
 

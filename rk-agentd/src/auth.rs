@@ -188,11 +188,25 @@ pub fn check_launchable_by(cred: &PeerCred, profile: &Profile) -> Result<()> {
         }
     }
 
-    bail!(
-        "caller uid {} is not authorised to launch profile `{}`",
-        cred.uid,
-        profile.name
-    )
+    bail!(unauthorised_launch(cred.uid, &profile.name))
+}
+
+fn unauthorised_launch(uid: u32, profile: &str) -> String {
+    format!("caller uid {uid} is not authorised to launch profile `{profile}`")
+}
+
+/// The error message for a refused `rk run` of `profile`, whose lookup or
+/// [`check_launchable_by`] failed with `reason`. A policy admin, who may read
+/// the whole policy anyway, gets the reason. Anyone else gets the same message
+/// whether the profile does not exist, cannot be launched by anyone or is not
+/// theirs, so the world-connectable socket does not reveal which profiles
+/// exist.
+pub fn launch_refusal(cred: &PeerCred, profile: &str, reason: &anyhow::Error) -> String {
+    if check_policy_admin(cred).is_ok() {
+        format!("{reason:#}")
+    } else {
+        unauthorised_launch(cred.uid, profile)
+    }
 }
 
 #[cfg(test)]
@@ -233,6 +247,36 @@ mod tests {
             gid: 65534,
         };
         assert!(check_policy_admin(&unpriv_cred).is_err());
+    }
+
+    /// An unprivileged caller cannot tell an unknown profile from one it may
+    /// not launch; root (a policy admin) gets the actual reason.
+    #[test]
+    fn launch_refusal_does_not_reveal_whether_a_profile_exists() {
+        let nobody = PeerCred {
+            pid: 9999,
+            uid: 65534,
+            gid: 65534,
+        };
+        let unknown = anyhow::anyhow!("profile `secret` not found");
+        let quarantine = test_profile("secret", Vec::new());
+        let not_launchable = check_launchable_by(&nobody, &quarantine).unwrap_err();
+        let root_only = test_profile("secret", vec![Principal::User("root".into())]);
+        let not_theirs = check_launchable_by(&nobody, &root_only).unwrap_err();
+        let expected = "caller uid 65534 is not authorised to launch profile `secret`";
+        for reason in [&unknown, &not_launchable, &not_theirs] {
+            assert_eq!(launch_refusal(&nobody, "secret", reason), expected);
+        }
+
+        let root = PeerCred {
+            pid: 1,
+            uid: 0,
+            gid: 0,
+        };
+        assert_eq!(
+            launch_refusal(&root, "secret", &unknown),
+            "profile `secret` not found"
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
-use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -17,6 +17,9 @@ pub const CLONE_INTO_CGROUP: u64 = 0x2_0000_0000;
 
 const SYS_CLONE3: libc::c_long = 435;
 const SYS_CAPSET: libc::c_long = 126;
+// Same number on every architecture (the unified syscall table, Linux 5.1+).
+const SYS_PIDFD_SEND_SIGNAL: libc::c_long = 424;
+const SYS_PIDFD_OPEN: libc::c_long = 434;
 
 const PR_SET_NO_NEW_PRIVS: libc::c_int = 38;
 const PR_CAP_AMBIENT: libc::c_int = 47;
@@ -344,22 +347,67 @@ unsafe fn child_pre_exec(ctx: ChildExecContext<'_>) -> ! {
     send_child_err_and_exit(ctx.err_pipe, &msg, 127);
 }
 
+/// Byte the parent writes to release a forked child once it is in its
+/// cgroup. Only this byte releases it: end-of-file (the parent dropped the
+/// pipe, abandoning the launch) or an error makes the child exit instead.
+const RELEASE_BYTE: u8 = b'R';
+
+/// A close-on-exec pipe: (read end, write end).
+fn cloexec_pipe() -> Result<(OwnedFd, OwnedFd)> {
+    let mut fds = [0; 2];
+    if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } < 0 {
+        return Err(std::io::Error::last_os_error()).context("pipe2 failed");
+    }
+    // SAFETY: pipe2 returned two new descriptors that nothing else owns.
+    Ok(unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) })
+}
+
+/// Reads one byte, retrying on EINTR; `None` on end-of-file or error.
+/// Async-signal-safe: it runs in the forked child.
+unsafe fn read_byte(fd: RawFd) -> Option<u8> {
+    let mut buf = [0u8; 1];
+    loop {
+        let n = libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, 1);
+        if n == 1 {
+            return Some(buf[0]);
+        }
+        if n < 0 && *libc::__errno_location() == libc::EINTR {
+            continue;
+        }
+        return None;
+    }
+}
+
+/// Whether the parent released the child (see [`RELEASE_BYTE`]).
+unsafe fn wait_for_release(fd: RawFd) -> bool {
+    read_byte(fd) == Some(RELEASE_BYTE)
+}
+
+/// Kills and reaps a child of this process that must never run its command.
+fn kill_and_reap(pid: libc::pid_t) {
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+        while libc::waitpid(pid, std::ptr::null_mut(), 0) < 0
+            && *libc::__errno_location() == libc::EINTR
+        {}
+    }
+}
+
 /// Fallback fork + pipe handshake if clone3 is unavailable.
+///
+/// The child signals it is ready, then blocks until the parent has written
+/// its pid to the agent cgroup's `cgroup.procs` and released it with
+/// [`RELEASE_BYTE`]. Every failure fails closed: if the attach fails the
+/// child is killed and reaped, and a child that reads end-of-file exits
+/// without running the command, so it can never execute in the daemon's own
+/// (ungoverned) cgroup.
 fn spawn_fallback_pipe(
     cgroup_path: &Path,
     mut child_ctx: ChildExecContext<'_>,
 ) -> Result<(i32, Option<OwnedFd>)> {
-    let mut c2p = [0; 2];
-    let mut p2c = [0; 2];
-    let mut err_pipe = [0; 2];
-    unsafe {
-        if libc::pipe2(c2p.as_mut_ptr(), libc::O_CLOEXEC) < 0
-            || libc::pipe2(p2c.as_mut_ptr(), libc::O_CLOEXEC) < 0
-            || libc::pipe2(err_pipe.as_mut_ptr(), libc::O_CLOEXEC) < 0
-        {
-            return Err(std::io::Error::last_os_error()).context("pipe2 failed");
-        }
-    }
+    let (c2p_r, c2p_w) = cloexec_pipe()?;
+    let (p2c_r, p2c_w) = cloexec_pipe()?;
+    let (err_r, err_w) = cloexec_pipe()?;
 
     let pid = unsafe { libc::fork() };
     if pid < 0 {
@@ -367,64 +415,129 @@ fn spawn_fallback_pipe(
     }
 
     if pid == 0 {
-        // Child
+        // --- CHILD ---
+        // Async-signal-safe code only. The OwnedFds are never dropped here:
+        // every path ends in _exit or execve.
         unsafe {
-            libc::close(err_pipe[0]);
-            libc::close(c2p[0]);
-            libc::close(p2c[1]);
+            libc::close(err_r.as_raw_fd());
+            libc::close(c2p_r.as_raw_fd());
+            libc::close(p2c_w.as_raw_fd());
 
-            // Signal parent that we are ready to be attached to cgroup
-            let dummy = [1u8];
-            libc::write(c2p[1], dummy.as_ptr() as *const _, 1);
-            libc::close(c2p[1]);
+            // Tell the parent we are ready to be attached to the cgroup.
+            let ready = [1u8];
+            if libc::write(c2p_w.as_raw_fd(), ready.as_ptr() as *const libc::c_void, 1) != 1 {
+                libc::_exit(109);
+            }
+            libc::close(c2p_w.as_raw_fd());
 
-            // Wait for parent confirmation
-            let mut buf = [0u8; 1];
-            libc::read(p2c[0], buf.as_mut_ptr() as *mut _, 1);
-            libc::close(p2c[0]);
+            // Wait for the explicit release. EOF or an error means the parent
+            // abandoned the launch (the attach failed): never exec.
+            if !wait_for_release(p2c_r.as_raw_fd()) {
+                libc::_exit(110);
+            }
+            libc::close(p2c_r.as_raw_fd());
 
-            child_ctx.err_pipe = err_pipe[1];
+            child_ctx.err_pipe = err_w.as_raw_fd();
             child_pre_exec(child_ctx);
         }
     }
 
-    // Parent
-    unsafe {
-        libc::close(err_pipe[1]);
-        libc::close(c2p[1]);
-        libc::close(p2c[0]);
+    // --- PARENT ---
+    drop(err_w);
+    drop(c2p_w);
+    drop(p2c_r);
 
-        // Wait for child signal
-        let mut buf = [0u8; 1];
-        libc::read(c2p[0], buf.as_mut_ptr() as *mut _, 1);
-        libc::close(c2p[0]);
+    let ready = unsafe { read_byte(c2p_r.as_raw_fd()) };
+    drop(c2p_r);
 
-        // Move child into cgroup
-        let procs = cgroup_path.join("cgroup.procs");
-        fs::write(&procs, format!("{pid}\n"))
-            .with_context(|| format!("failed to attach child to {}", procs.display()))?;
-
-        // Release child
-        let dummy = [1u8];
-        libc::write(p2c[1], dummy.as_ptr() as *const _, 1);
-        libc::close(p2c[1]);
-
-        let mut err_buf = [0u8; 1024];
-        let n = libc::read(
-            err_pipe[0],
-            err_buf.as_mut_ptr() as *mut libc::c_void,
-            err_buf.len(),
-        );
-        libc::close(err_pipe[0]);
-        if n > 0 {
-            let msg = String::from_utf8_lossy(&err_buf[..n as usize]);
-            let mut status = 0;
-            libc::waitpid(pid, &mut status, 0);
-            bail!("child setup or exec failed: {}", msg.trim());
-        }
+    let procs = cgroup_path.join("cgroup.procs");
+    let attached = match ready {
+        Some(_) => fs::write(&procs, format!("{pid}\n"))
+            .with_context(|| format!("failed to attach child to {}", procs.display())),
+        None => Err(anyhow::anyhow!("child exited before it could be attached to its cgroup")),
+    };
+    if let Err(e) = attached {
+        // Closing the release pipe alone makes the child exit; kill it too,
+        // so it can never run the command outside its cgroup.
+        drop(p2c_w);
+        kill_and_reap(pid);
+        return Err(e);
     }
 
-    Ok((pid, None))
+    // A pidfd for the registry where the kernel has pidfd_open (a container
+    // runtime's seccomp profile can hide clone3 but not pidfd_open). The child
+    // is not reaped yet, so `pid` is still ours.
+    let pidfd = pidfd_open(pid).ok();
+
+    // Release the child.
+    let release = [RELEASE_BYTE];
+    let n = unsafe {
+        libc::write(
+            p2c_w.as_raw_fd(),
+            release.as_ptr() as *const libc::c_void,
+            1,
+        )
+    };
+    let release_err = std::io::Error::last_os_error();
+    drop(p2c_w);
+    if n != 1 {
+        kill_and_reap(pid);
+        return Err(release_err).context("failed to release the child");
+    }
+
+    let mut err_buf = [0u8; 1024];
+    let n = unsafe {
+        libc::read(
+            err_r.as_raw_fd(),
+            err_buf.as_mut_ptr() as *mut libc::c_void,
+            err_buf.len(),
+        )
+    };
+    drop(err_r);
+    if n > 0 {
+        let msg = String::from_utf8_lossy(&err_buf[..n as usize]);
+        let mut status = 0;
+        unsafe {
+            libc::waitpid(pid, &mut status, 0);
+        }
+        bail!("child setup or exec failed: {}", msg.trim());
+    }
+
+    Ok((pid, pidfd))
+}
+
+/// `pidfd_open(2)` (Linux 5.3): a descriptor that names exactly one process,
+/// so it can be signalled without the risk of hitting a recycled pid.
+pub fn pidfd_open(pid: libc::pid_t) -> std::io::Result<OwnedFd> {
+    let fd = unsafe { libc::syscall(SYS_PIDFD_OPEN, pid, 0) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: pidfd_open returned a new descriptor that nothing else owns.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd as RawFd) })
+}
+
+/// Sends `signal` to a process through its pidfd, which can never reach a
+/// process that reused the pid. Without a pidfd (kernels before 5.3) it
+/// falls back to `kill(2)`; callers drop their record of `pid` as soon as
+/// the process is reaped, which bounds that window.
+pub fn signal_process(pid: u32, pidfd: Option<&OwnedFd>, signal: i32) -> std::io::Result<()> {
+    let rc = match pidfd {
+        Some(fd) => unsafe {
+            libc::syscall(
+                SYS_PIDFD_SEND_SIGNAL,
+                fd.as_raw_fd(),
+                signal,
+                std::ptr::null::<libc::siginfo_t>(),
+                0,
+            )
+        },
+        None => libc::c_long::from(unsafe { libc::kill(pid as libc::pid_t, signal) }),
+    };
+    if rc < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 /// Locate a command in `$PATH`.
@@ -494,6 +607,86 @@ mod tests {
         assert_eq!(CLONE_INTO_CGROUP, 1 << 33);
         assert_eq!(CLONE_PIDFD, 1 << 12);
         assert_eq!(CLONE_INTO_CGROUP & 0xffff_ffff, 0);
+    }
+
+    fn write_byte(fd: &OwnedFd, byte: u8) {
+        let buf = [byte];
+        let n = unsafe { libc::write(fd.as_raw_fd(), buf.as_ptr() as *const libc::c_void, 1) };
+        assert_eq!(n, 1);
+    }
+
+    /// The fork fallback's child runs only on the explicit release byte; EOF
+    /// (the parent abandoned the launch) and any other byte make it exit.
+    #[test]
+    fn fallback_child_is_released_only_by_the_release_byte() {
+        let (r, w) = cloexec_pipe().unwrap();
+        write_byte(&w, RELEASE_BYTE);
+        assert!(unsafe { wait_for_release(r.as_raw_fd()) });
+
+        let (r, w) = cloexec_pipe().unwrap();
+        drop(w);
+        assert!(!unsafe { wait_for_release(r.as_raw_fd()) }, "EOF released");
+
+        let (r, w) = cloexec_pipe().unwrap();
+        write_byte(&w, 1);
+        assert!(!unsafe { wait_for_release(r.as_raw_fd()) }, "wrong byte released");
+    }
+
+    /// When the cgroup attach fails, the fallback kills and reaps the child
+    /// and the command never runs.
+    #[test]
+    fn fallback_attach_failure_never_runs_the_command() {
+        let dir = std::env::temp_dir().join(format!("rk-fallback-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("ran");
+        let missing_cgroup = dir.join("no-such-cgroup");
+
+        let c_path = CString::new("/bin/sh").unwrap();
+        let args = [
+            CString::new("sh").unwrap(),
+            CString::new("-c").unwrap(),
+            CString::new(format!("echo ran > {}", marker.display())).unwrap(),
+        ];
+        let mut argv: Vec<*const libc::c_char> = args.iter().map(|a| a.as_ptr()).collect();
+        argv.push(std::ptr::null());
+        let envp = [std::ptr::null::<libc::c_char>()];
+        let ctx = ChildExecContext {
+            err_pipe: -1,
+            stdio_fds: None,
+            target_uid: unsafe { libc::getuid() },
+            target_gid: unsafe { libc::getgid() },
+            c_cwd: None,
+            c_path: &c_path,
+            c_argv_ptrs: &argv,
+            c_envp_ptrs: &envp,
+        };
+        let err = spawn_fallback_pipe(&missing_cgroup, ctx).unwrap_err();
+        assert!(format!("{err:#}").contains("attach"), "{err:#}");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(!marker.exists(), "the command ran although the attach failed");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A pidfd never signals a recycled pid: once the process is reaped,
+    /// signalling through it fails instead of reaching another process.
+    #[test]
+    fn signal_through_pidfd_fails_after_reap() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let Ok(pidfd) = pidfd_open(pid as libc::pid_t) else {
+            // Kernel without pidfd_open (before 5.3): nothing to test.
+            let _ = child.kill();
+            let _ = child.wait();
+            return;
+        };
+        signal_process(pid, Some(&pidfd), libc::SIGKILL).unwrap();
+        child.wait().unwrap();
+        let err = signal_process(pid, Some(&pidfd), libc::SIGKILL).unwrap_err();
+        assert_eq!(err.raw_os_error(), Some(libc::ESRCH));
     }
 
     #[test]
