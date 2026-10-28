@@ -16,7 +16,8 @@ pub const CLONE_PIDFD: u64 = 0x0000_1000;
 pub const CLONE_INTO_CGROUP: u64 = 0x2_0000_0000;
 
 const SYS_CLONE3: libc::c_long = 435;
-const SYS_CAPSET: libc::c_long = 126;
+// Differs by architecture (126 on x86_64, 91 on arm64): take it from libc.
+const SYS_CAPSET: libc::c_long = libc::SYS_capset;
 // Same number on every architecture (the unified syscall table, Linux 5.1+).
 const SYS_PIDFD_SEND_SIGNAL: libc::c_long = 424;
 const SYS_PIDFD_OPEN: libc::c_long = 434;
