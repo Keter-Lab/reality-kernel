@@ -64,6 +64,13 @@ Raw/packet sockets, io_uring, TCP Fast Open and NAT64 can't bypass the rules
 - `net_tcp_fastopen_denied` (VM suite, every kernel)
 - `net_nat64_equivalence` (VM suite, every kernel)
 
+### net-unobserved-transports
+
+With deny_raw_sockets, no inet socket whose traffic the egress hooks cannot see (ICMP ping, UDP-Lite, SCTP, DCCP, MPTCP, SOCK_SEQPACKET) can be created; TCP and UDP sockets, protocol 0 included, still can
+
+- `net_unobserved_transports_denied` (VM suite, every kernel)
+- `net_unobserved_transports_allowed_without_flag` (VM suite, every kernel)
+
 ### net-compiler
 
 The compiled kernel lookup always agrees with the reference evaluator
@@ -154,6 +161,27 @@ Subtree rules apply; excessive nesting fails closed
 
 - `file_subtree_rule_applies` (VM suite, every kernel)
 - `file_deep_nesting_fails_closed` (VM suite, every kernel)
+
+### file-create-every-name
+
+Every syscall that adds a name to a directory (create, mkdir, rename, link, symlink, mknod) needs that directory's create right, directly or through a subtree rule
+
+- `file_create_in_protected_dir_denied` (VM suite, every kernel)
+- `file_rename_into_protected_dir_denied` (VM suite, every kernel)
+- `file_link_into_protected_dir_denied` (VM suite, every kernel)
+- `file_symlink_into_protected_dir_denied` (VM suite, every kernel)
+- `file_mknod_into_protected_dir_denied` (VM suite, every kernel)
+- `file_rename_into_protected_subtree_denied` (VM suite, every kernel)
+- `file_rename_within_unprotected_dir_allowed` (VM suite, every kernel)
+
+### file-identity-superblock
+
+File and exec rules resolve to the superblock device the hooks compare (mountinfo), not stat's st_dev, which differs on btrfs subvolumes and snapshots
+
+- `identity_parses_mountinfo_lines` (Rust test)
+- `identity_parses_fdinfo_mnt_id` (Rust test)
+- `identity_mount_table_indexes_by_id` (Rust test)
+- `identity_resolves_a_live_path_and_keeps_the_inode` (Rust test)
 
 ### file-protect-allowlist
 

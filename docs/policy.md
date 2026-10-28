@@ -52,7 +52,7 @@ never need rewriting when the policy changes.
 | `default` | `"allow"` \| `"deny"` | `"deny"` | Verdict when no rule matches |
 | `include` | list of names | `["cloud-metadata"]` | Built-in deny lists. Remove only explicitly (`include = []`) |
 | `nat64_equivalence` | bool | `true` | Also deny the `64:ff9b::/96` form of every IPv4 deny rule |
-| `deny_raw_sockets` | bool | `true` | Deny the packet-injection surfaces that would bypass every network hook: raw (inet) and packet sockets, and creating or attaching to TUN/TAP devices (Phase 16). The name predates TUN/TAP and is kept for compatibility |
+| `deny_raw_sockets` | bool | `true` | Deny every socket whose traffic would bypass the network hooks: raw (inet) and packet sockets; every inet socket other than plain TCP (`SOCK_STREAM`, protocol 0 or `IPPROTO_TCP`) and plain UDP (`SOCK_DGRAM`, protocol 0 or `IPPROTO_UDP`), which covers ICMP ping, UDP-Lite, SCTP, DCCP, MPTCP and `SOCK_SEQPACKET`; and creating or attaching to TUN/TAP devices (Phase 16). The connect and send hooks only run for TCP and UDP, so with this set to `false` those transports are not filtered at all. The name predates the wider meaning and is kept for compatibility |
 | `allow`, `deny` | list of rules | `[]` | See below |
 
 Rule fields:
@@ -61,7 +61,7 @@ Rule fields:
 |---|---|---|---|
 | `cidr` | string | required | `a.b.c.d/n`, `x::y/n` or a bare address. Host bits must be zero |
 | `ports` | list | all ports | `"443"`, `"8000-8100"`, `"*"` |
-| `proto` | list | any | `"tcp"`, `"udp"`, `"other"`, `"any"` |
+| `proto` | list | any | `"tcp"`, `"udp"`, `"other"`, `"any"`. The hooks only see TCP and UDP (and, on kernels whose ICMP ping sockets run the connect hook, a ping socket's `connect`), so `"other"` matches almost nothing: with `deny_raw_sockets` (the default) other transports cannot be created at all, and without it they are not filtered. Do not rely on `"other"` to allow or deny a transport |
 
 **Semantics:**
 - **Deny rules always win** over allow rules.
@@ -128,8 +128,20 @@ Rule fields:
 **Semantics:**
 - Every way of naming the same file (hard links, bind mounts, symlinks,
   relative paths, `/proc/self/fd`) gets the same verdict.
+- Paths resolve to the superblock device the kernel compares (from
+  `/proc/self/mountinfo`), not `stat`'s `st_dev`, which differs on btrfs
+  subvolumes and snapshots. A path whose mount cannot be found fails the
+  apply. On a filesystem other than btrfs where the two differ (for example
+  overlayfs), the daemon logs a warning: the inode number may not match.
+- `create` on a directory covers every way to add a name to it: `open` with
+  `O_CREAT`, `mkdir`, `mknod` (including binding a Unix socket to a path),
+  `symlink`, and the destination of `link` and `rename` (including a rename
+  within the directory).
 - Subtree rules are found by walking up to 32 parent directories. Deeper
   nesting **fails closed** in `enforce` mode.
+- The walk stops at the root of each mounted filesystem: a subtree rule on a
+  directory does not cover a different filesystem mounted beneath it. Give
+  that mount's root its own rule.
 - Several rules on the same file merge: access masks are combined, and the
   first rule's id is reported.
 - An explicit path that doesn't exist fails the apply. A built-in list entry
@@ -210,7 +222,8 @@ include = []                       # and no [exec] section
 
 Raw sockets and TUN/TAP devices bypass connect rules, so also drop
 `CAP_NET_RAW` from such workloads and give their users no persistent TUN/TAP
-device.
+device. ICMP ping, UDP-Lite, SCTP and DCCP sockets bypass them too and need
+no capability: without BPF LSM the network rules bind TCP and UDP only.
 
 ## Rolling out a profile
 

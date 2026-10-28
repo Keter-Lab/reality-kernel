@@ -199,13 +199,30 @@ int BPF_PROG(rk_file_rmdir, struct inode *dir, struct dentry *dentry, int ret)
     return rk_file_check(&g, inode, dentry, dentry, RK_FILE_DELETE, RK_FILE_HOOK_UNLINK);
 }
 
+/*
+ * The create right of the directory that receives a new name: the directory
+ * itself (direct rule) and its ancestors (subtree rules). Every operation that
+ * adds a name to a directory evaluates it: create, mkdir, symlink, mknod, the
+ * destination of link and of rename (including a rename within one directory,
+ * and each side of RENAME_EXCHANGE, for which security_inode_rename calls the
+ * hook twice with the directories swapped).
+ */
+static __always_inline int rk_dir_create_check(const struct rk_gov *g, struct inode *dir,
+                                               struct dentry *dentry, __u16 hook)
+{
+    if (!dir)
+        return 0;
+
+    struct dentry *dir_dentry = dentry ? BPF_CORE_READ(dentry, d_parent) : 0;
+    return rk_file_check(g, dir, dir_dentry, dentry, RK_FILE_CREATE, hook);
+}
+
 SEC("lsm/inode_rename")
 int BPF_PROG(rk_file_rename, struct inode *old_dir, struct dentry *old_dentry,
              struct inode *new_dir, struct dentry *new_dentry, int ret)
 {
     struct rk_gov g = {};
     (void)old_dir;
-    (void)new_dir;
 
     if (ret)
         return ret;
@@ -226,7 +243,8 @@ int BPF_PROG(rk_file_rename, struct inode *old_dir, struct dentry *old_dentry,
             return err;
     }
 
-    return 0;
+    /* The new name appears in new_dir: it needs that directory's create right. */
+    return rk_dir_create_check(&g, new_dir, new_dentry, RK_FILE_HOOK_RENAME);
 }
 
 SEC("lsm/inode_link")
@@ -234,8 +252,6 @@ int BPF_PROG(rk_file_link, struct dentry *old_dentry, struct inode *dir,
              struct dentry *new_dentry, int ret)
 {
     struct rk_gov g = {};
-    (void)dir;
-    (void)new_dentry;
 
     if (ret)
         return ret;
@@ -243,10 +259,14 @@ int BPF_PROG(rk_file_link, struct dentry *old_dentry, struct inode *dir,
         return 0;
 
     struct inode *inode = BPF_CORE_READ(old_dentry, d_inode);
-    if (!inode)
-        return 0;
+    if (inode) {
+        int err = rk_file_check(&g, inode, old_dentry, old_dentry, RK_FILE_LINK, RK_FILE_HOOK_LINK);
+        if (err)
+            return err;
+    }
 
-    return rk_file_check(&g, inode, old_dentry, old_dentry, RK_FILE_LINK, RK_FILE_HOOK_LINK);
+    /* The new name appears in dir: it needs that directory's create right. */
+    return rk_dir_create_check(&g, dir, new_dentry, RK_FILE_HOOK_LINK);
 }
 
 static __always_inline int rk_create_check(struct inode *dir, struct dentry *dentry, int ret)
@@ -257,11 +277,8 @@ static __always_inline int rk_create_check(struct inode *dir, struct dentry *den
         return ret;
     if (!rk_governance(&g))
         return 0;
-    if (!dir)
-        return 0;
 
-    struct dentry *dir_dentry = dentry ? BPF_CORE_READ(dentry, d_parent) : 0;
-    return rk_file_check(&g, dir, dir_dentry, dentry, RK_FILE_CREATE, RK_FILE_HOOK_CREATE);
+    return rk_dir_create_check(&g, dir, dentry, RK_FILE_HOOK_CREATE);
 }
 
 SEC("lsm/inode_create")
@@ -275,6 +292,31 @@ SEC("lsm/inode_mkdir")
 int BPF_PROG(rk_file_mkdir, struct inode *dir, struct dentry *dentry, umode_t mode, int ret)
 {
     (void)mode;
+    return rk_create_check(dir, dentry, ret);
+}
+
+/*
+ * symlink(2): LSM_HOOK(int, 0, inode_symlink, struct inode *dir,
+ * struct dentry *dentry, const char *old_name), unchanged from 5.15 to 6.19.
+ */
+SEC("lsm/inode_symlink")
+int BPF_PROG(rk_file_symlink, struct inode *dir, struct dentry *dentry, const char *old_name, int ret)
+{
+    (void)old_name;
+    return rk_create_check(dir, dentry, ret);
+}
+
+/*
+ * mknod(2) of a device, FIFO or socket, and bind(2) of an AF_UNIX socket to a
+ * path (both reach vfs_mknod; a regular-file mknod goes through inode_create).
+ * LSM_HOOK(int, 0, inode_mknod, struct inode *dir, struct dentry *dentry,
+ * umode_t mode, dev_t dev), unchanged from 5.15 to 6.19.
+ */
+SEC("lsm/inode_mknod")
+int BPF_PROG(rk_file_mknod, struct inode *dir, struct dentry *dentry, umode_t mode, dev_t dev, int ret)
+{
+    (void)mode;
+    (void)dev;
     return rk_create_check(dir, dentry, ret);
 }
 

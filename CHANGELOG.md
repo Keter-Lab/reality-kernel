@@ -8,6 +8,34 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- File and exec rules now resolve to the superblock device the kernel hooks
+  compare (read from `/proc/self/mountinfo`) instead of `stat`'s `st_dev`.
+  On btrfs subvolumes and snapshots the two differ, so every file rule, every
+  exec allow-list entry and the built-in credentials list silently never
+  matched there. A rule path whose mount cannot be found now fails the apply;
+  a path on another filesystem whose `stat` device differs (for example
+  overlayfs) is logged as a warning.
+- `network.deny_raw_sockets` (on by default) now also denies every inet
+  socket the connect and send hooks cannot see: ICMP ping, UDP-Lite, SCTP,
+  DCCP, MPTCP, `SOCK_SEQPACKET` and any non-TCP stream or non-UDP datagram
+  socket. Before, such sockets reached a denied destination with no verdict
+  and no event. Plain TCP and UDP sockets (protocol 0 included) are
+  unaffected. docs/policy.md now says that `proto = ["other"]` matches
+  almost nothing.
+- The `create` right of a protected directory is now checked for every way
+  of adding a name to it: the destination of `rename(2)` and `link(2)`, and
+  `symlink(2)` and `mknod(2)` (new `rk_file_symlink` and `rk_file_mknod`
+  programs on `inode_symlink` and `inode_mknod`). Before, only `open(O_CREAT)`
+  and `mkdir` were checked, so entries could be planted in a protected
+  directory.
+- docs/threat-model.md lists the remaining gaps: leaving the bound cgroup is
+  only prevented by cgroupfs permissions (privileged workloads and delegated
+  agent cgroups are outside the guarantee until governance is ancestor-aware),
+  address families other than inet and packet are not classified, and
+  subtree rules stop at nested mounts.
+
 ## [0.2.0] - 2026-10-24
 
 ### Added

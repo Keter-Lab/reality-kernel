@@ -2,6 +2,7 @@
 
 pub mod consumer;
 pub mod decoder;
+pub mod identity;
 pub mod loader;
 pub mod metrics;
 pub mod observe;

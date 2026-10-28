@@ -30,8 +30,8 @@ use rk_policy::net::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::identity::{self, FileIdentity, MountTable};
 use crate::loader::SETATTR_VARIANTS;
-use crate::selftest::kernel_dev;
 
 /// cgroup v2 mount point.
 pub const CGROUP_FS: &str = "/sys/fs/cgroup";
@@ -133,13 +133,16 @@ struct ResolvedFile {
     subtree: bool,
 }
 
-/// Resolves file rules to (device, inode), following symlinks. Several rules
-/// on the same object in one profile merge into one entry: masks are OR-ed,
-/// the first rule id is kept. A path from a built-in list that is missing or
-/// not accessible on this host is skipped and returned in the second list so
-/// the apply report shows it; any other resolution failure fails the apply
-/// before the kernel changes.
+/// Resolves file rules to (device, inode), following symlinks. The device is
+/// the superblock device the hooks compare, not `st_dev` (see
+/// [`crate::identity`]). Several rules on the same object in one profile
+/// merge into one entry: masks are OR-ed, the first rule id is kept. A path
+/// from a built-in list that is missing or not accessible on this host is
+/// skipped and returned in the second list so the apply report shows it; any
+/// other resolution failure (including a path whose superblock device cannot
+/// be determined) fails the apply before the kernel changes.
 fn resolve_files(entries: &[CompiledFile]) -> Result<(Vec<ResolvedFile>, Vec<String>)> {
+    let mut mounts = MountTable::new();
     let mut skipped = Vec::new();
     let mut merged: BTreeMap<(u32, u64, u64), ResolvedFile> = BTreeMap::new();
     let mut add = |r: ResolvedFile| {
@@ -154,29 +157,35 @@ fn resolve_files(entries: &[CompiledFile]) -> Result<(Vec<ResolvedFile>, Vec<Str
     let mut exec_targets = Vec::new();
     for e in entries {
         match e.target {
-            FileTarget::Path { subtree, optional } => match fs::metadata(&e.path) {
-                Ok(meta) => add(ResolvedFile {
-                    profile: e.profile,
-                    rule_id: e.rule_id,
-                    dev: kernel_dev(meta.dev()),
-                    ino: meta.ino(),
-                    deny_mask: e.deny_mask,
-                    subtree: subtree && meta.is_dir(),
-                }),
-                Err(err)
-                    if optional
-                        && matches!(
-                            err.kind(),
-                            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-                        ) =>
-                {
-                    skipped.push(format!("{} ({err})", e.path));
+            FileTarget::Path { subtree, optional } => {
+                match mounts.identity(Path::new(&e.path)) {
+                    Ok(id) => {
+                        identity::warn_if_uncertain("file", &e.path, &id);
+                        add(ResolvedFile {
+                            profile: e.profile,
+                            rule_id: e.rule_id,
+                            dev: id.dev,
+                            ino: id.ino,
+                            deny_mask: e.deny_mask,
+                            subtree: subtree && id.meta.is_dir(),
+                        })
+                    }
+                    Err(err)
+                        if optional
+                            && matches!(
+                                err.kind(),
+                                std::io::ErrorKind::NotFound
+                                    | std::io::ErrorKind::PermissionDenied
+                            ) =>
+                    {
+                        skipped.push(format!("{} ({err})", e.path));
+                    }
+                    Err(err) => {
+                        return Err(err)
+                            .with_context(|| format!("file rule: cannot resolve `{}`", e.path))
+                    }
                 }
-                Err(err) => {
-                    return Err(err)
-                        .with_context(|| format!("file rule: cannot resolve `{}`", e.path))
-                }
-            },
+            }
             FileTarget::Exec(kind) => exec_targets.push((
                 CompiledExec {
                     profile: e.profile,
@@ -189,7 +198,7 @@ fn resolve_files(entries: &[CompiledFile]) -> Result<(Vec<ResolvedFile>, Vec<Str
         }
     }
     for (target, mask) in &exec_targets {
-        for r in resolve_exec(std::slice::from_ref(target))? {
+        for r in resolve_exec_in(std::slice::from_ref(target), &mut mounts)? {
             add(ResolvedFile {
                 profile: r.profile,
                 rule_id: r.rule_id,
@@ -280,6 +289,8 @@ const FILE_PROGRAMS: &[&str] = &[
     "rk_file_link",
     "rk_file_create",
     "rk_file_mkdir",
+    "rk_file_symlink",
+    "rk_file_mknod",
 ];
 
 /// Self-protection LSM programs (guard.bpf.c, docs/design/phase-6.md §5).
@@ -382,19 +393,28 @@ struct ResolvedExec {
 }
 
 /// Resolves exec allowlist paths to (device, inode), following symlinks to the
-/// real file. A missing path, a non-file entry or an oversized directory is an
+/// real file. The device is the superblock device the hooks compare (see
+/// [`crate::identity`]). A missing path, a non-file entry, a path whose
+/// superblock device cannot be determined or an oversized directory is an
 /// error: the apply fails before anything visible to the kernel changes.
 fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
+    resolve_exec_in(entries, &mut MountTable::new())
+}
+
+fn resolve_exec_in(
+    entries: &[CompiledExec],
+    mounts: &mut MountTable,
+) -> Result<Vec<ResolvedExec>> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     let mut dir_files: BTreeMap<u32, usize> = BTreeMap::new();
     let mut push =
-        |profile: u32, rule_id: u32, meta: &fs::Metadata, out: &mut Vec<ResolvedExec>| {
+        |profile: u32, rule_id: u32, id: &FileIdentity, out: &mut Vec<ResolvedExec>| {
             let r = ResolvedExec {
                 profile,
                 rule_id,
-                dev: kernel_dev(meta.dev()),
-                ino: meta.ino(),
+                dev: id.dev,
+                ino: id.ino,
             };
             // First rule wins for the same file in the same profile.
             if seen.insert((r.profile, r.dev, r.ino)) {
@@ -404,12 +424,14 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
     for e in entries {
         match e.kind {
             ExecPathKind::File => {
-                let meta = fs::metadata(&e.path)
+                let id = mounts
+                    .identity(Path::new(&e.path))
                     .with_context(|| format!("exec allowlist: cannot resolve `{}`", e.path))?;
-                if !meta.is_file() {
+                if !id.meta.is_file() {
                     anyhow::bail!("exec allowlist: `{}` is not a regular file", e.path);
                 }
-                push(e.profile, e.rule_id, &meta, &mut out);
+                identity::warn_if_uncertain("exec", &e.path, &id);
+                push(e.profile, e.rule_id, &id, &mut out);
             }
             ExecPathKind::Dir => {
                 let dir = fs::read_dir(&e.path).with_context(|| {
@@ -417,7 +439,8 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
                 })?;
                 for item in dir {
                     let item = item.with_context(|| format!("read entry in `{}`", e.path))?;
-                    let Ok(meta) = fs::metadata(item.path()) else {
+                    let path = item.path();
+                    let Ok(meta) = fs::metadata(&path) else {
                         continue; // dangling symlink: nothing to execute
                     };
                     if !meta.is_file() {
@@ -430,7 +453,17 @@ fn resolve_exec(entries: &[CompiledExec]) -> Result<Vec<ResolvedExec>> {
                             "exec allowlist: directories expand to more than {MAX_EXEC_DIR_FILES} files for one profile"
                         );
                     }
-                    push(e.profile, e.rule_id, &meta, &mut out);
+                    let id = match mounts.identity(&path) {
+                        Ok(id) => id,
+                        // Removed since read_dir: nothing to execute.
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                        Err(err) => {
+                            return Err(err).with_context(|| {
+                                format!("exec allowlist: cannot resolve `{}`", path.display())
+                            })
+                        }
+                    };
+                    push(e.profile, e.rule_id, &id, &mut out);
                 }
             }
         }

@@ -28,6 +28,7 @@ pub fn run_child(args: &[String]) -> i32 {
         "udp_sendmsg" => handle_udp_sendmsg(rest),
         "raw_socket" => handle_raw_socket(),
         "packet_socket" => handle_packet_socket(),
+        "unobserved_sockets" => handle_unobserved_sockets(rest),
         "tcp_fastopen" => handle_tcp_fastopen(rest),
         "io_uring_connect" => handle_io_uring_connect(rest),
         "blast_connect" => handle_blast_connect(rest),
@@ -49,6 +50,8 @@ pub fn run_child(args: &[String]) -> i32 {
         "file_rename_exchange" => handle_file_rename_exchange(rest),
         "file_link" => handle_file_link(rest),
         "file_create" => handle_file_create(rest),
+        "file_symlink" => handle_file_symlink(rest),
+        "file_mkfifo" => handle_file_mkfifo(rest),
         "file_chmod" => handle_file_chmod(rest),
         "file_proc_fd_reopen" => handle_file_proc_fd_reopen(rest),
         "file_relative_open" => handle_file_relative_open(rest),
@@ -255,6 +258,103 @@ fn handle_packet_socket() -> i32 {
         }
     }
     0
+}
+
+/// Inet socket shapes whose traffic no cgroup sock_addr hook observes
+/// (rk_sock_observed in net.bpf.c). Literal values, so the test does not
+/// depend on which constants the libc crate exports.
+const UNOBSERVED_SOCKETS: [(&str, i32, i32, i32); 12] = [
+    ("ping (AF_INET, SOCK_DGRAM, IPPROTO_ICMP)", libc::AF_INET, 2, 1),
+    ("ping (AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6)", libc::AF_INET6, 2, 58),
+    ("UDP-Lite (AF_INET, SOCK_DGRAM, IPPROTO_UDPLITE)", libc::AF_INET, 2, 136),
+    ("UDP-Lite (AF_INET6, SOCK_DGRAM, IPPROTO_UDPLITE)", libc::AF_INET6, 2, 136),
+    ("SCTP (AF_INET, SOCK_STREAM, IPPROTO_SCTP)", libc::AF_INET, 1, 132),
+    ("SCTP (AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP)", libc::AF_INET, 5, 132),
+    ("SCTP (AF_INET6, SOCK_STREAM, IPPROTO_SCTP)", libc::AF_INET6, 1, 132),
+    ("DCCP (AF_INET, SOCK_DCCP, IPPROTO_DCCP)", libc::AF_INET, 6, 33),
+    ("DCCP (AF_INET6, SOCK_DCCP, 0)", libc::AF_INET6, 6, 0),
+    ("MPTCP (AF_INET, SOCK_STREAM, IPPROTO_MPTCP)", libc::AF_INET, 1, 262),
+    ("SOCK_SEQPACKET (AF_INET, protocol 0)", libc::AF_INET, 5, 0),
+    ("UDP protocol on a stream (AF_INET, SOCK_STREAM, IPPROTO_UDP)", libc::AF_INET, 1, 17),
+];
+
+/// Inet socket shapes the sock_addr hooks observe: always allowed, including
+/// protocol 0 (resolved by the kernel after the LSM hook) and the type flags.
+const OBSERVED_SOCKETS: [(&str, i32, i32, i32); 7] = [
+    ("TCP (AF_INET, SOCK_STREAM, 0)", libc::AF_INET, libc::SOCK_STREAM, 0),
+    ("TCP (AF_INET, SOCK_STREAM, IPPROTO_TCP)", libc::AF_INET, libc::SOCK_STREAM, 6),
+    ("TCP (AF_INET6, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)", libc::AF_INET6, libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC, 0),
+    ("UDP (AF_INET, SOCK_DGRAM, 0)", libc::AF_INET, libc::SOCK_DGRAM, 0),
+    ("UDP (AF_INET, SOCK_DGRAM, IPPROTO_UDP)", libc::AF_INET, libc::SOCK_DGRAM, 17),
+    ("UDP (AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP)", libc::AF_INET6, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 17),
+    ("AF_UNIX (SOCK_STREAM, 0)", libc::AF_UNIX, libc::SOCK_STREAM, 0),
+];
+
+/// Creates one socket; Ok(()) on success (the descriptor is closed).
+fn try_socket(family: i32, ty: i32, protocol: i32) -> Result<(), std::io::Error> {
+    // SAFETY: plain syscall with integer arguments; the fd is closed at once.
+    let fd = unsafe { libc::socket(family, ty, protocol) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: fd was just returned by socket(2) and is owned here.
+    unsafe { libc::close(fd) };
+    Ok(())
+}
+
+/// `unobserved_sockets <eperm|ok>`. `eperm`: every unobserved shape fails
+/// with EPERM, every observed shape is created. `ok` (deny_raw_sockets =
+/// false): no shape fails with EPERM (a missing protocol module or the ping
+/// group range may still refuse one with another error), and UDP-Lite over
+/// IPv4, which is built into every IPv4 kernel, is created.
+fn handle_unobserved_sockets(args: &[String]) -> i32 {
+    let Some(expected) = args.first() else {
+        eprintln!("[child] unobserved_sockets: expected <eperm|ok>");
+        return 360;
+    };
+    match expected.as_str() {
+        "eperm" => {
+            for (what, family, ty, protocol) in UNOBSERVED_SOCKETS {
+                match try_socket(family, ty, protocol) {
+                    Err(e) if e.raw_os_error() == Some(libc::EPERM) => {}
+                    Ok(()) => {
+                        eprintln!("[child] {what} was created; expected EPERM");
+                        return 361;
+                    }
+                    Err(e) => {
+                        eprintln!("[child] {what} failed with {e}; expected EPERM");
+                        return 362;
+                    }
+                }
+            }
+            for (what, family, ty, protocol) in OBSERVED_SOCKETS {
+                if let Err(e) = try_socket(family, ty, protocol) {
+                    eprintln!("[child] {what} failed with {e}; expected success");
+                    return 363;
+                }
+            }
+            0
+        }
+        "ok" => {
+            for (what, family, ty, protocol) in UNOBSERVED_SOCKETS {
+                if let Err(e) = try_socket(family, ty, protocol) {
+                    if e.raw_os_error() == Some(libc::EPERM) {
+                        eprintln!("[child] {what} failed with EPERM without deny_raw_sockets");
+                        return 364;
+                    }
+                }
+            }
+            if let Err(e) = try_socket(libc::AF_INET, libc::SOCK_DGRAM, 136) {
+                eprintln!("[child] UDP-Lite (AF_INET) failed with {e}; expected success");
+                return 365;
+            }
+            0
+        }
+        other => {
+            eprintln!("[child] unobserved_sockets: unknown expectation `{other}`");
+            366
+        }
+    }
 }
 
 /// One TUN/TAP attempt (docs/design/phase-16.md):
@@ -1419,6 +1519,52 @@ fn handle_file_create(args: &[String]) -> i32 {
         } else {
             2
         }
+    }
+}
+
+/// `file_symlink <target> <linkpath> <ok|eperm>`: symlink(2).
+fn handle_file_symlink(args: &[String]) -> i32 {
+    if args.len() < 3 {
+        return 370;
+    }
+    let (Ok(c_target), Ok(c_link)) = (
+        std::ffi::CString::new(args[0].as_str()),
+        std::ffi::CString::new(args[1].as_str()),
+    ) else {
+        return 371;
+    };
+    // SAFETY: both pointers are valid NUL-terminated strings.
+    let rc = unsafe { libc::symlink(c_target.as_ptr(), c_link.as_ptr()) };
+    expect_rc(rc, &args[2])
+}
+
+/// `file_mkfifo <path> <ok|eperm>`: mknod(2) of a FIFO, which needs no
+/// privilege and reaches the inode_mknod hook (a regular-file mknod would
+/// go through inode_create instead).
+fn handle_file_mkfifo(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        return 372;
+    }
+    let Ok(c_path) = std::ffi::CString::new(args[0].as_str()) else {
+        return 373;
+    };
+    // SAFETY: valid NUL-terminated path; mode is a plain integer.
+    let rc = unsafe { libc::mknod(c_path.as_ptr(), libc::S_IFIFO | 0o600, 0) };
+    expect_rc(rc, &args[1])
+}
+
+/// Maps a syscall return code to the child's exit code: 0 when it matches
+/// `expected` (`ok` = success, `eperm` = failure with EPERM).
+fn expect_rc(rc: i32, expected: &str) -> i32 {
+    if rc == 0 {
+        return if expected == "ok" { 0 } else { 1 };
+    }
+    let err = std::io::Error::last_os_error();
+    if expected == "eperm" && err.raw_os_error() == Some(libc::EPERM) {
+        0
+    } else {
+        eprintln!("[child] failed with {err}; expected {expected}");
+        2
     }
 }
 
