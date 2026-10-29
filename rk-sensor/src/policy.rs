@@ -1800,7 +1800,9 @@ mod tests {
     fn governed_levels_bitmask_from_binding_depths() {
         let mut engine = PolicyEngine::new(PathBuf::from("/nonexistent"));
         engine.bindings.insert(1, ("rk.slice/agent-a".into(), 1)); // level 2
-        engine.bindings.insert(2, ("kubepods.slice/pod/ctr".into(), 2)); // level 3
+        engine
+            .bindings
+            .insert(2, ("kubepods.slice/pod/ctr".into(), 2)); // level 3
         engine.bindings.insert(3, ("rk.slice/agent-b".into(), 3)); // level 2 again
         assert_eq!(engine.governed_levels(), (1u64 << 2) | (1u64 << 3));
 

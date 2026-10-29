@@ -81,7 +81,10 @@ impl Heartbeat {
         // Read-modify-write: keep any governed_levels the engine already
         // published (startup writes the heartbeat first, but an apply may run
         // either side of this in tests).
-        let mut cfg = config.get(&0, 0).map(|c| c.0).unwrap_or_else(|_| rk_config::zeroed());
+        let mut cfg = config
+            .get(&0, 0)
+            .map(|c| c.0)
+            .unwrap_or_else(|_| rk_config::zeroed());
         cfg.heartbeat_timeout_ns = u64::try_from(timeout.as_nanos()).unwrap_or(u64::MAX);
         config.set(0, Config(cfg), 0).context("write rk_config")?;
 
@@ -139,7 +142,10 @@ pub fn heartbeat_age(last: &AtomicU64) -> Duration {
 /// descendant of its bound cgroup is still resolved to it.
 pub fn set_governed_levels(ebpf: &Ebpf, levels: u64) -> Result<()> {
     let mut config: Array<MapData, Config> = owned_array(ebpf, MAP_CONFIG)?;
-    let mut cfg = config.get(&0, 0).map(|c| c.0).unwrap_or_else(|_| rk_config::zeroed());
+    let mut cfg = config
+        .get(&0, 0)
+        .map(|c| c.0)
+        .unwrap_or_else(|_| rk_config::zeroed());
     cfg.governed_levels = levels;
     config
         .set(0, Config(cfg), 0)
