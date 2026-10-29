@@ -27,7 +27,7 @@ The record length must equal `56 + payload_len` exactly.
 | 32 | `uid`, `gid` | |
 | 40 | `type` | `enum rk_event_type` |
 | 42 | `verdict` | `enum rk_verdict`: allow, deny, audit-would-deny |
-| 43 | `abi` | `RK_ABI_VERSION` (currently 1) |
+| 43 | `abi` | `RK_ABI_VERSION` (currently 2) |
 | 44 | `rule_id` | matching rule; 0 = default |
 
 ## Encoding rules

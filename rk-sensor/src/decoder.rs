@@ -557,12 +557,13 @@ pub(crate) mod tests {
 
     #[test]
     fn rejects_abi_mismatch() {
+        let wrong = RK_ABI_VERSION as u8 + 1; // any value but the current ABI
         let mut h = hdr(rk_event_type::RK_EV_EXEC, 0);
-        h.abi = 2;
+        h.abi = wrong;
         let rec = record(&h, &exec_payload(&[]));
         assert!(matches!(
             decode(&rec),
-            Err(DecodeError::AbiMismatch { found: 2, .. })
+            Err(DecodeError::AbiMismatch { found, .. }) if found == wrong
         ));
     }
 

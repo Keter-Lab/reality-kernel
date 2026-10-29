@@ -78,7 +78,13 @@ impl Heartbeat {
             bail!("heartbeat timeout {timeout:?} is below the minimum {MIN_TIMEOUT:?}");
         }
         let mut config: Array<MapData, Config> = owned_array(ebpf, MAP_CONFIG)?;
-        let mut cfg = rk_config::zeroed();
+        // Read-modify-write: keep any governed_levels the engine already
+        // published (startup writes the heartbeat first, but an apply may run
+        // either side of this in tests).
+        let mut cfg = config
+            .get(&0, 0)
+            .map(|c| c.0)
+            .unwrap_or_else(|_| rk_config::zeroed());
         cfg.heartbeat_timeout_ns = u64::try_from(timeout.as_nanos()).unwrap_or(u64::MAX);
         config.set(0, Config(cfg), 0).context("write rk_config")?;
 
@@ -128,6 +134,23 @@ impl Heartbeat {
 /// Time since the beat recorded in `last` (Phase 9 metrics).
 pub fn heartbeat_age(last: &AtomicU64) -> Duration {
     Duration::from_nanos(boottime_ns().saturating_sub(last.load(Ordering::Relaxed)))
+}
+
+/// Publishes the ancestor-walk level bitmask into rk_config, preserving the
+/// heartbeat timeout. See docs/design/cgroup-ancestry.md: bit L set means a
+/// cgroup is bound at hierarchy level L, so a task that moved into a
+/// descendant of its bound cgroup is still resolved to it.
+pub fn set_governed_levels(ebpf: &Ebpf, levels: u64) -> Result<()> {
+    let mut config: Array<MapData, Config> = owned_array(ebpf, MAP_CONFIG)?;
+    let mut cfg = config
+        .get(&0, 0)
+        .map(|c| c.0)
+        .unwrap_or_else(|_| rk_config::zeroed());
+    cfg.governed_levels = levels;
+    config
+        .set(0, Config(cfg), 0)
+        .context("write rk_config governed_levels")?;
+    Ok(())
 }
 
 impl Drop for Heartbeat {

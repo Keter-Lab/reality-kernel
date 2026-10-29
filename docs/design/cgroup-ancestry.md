@@ -123,8 +123,12 @@ for (int L = RK_CGROUP_MAX_DEPTH; L >= 1; L--) {
 Deepest-first means the **nearest** bound ancestor wins, so a child of a bound
 cgroup inherits that cgroup's profile, and a child of a *different* bound
 cgroup nested deeper still resolves to the closest one. The report header
-(`rk_hdr.cgroup_id`) records the task's own id, so an escaped-but-caught
-decision is visible as "governed under ancestor X while running in Y".
+(`rk_hdr.cgroup_id`) records the **governing** cgroup — the task's own id when
+directly bound, otherwise the bound ancestor — so userspace attributes the
+decision to its profile, metrics and OTLP session as it does for a directly
+bound task. (Reporting the task's own, unbound id instead would leave default
+and stale-heartbeat denials with no profile name and suppress the off-host
+OTLP span.)
 
 Why a published bitmask and not a blind walk of all levels: the ungoverned fast
 path is the cost every process on the host pays. A blind walk to a fixed max

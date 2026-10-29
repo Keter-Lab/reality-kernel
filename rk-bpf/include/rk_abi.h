@@ -18,7 +18,7 @@
 #include <linux/types.h>
 #endif
 
-#define RK_ABI_VERSION 1
+#define RK_ABI_VERSION 2
 #define RK_SCRATCH_PAYLOAD_MAX 2048
 
 /* Hook classes for the decision counters (docs/design/phase-9.md §3.4). */
@@ -339,9 +339,23 @@ struct rk_payload_file_deny {
 /* /proc/<pid>/stat starttime unit (USER_HZ) in nanoseconds. */
 #define RK_NSEC_PER_CLOCK_TICK 10000000ull
 
+/*
+ * Deepest cgroup hierarchy level the ancestor-aware governance walk checks
+ * (docs/design/cgroup-ancestry.md). Levels count from the root (0); a binding
+ * deeper than this cannot be covered by the walk.
+ */
+#define RK_CGROUP_MAX_DEPTH 16
+
 /* rk_config[0]. A timeout of 0 means never configured: fail closed. */
 struct rk_config {
     __u64 heartbeat_timeout_ns; /* offset 0 */
+    /*
+     * Bit L set => at least one cgroup is bound at hierarchy level L. On an
+     * exact-lookup miss, governance walks only these levels (nearest-ancestor
+     * wins), so a task that moved into a descendant of its bound cgroup stays
+     * governed. 0 => no bindings, no walk (behaves like an exact lookup).
+     */
+    __u64 governed_levels;      /* offset 8 */
 };
 
 /* rk_guard[0]: the sensor process the guard hooks protect. */
@@ -378,7 +392,7 @@ struct rk_payload_tamper {
 };
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-_Static_assert(sizeof(struct rk_config) == 8, "config size");
+_Static_assert(sizeof(struct rk_config) == 16, "config size");
 _Static_assert(sizeof(struct rk_guard_target) == 16, "guard_target size");
 _Static_assert(__builtin_offsetof(struct rk_guard_target, start_ticks) == 8, "guard start_ticks");
 _Static_assert(sizeof(struct rk_meta) == 56, "meta size");
