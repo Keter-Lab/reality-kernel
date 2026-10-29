@@ -638,3 +638,12 @@ rk init and rk policy suggest --out, run as root, never write through a symbolic
 - `out_never_writes_through_a_planted_symlink` (Rust test)
 - `observed_port_ranges_are_never_widened` (Rust test)
 - `a_replaced_executable_is_not_learned` (Rust test)
+
+## Release v0.4.0
+
+### governance-ancestor-aware
+
+A task that moved into a descendant of its bound cgroup stays governed under that cgroup's profile: governance resolves the nearest bound ancestor, bounded by the published set of bound hierarchy levels
+
+- `agent_in_child_cgroup_stays_governed` (VM suite, every kernel)
+- `governed_levels_bitmask_from_binding_depths` (Rust test)

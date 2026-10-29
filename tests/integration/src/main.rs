@@ -647,6 +647,26 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         Ok("10.99.0.1 denied with EPERM, 127.0.0.1 allowed".into())
     });
 
+    run_test(checks, "agent_in_child_cgroup_stays_governed", || {
+        // enforce (level 2) is bound and denies 10.99.0.1:80. A task that
+        // moved into a child cgroup under it (only a privileged workload
+        // could) must still be governed by enforce's profile through the
+        // ancestor-aware walk (docs/design/cgroup-ancestry.md); without it the
+        // child would be ungoverned and the connect would succeed.
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce/child",
+            "tcp_connect",
+            &["10.99.0.1:80", "eperm"],
+        )?;
+        // An allowed destination still works from the child.
+        spawn_child(
+            "/sys/fs/cgroup/rk.slice/enforce/child",
+            "tcp_connect",
+            &["127.0.0.1:8080", "ok"],
+        )?;
+        Ok("a task in a child of the bound enforce cgroup is still denied 10.99.0.1 and allowed 127.0.0.1".into())
+    });
+
     run_test(checks, "net_enforce_tcp_v6", || {
         spawn_child(
             "/sys/fs/cgroup/rk.slice/enforce",
@@ -3134,6 +3154,9 @@ fn setup_environment() {
 
     // Create cgroups
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/enforce");
+    // A child of the bound enforce cgroup, for the ancestor-aware governance
+    // test: a task moved here must still be governed by enforce's profile.
+    let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/enforce/child");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/audit");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/unlinked");
     let _ = fs::create_dir_all("/sys/fs/cgroup/rk.slice/rawok");

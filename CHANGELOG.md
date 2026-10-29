@@ -8,6 +8,23 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Governance is now ancestor-aware (docs/design/cgroup-ancestry.md). A task
+  that moves into a descendant of its bound cgroup — which only a privileged or
+  delegated workload can do — stays governed under that cgroup's profile,
+  instead of becoming silently ungoverned in every domain. On an exact-lookup
+  miss the kernel resolves the nearest bound ancestor, bounded by the set of
+  bound hierarchy levels the sensor publishes. A cgroup bound deeper than 16
+  levels keeps its exact match but its descendants are not covered (logged at
+  apply). Moving to an unbound sibling or the root by a separate privileged
+  process is still outside the guarantee (threat model §6).
+
+### Changed
+
+- The kernel/userspace ABI is version 2 (`rk_config` gained a field). The pin
+  set is replaced once on upgrade, as on any ABI change.
+
 ## [0.3.0] - 2026-10-28
 
 A security release. An external white-box review of 0.2.0 confirmed 26
