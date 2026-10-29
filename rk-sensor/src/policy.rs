@@ -22,7 +22,7 @@ use aya::Ebpf;
 use bytemuck::Zeroable;
 use rk_ebpf_common::{
     rk_binding, rk_exec_key, rk_exec_rule, rk_file_key, rk_file_rule, rk_net_range, rk_net_rule,
-    rk_profile, RK_MAX_PROFILES,
+    rk_profile, RK_CGROUP_MAX_DEPTH, RK_MAX_PROFILES,
 };
 use rk_policy::net::{
     self, Action, Compiled, CompiledExec, CompiledFile, Entry, ExecPathKind, FileTarget, Mode,
@@ -1110,6 +1110,7 @@ impl PolicyEngine {
             )
         })?;
         report.bindings = self.bindings.len();
+        self.publish_governed_levels(ebpf);
         Ok(report)
     }
 
@@ -1267,6 +1268,7 @@ impl PolicyEngine {
         self.bindings.insert(id, (cgroup.clone(), pid));
         self.dynamic.insert(id, (cgroup, profile.to_string()));
         self.persist();
+        self.publish_governed_levels(ebpf);
         Ok(id)
     }
 
@@ -1314,6 +1316,7 @@ impl PolicyEngine {
         self.dynamic
             .insert(id, (cgroup.to_string(), profile.to_string()));
         self.persist();
+        self.publish_governed_levels(ebpf);
         Ok(id)
     }
 
@@ -1331,6 +1334,7 @@ impl PolicyEngine {
         let mut bindings = BpfHashMap::<_, u64, Binding>::try_from(map)?;
         let _ = bindings.remove(&id);
         self.persist();
+        self.publish_governed_levels(ebpf);
         Ok(())
     }
 
@@ -1597,6 +1601,45 @@ impl PolicyEngine {
         }
         Ok(())
     }
+
+    /// The governed_levels bitmask for the current bindings: bit L set when a
+    /// cgroup is bound at hierarchy level L (its depth under the cgroup root,
+    /// which equals the relative path's component count). The ancestor-aware
+    /// walk uses it (docs/design/cgroup-ancestry.md). A binding deeper than
+    /// RK_CGROUP_MAX_DEPTH keeps its exact match but gets no descendant
+    /// protection; that is logged.
+    fn governed_levels(&self) -> u64 {
+        let max = RK_CGROUP_MAX_DEPTH as usize;
+        let mut mask = 0u64;
+        for (path, _) in self.bindings.values() {
+            let level = path.split('/').filter(|s| !s.is_empty()).count();
+            if (1..=max).contains(&level) {
+                mask |= 1u64 << level;
+            } else if level > max {
+                tracing::warn!(
+                    cgroup = %path,
+                    level,
+                    "cgroup bound deeper than RK_CGROUP_MAX_DEPTH: its descendants are \
+                     not covered by the ancestor-aware governance walk"
+                );
+            }
+        }
+        mask
+    }
+
+    /// Writes the current governed_levels bitmask into rk_config. Called after
+    /// any change to the set of bindings. Best effort once the bindings
+    /// themselves are live: a failure leaves the previous mask, so a newly
+    /// bound cgroup's descendants may be ungoverned until the next publish.
+    fn publish_governed_levels(&self, ebpf: &Ebpf) {
+        if let Err(e) = crate::resilience::set_governed_levels(ebpf, self.governed_levels()) {
+            tracing::error!(
+                error = %e,
+                "could not publish governed cgroup levels; descendants of a newly bound \
+                 cgroup may be ungoverned until the next apply or bind"
+            );
+        }
+    }
 }
 
 /// What one generation slot holds in the kernel maps, found by scanning them
@@ -1749,6 +1792,27 @@ mod tests {
             0o600
         );
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// governed_levels sets one bit per hierarchy level that holds a binding
+    /// (deduped), and ignores a cgroup deeper than RK_CGROUP_MAX_DEPTH.
+    #[test]
+    fn governed_levels_bitmask_from_binding_depths() {
+        let mut engine = PolicyEngine::new(PathBuf::from("/nonexistent"));
+        engine.bindings.insert(1, ("rk.slice/agent-a".into(), 1)); // level 2
+        engine.bindings.insert(2, ("kubepods.slice/pod/ctr".into(), 2)); // level 3
+        engine.bindings.insert(3, ("rk.slice/agent-b".into(), 3)); // level 2 again
+        assert_eq!(engine.governed_levels(), (1u64 << 2) | (1u64 << 3));
+
+        // A binding deeper than the max keeps its exact match but contributes
+        // no bit, so its descendants are not covered by the walk.
+        let deep = (0..=RK_CGROUP_MAX_DEPTH)
+            .map(|i| format!("l{i}"))
+            .collect::<Vec<_>>()
+            .join("/");
+        let before = engine.governed_levels();
+        engine.bindings.insert(4, (deep, 4));
+        assert_eq!(engine.governed_levels(), before);
     }
 
     /// A state file from another pin set (or with no epoch, or corrupt) is
