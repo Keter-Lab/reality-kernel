@@ -174,19 +174,58 @@ static __always_inline __u8 rk_heartbeat_stale(void)
 }
 
 /*
- * Returns 0 for an ungoverned task (fast path: one hash lookup). A cgroup bound
- * to a profile whose slot entry was never written is a configuration error and
+ * The cgroup whose binding governs the current task: its own if bound, else
+ * the nearest bound ancestor (docs/design/cgroup-ancestry.md). On an exact
+ * miss, walks only the hierarchy levels that hold a binding (rk_config's
+ * governed_levels bitmask), deepest first, so a task that moved into a
+ * descendant of its bound cgroup stays governed under that cgroup's profile.
+ * Returns 0 (ungoverned) when neither the task nor a bound ancestor matches;
+ * governed_levels == 0 means no walk, so a host with no bindings keeps the
+ * one-lookup fast path. `*out` is the matching binding on success.
+ */
+static __always_inline struct rk_binding *rk_governed_binding(__u64 self)
+{
+    struct rk_binding *b = bpf_map_lookup_elem(&rk_cgroup_profile, &self);
+    __u32 zero = 0;
+    struct rk_config *cfg;
+    __u64 levels;
+
+    if (b)
+        return b;
+    cfg = bpf_map_lookup_elem(&rk_config, &zero);
+    levels = cfg ? cfg->governed_levels : 0;
+    if (!levels)
+        return 0;
+#pragma unroll
+    for (int level = RK_CGROUP_MAX_DEPTH; level >= 1; level--) {
+        __u64 anc;
+
+        if (!(levels & (1ULL << level)))
+            continue;
+        anc = bpf_get_current_ancestor_cgroup_id(level);
+        if (!anc || anc == self)
+            continue;
+        b = bpf_map_lookup_elem(&rk_cgroup_profile, &anc);
+        if (b)
+            return b;
+    }
+    return 0;
+}
+
+/*
+ * Returns 0 for an ungoverned task (fast path: one hash lookup when the task's
+ * own cgroup is bound, or when no cgroup is bound at all). A cgroup bound to a
+ * profile whose slot entry was never written is a configuration error and
  * fails closed: ENFORCE, default deny, raw sockets denied, no rule matches.
  */
 static __always_inline int rk_governance(struct rk_gov *g)
 {
     __u64 cg = bpf_get_current_cgroup_id();
-    struct rk_binding *binding;
+    struct rk_binding *binding = rk_governed_binding(cg);
     struct rk_profile *prof;
     __u32 zero = 0, slot = 0, idx, profile;
     __u32 *active;
 
-    binding = bpf_map_lookup_elem(&rk_cgroup_profile, &cg);
     if (!binding)
         return 0;
 

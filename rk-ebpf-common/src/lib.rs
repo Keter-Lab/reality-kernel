@@ -104,7 +104,7 @@ const _: () = {
     assert!(offset_of!(rk_payload_file_deny, str_count) == 24);
 
     // Phase 6 (docs/design/phase-6.md).
-    assert!(size_of::<rk_config>() == 8);
+    assert!(size_of::<rk_config>() == 16);
     assert!(size_of::<rk_guard_target>() == 16);
     assert!(offset_of!(rk_guard_target, start_ticks) == 8);
     assert!(size_of::<rk_meta>() == 56);
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn abi_constants_match_header() {
-        assert_eq!(RK_ABI_VERSION, 1);
+        assert_eq!(RK_ABI_VERSION, 2);
         assert_eq!(RK_SCRATCH_PAYLOAD_MAX, 2048);
         assert_eq!(rk_event_type::RK_EV_SENDMSG, 9);
         assert_eq!(rk_verdict::RK_VERDICT_AUDIT_WOULD_DENY, 2);

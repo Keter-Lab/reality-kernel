@@ -600,7 +600,7 @@ mod tests {
     ) -> SelftestReport {
         SelftestReport {
             sensor_version: "test",
-            abi_version: 1,
+            abi_version: rk_ebpf_common::RK_ABI_VERSION,
             capabilities: Capabilities {
                 kernel_release: "test".into(),
                 arch: "x86_64",
