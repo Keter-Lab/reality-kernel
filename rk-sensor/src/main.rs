@@ -38,6 +38,7 @@ const USAGE: &str = "usage: rk-sensor [--policy FILE] [--watch-policy] \
                      [--state-file FILE] [--ring-size-mb N] \
                      [--audit-dir DIR|off] [--audit-key FILE] [--audit-allow] \
                      [--metrics-addr ADDR|off] [--otlp-endpoint http://HOST:PORT] \
+                     [--allow-delegated-cgroups] \
                      | --uninstall | --selftest | --version | --help";
 
 /// Longest time a replacement spends draining the old ring buffer
@@ -90,6 +91,9 @@ struct RunOpts {
     audit_key: Option<String>,
     /// Also record allowed decisions in the audit log.
     audit_allow: bool,
+    /// Bind a container cgroup whose delegated subtree is too deep for the
+    /// ancestor-aware walk to cover (docs/design/cgroup-ancestry.md §4.B).
+    allow_delegated_cgroups: bool,
     /// Metrics listen address, or `off` (Phase 9 §3.5).
     metrics_addr: Option<String>,
     /// OTLP/HTTP collector, e.g. `http://127.0.0.1:4318` (Phase 9 §3.6).
@@ -150,6 +154,7 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
             "--audit-dir" => opts.audit_dir = Some(it.next().ok_or_else(unrecognised)?.clone()),
             "--audit-key" => opts.audit_key = Some(it.next().ok_or_else(unrecognised)?.clone()),
             "--audit-allow" => opts.audit_allow = true,
+            "--allow-delegated-cgroups" => opts.allow_delegated_cgroups = true,
             "--metrics-addr" => {
                 let addr = it.next().ok_or_else(unrecognised)?;
                 if addr != "off" && addr.parse::<std::net::SocketAddr>().is_err() {
@@ -633,6 +638,7 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
 
         let mut engine = PolicyEngine::default();
         engine.set_lsm_active(lsm_active);
+        engine.set_allow_delegated_cgroups(opts.allow_delegated_cgroups);
         engine.set_state_file(
             PathBuf::from(opts.state_file.as_deref().unwrap_or(DEFAULT_STATE_FILE)),
             &epoch,

@@ -10,6 +10,12 @@ and container image. The format follows
 
 ### Security
 
+- rk-nri container binds now detect a delegated cgroup subtree (one writable
+  outside host root, so the workload can create and enter child cgroups) and
+  log a warning: its descendants stay governed by the ancestor-aware walk, but
+  a move to a sibling or the root does not. A delegated cgroup bound deeper
+  than the walk covers (16 levels) is refused unless `--allow-delegated-cgroups`
+  is set (docs/design/cgroup-ancestry.md §4.B).
 - Governance is now ancestor-aware (docs/design/cgroup-ancestry.md). A task
   that moves into a descendant of its bound cgroup — which only a privileged or
   delegated workload can do — stays governed under that cgroup's profile,

@@ -607,6 +607,10 @@ pub struct PolicyEngine {
     /// epoch that state belongs to (docs/design/phase-6.md §3.3).
     state_file: Option<PathBuf>,
     epoch: String,
+    /// Bind a container cgroup whose subtree is delegated (writable outside
+    /// host root) even when the ancestor-aware walk cannot cover its
+    /// descendants (docs/design/cgroup-ancestry.md §4.B). Off by default.
+    allow_delegated_cgroups: bool,
 }
 
 /// What survives a sensor restart beyond the kernel maps themselves.
@@ -648,6 +652,15 @@ fn cgroup_alive(cgroup_fs: &Path, path: &str, id: u64) -> bool {
         Ok(meta) => meta.ino() == id,
         Err(e) => e.kind() != std::io::ErrorKind::NotFound,
     }
+}
+
+/// A cgroup subtree is delegated — writable by someone other than host root,
+/// so the workload can create child cgroups and move into them — when its
+/// directory is not owned by root or is group/other writable. The launcher
+/// creates agent cgroups root-owned 0755, so only a runtime that chowned the
+/// subtree into the workload trips this (docs/design/cgroup-ancestry.md §4.B).
+fn is_delegated(meta: &fs::Metadata) -> bool {
+    meta.uid() != 0 || (meta.mode() & 0o022) != 0
 }
 
 /// Paths, relative to `cgroup_fs`, of the cgroups whose ids are in `ids`,
@@ -791,7 +804,15 @@ impl PolicyEngine {
             lsm_active: true,
             state_file: None,
             epoch: String::new(),
+            allow_delegated_cgroups: false,
         }
+    }
+
+    /// Allows binding a container cgroup whose subtree is delegated even when
+    /// the ancestor-aware walk cannot cover its descendants (§4.B). Off by
+    /// default; set from `--allow-delegated-cgroups`.
+    pub fn set_allow_delegated_cgroups(&mut self, allow: bool) {
+        self.allow_delegated_cgroups = allow;
     }
 
     /// Persists the engine state to `path` after every change, tagged with
@@ -1296,9 +1317,9 @@ impl PolicyEngine {
             .map(|p| p.id)
             .with_context(|| format!("unknown profile `{profile}`"))?;
         let path = self.cgroup_fs.join(cgroup);
-        let id = fs::metadata(&path)
-            .with_context(|| format!("stat cgroup {}", path.display()))?
-            .ino();
+        let meta =
+            fs::metadata(&path).with_context(|| format!("stat cgroup {}", path.display()))?;
+        let id = meta.ino();
         // A binding adopted without a state file may be this very container
         // (NRI resyncs after a restart): rebinding it attributes it.
         if self.bindings.contains_key(&id)
@@ -1309,6 +1330,31 @@ impl PolicyEngine {
         }
         if self.quarantined.contains(&id) {
             return Ok(id);
+        }
+        // §4.B: a delegated subtree lets the workload create child cgroups and
+        // move into them. The ancestor-aware walk keeps those descendants
+        // governed as long as this cgroup's level is covered; warn so the
+        // posture is visible, and refuse only when the level is too deep for
+        // the walk, unless the operator opted in.
+        if is_delegated(&meta) {
+            let level = cgroup.split('/').filter(|s| !s.is_empty()).count();
+            if level > RK_CGROUP_MAX_DEPTH as usize && !self.allow_delegated_cgroups {
+                anyhow::bail!(
+                    "container cgroup `{cgroup}` is delegated (writable outside host root) and \
+                     bound at level {level}, deeper than the ancestor-aware walk covers \
+                     ({RK_CGROUP_MAX_DEPTH}); its sub-cgroups would escape governance. Pass \
+                     --allow-delegated-cgroups to bind it anyway"
+                );
+            }
+            let mode = format!("{:o}", meta.mode() & 0o777);
+            tracing::warn!(
+                cgroup,
+                uid = meta.uid(),
+                mode = %mode,
+                "container cgroup subtree is delegated: its descendants stay governed by the \
+                 ancestor-aware walk, but a move to a sibling or the root cgroup would not \
+                 (docs/threat-model.md §6)"
+            );
         }
         self.set_binding(ebpf, id, pid)?;
         self.bindings.insert(id, (cgroup.to_string(), pid));
@@ -1840,6 +1886,22 @@ mod tests {
             0,
             "unknown-level binding must not disable the walk"
         );
+    }
+
+    /// A group- or other-writable cgroup directory is delegated, whoever owns
+    /// it. (A root-owned 0755 cgroup is not delegated; that is exercised by the
+    /// Kubernetes VM tests, which run as root.)
+    #[test]
+    fn delegated_cgroup_detected_by_mode() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = std::env::temp_dir().join(format!("rk-delegated-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        for mode in [0o775, 0o757, 0o777] {
+            fs::set_permissions(&dir, fs::Permissions::from_mode(mode)).unwrap();
+            assert!(is_delegated(&fs::metadata(&dir).unwrap()), "mode {mode:o}");
+        }
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A state file from another pin set (or with no epoch, or corrupt) is
