@@ -1607,15 +1607,28 @@ impl PolicyEngine {
     /// which equals the relative path's component count). The ancestor-aware
     /// walk uses it (docs/design/cgroup-ancestry.md). A binding deeper than
     /// RK_CGROUP_MAX_DEPTH keeps its exact match but gets no descendant
-    /// protection; that is logged.
+    /// protection; that is logged. A binding whose path could not be resolved
+    /// (an adopted binding whose cgroup the filesystem walk did not find) has
+    /// no known level: every level is covered for it, since omitting it would
+    /// risk publishing an empty mask that switches the walk off for every
+    /// bound cgroup.
     fn governed_levels(&self) -> u64 {
         let max = RK_CGROUP_MAX_DEPTH as usize;
+        // Bits 1..=max: cover every walkable level for an unknown-level binding.
+        let all_levels = (u64::MAX >> (63 - max)) & !1u64;
         let mut mask = 0u64;
-        for (path, _) in self.bindings.values() {
+        for (&id, (path, _)) in &self.bindings {
             let level = path.split('/').filter(|s| !s.is_empty()).count();
-            if (1..=max).contains(&level) {
+            if level == 0 {
+                tracing::warn!(
+                    cgroup = id,
+                    "cgroup bound at an unknown level: its path could not be resolved, so \
+                     every level is covered by the ancestor-aware governance walk"
+                );
+                mask |= all_levels;
+            } else if level <= max {
                 mask |= 1u64 << level;
-            } else if level > max {
+            } else {
                 tracing::warn!(
                     cgroup = %path,
                     level,
@@ -1815,6 +1828,14 @@ mod tests {
         let before = engine.governed_levels();
         engine.bindings.insert(4, (deep, 4));
         assert_eq!(engine.governed_levels(), before);
+
+        // A binding whose path is unknown (level 0) fails safe: it covers
+        // every walkable level (1..=max), never an empty mask.
+        let mut e2 = PolicyEngine::new(PathBuf::from("/nonexistent"));
+        e2.bindings.insert(9, (String::new(), 7));
+        let all = (u64::MAX >> (63 - RK_CGROUP_MAX_DEPTH)) & !1u64;
+        assert_eq!(e2.governed_levels(), all);
+        assert_ne!(e2.governed_levels(), 0, "unknown-level binding must not disable the walk");
     }
 
     /// A state file from another pin set (or with no epoch, or corrupt) is

@@ -181,17 +181,21 @@ static __always_inline __u8 rk_heartbeat_stale(void)
  * descendant of its bound cgroup stays governed under that cgroup's profile.
  * Returns 0 (ungoverned) when neither the task nor a bound ancestor matches;
  * governed_levels == 0 means no walk, so a host with no bindings keeps the
- * one-lookup fast path. `*out` is the matching binding on success.
+ * one-lookup fast path. On a match it returns the binding and sets `*governed`
+ * to the governing cgroup id (self when directly bound, else the ancestor),
+ * which the caller reports so the decision keeps its profile attribution.
  */
-static __always_inline struct rk_binding *rk_governed_binding(__u64 self)
+static __always_inline struct rk_binding *rk_governed_binding(__u64 self, __u64 *governed)
 {
     struct rk_binding *b = bpf_map_lookup_elem(&rk_cgroup_profile, &self);
     __u32 zero = 0;
     struct rk_config *cfg;
     __u64 levels;
 
-    if (b)
+    if (b) {
+        *governed = self;
         return b;
+    }
     cfg = bpf_map_lookup_elem(&rk_config, &zero);
     levels = cfg ? cfg->governed_levels : 0;
     if (!levels)
@@ -206,8 +210,10 @@ static __always_inline struct rk_binding *rk_governed_binding(__u64 self)
         if (!anc || anc == self)
             continue;
         b = bpf_map_lookup_elem(&rk_cgroup_profile, &anc);
-        if (b)
+        if (b) {
+            *governed = anc;
             return b;
+        }
     }
     return 0;
 }
@@ -221,7 +227,8 @@ static __always_inline struct rk_binding *rk_governed_binding(__u64 self)
 static __always_inline int rk_governance(struct rk_gov *g)
 {
     __u64 cg = bpf_get_current_cgroup_id();
-    struct rk_binding *binding = rk_governed_binding(cg);
+    __u64 governed = cg;
+    struct rk_binding *binding = rk_governed_binding(cg, &governed);
     struct rk_profile *prof;
     __u32 zero = 0, slot = 0, idx, profile;
     __u32 *active;
@@ -234,7 +241,10 @@ static __always_inline int rk_governance(struct rk_gov *g)
         slot = *active & 1;
     profile = binding->profile;
 
-    g->cgroup_id = cg;
+    /* Report the governing cgroup (self when directly bound, else the bound
+     * ancestor) so userspace attributes the decision to its profile, metrics
+     * and OTLP session (docs/design/cgroup-ancestry.md). */
+    g->cgroup_id = governed;
     if (profile >= RK_MAX_PROFILES)
         goto fail_closed;
     idx = slot * RK_MAX_PROFILES + profile;
