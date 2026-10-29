@@ -1835,7 +1835,11 @@ mod tests {
         e2.bindings.insert(9, (String::new(), 7));
         let all = (u64::MAX >> (63 - RK_CGROUP_MAX_DEPTH)) & !1u64;
         assert_eq!(e2.governed_levels(), all);
-        assert_ne!(e2.governed_levels(), 0, "unknown-level binding must not disable the walk");
+        assert_ne!(
+            e2.governed_levels(),
+            0,
+            "unknown-level binding must not disable the walk"
+        );
     }
 
     /// A state file from another pin set (or with no epoch, or corrupt) is
