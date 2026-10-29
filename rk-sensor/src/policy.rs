@@ -1317,8 +1317,8 @@ impl PolicyEngine {
             .map(|p| p.id)
             .with_context(|| format!("unknown profile `{profile}`"))?;
         let path = self.cgroup_fs.join(cgroup);
-        let meta = fs::metadata(&path)
-            .with_context(|| format!("stat cgroup {}", path.display()))?;
+        let meta =
+            fs::metadata(&path).with_context(|| format!("stat cgroup {}", path.display()))?;
         let id = meta.ino();
         // A binding adopted without a state file may be this very container
         // (NRI resyncs after a restart): rebinding it attributes it.
