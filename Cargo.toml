@@ -24,7 +24,7 @@ rust-version = "1.89"
 [workspace.dependencies]
 anyhow = "1"
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"] }
-aya = "0.14"
+aya = "0.16"
 clap = { version = "4", features = ["derive", "env"] }
 hex = "0.4"
 ed25519-dalek = { version = "3", features = ["rand_core", "zeroize"] }
