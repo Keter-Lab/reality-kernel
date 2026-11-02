@@ -5,7 +5,7 @@ go 1.26.0
 // The toolchain CI and releases build with; setup-go reads it.
 toolchain go1.27.3
 
-require github.com/containerd/nri v0.12.3
+require github.com/containerd/nri v0.12.5
 
 // govulncheck, pinned here and run with `go tool govulncheck` in CI.
 tool golang.org/x/vuln/cmd/govulncheck
