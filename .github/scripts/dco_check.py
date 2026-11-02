@@ -10,7 +10,8 @@ import re
 import subprocess
 import sys
 
-BOT = re.compile(r"\[bot\]@users\.noreply\.github\.com$")
+BOT_AUTHOR = re.compile(r"\[bot\]$")
+BOT_EMAIL = re.compile(r"\[bot\]@users\.noreply\.github\.com$")
 SIGNOFF = re.compile(r"^Signed-off-by: .+ <([^>]+)>\s*$", re.MULTILINE)
 
 
@@ -18,7 +19,7 @@ def unsigned(commits):
     """(sha, author, email, message) -> the commits missing the author's sign-off."""
     bad = []
     for sha, author, email, message in commits:
-        if BOT.search(email):
+        if BOT_AUTHOR.search(author) or BOT_EMAIL.search(email):
             continue
         if email.lower() not in (e.lower() for e in SIGNOFF.findall(message)):
             bad.append((sha, author, email))

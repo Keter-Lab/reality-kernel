@@ -27,3 +27,8 @@ def test_missing_or_foreign_sign_off_fails():
 def test_bot_commits_are_exempt():
     bot = "41898282+github-actions[bot]@users.noreply.github.com"
     assert dco.unsigned([("d" * 40, "github-actions[bot]", bot, "chore: autofix\n")]) == []
+
+
+def test_bot_author_with_non_bot_email_is_exempt():
+    email = "198982749+Copilot@users.noreply.github.com"
+    assert dco.unsigned([("e" * 40, "copilot-swe-agent[bot]", email, "chore: autofix\n")]) == []

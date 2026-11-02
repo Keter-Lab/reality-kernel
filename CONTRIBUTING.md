@@ -100,7 +100,8 @@ git rebase --signoff main
 git push --force-with-lease
 ```
 
-Commits made by bots (`[bot]@users.noreply.github.com`) are exempt.
+Commits made by bots (author ending in `[bot]` or email matching
+`[bot]@users.noreply.github.com`) are exempt.
 
 ## Licensing
 
