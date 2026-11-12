@@ -7,13 +7,14 @@ use std::fs;
 use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod doctor;
 mod identity;
 mod init;
 mod safe_write;
 mod suggest;
+mod time;
 mod toml_out;
 
 #[derive(Parser, Debug)]
@@ -104,6 +105,9 @@ enum AuditCommands {
         /// Only decisions of this agent session
         #[arg(long)]
         session: Option<String>,
+        /// Only records from the last 30s, 15m, 2h, 1d, ...
+        #[arg(long)]
+        since: Option<String>,
         /// Records to print before following; 0 prints all
         #[arg(short = 'n', long, default_value_t = 20)]
         lines: usize,
@@ -236,6 +240,7 @@ fn main() -> ExitCode {
                     json,
                     verdict,
                     session,
+                    since,
                     lines,
                 },
         } => match run_audit_tail(
@@ -244,6 +249,7 @@ fn main() -> ExitCode {
             json,
             verdict.as_deref(),
             session.as_deref(),
+            since.as_deref(),
             lines,
         ) {
             Ok(()) => ExitCode::SUCCESS,
@@ -279,10 +285,17 @@ fn audit_line(
     json: bool,
     verdict: Option<&str>,
     session: Option<&str>,
+    since_ms: Option<i64>,
 ) -> Option<String> {
     let v: serde_json::Value = serde_json::from_str(line).ok()?;
     if !rk_audit::tail::is_record(&v) || !rk_audit::tail::matches(&v, verdict, session) {
         return None;
+    }
+    if let Some(cutoff) = since_ms {
+        let time = v.get("time").and_then(serde_json::Value::as_i64).unwrap_or(0);
+        if time < cutoff {
+            return None;
+        }
     }
     Some(if json {
         rk_audit::tail::escape_json_line(line).into_owned()
@@ -313,8 +326,18 @@ fn run_audit_tail(
     json: bool,
     verdict: Option<&str>,
     session: Option<&str>,
+    since: Option<&str>,
     lines: usize,
 ) -> Result<()> {
+    let since_ms = match since {
+        Some(text) => {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
+            Some(now.saturating_sub(time::parse_since(text)?))
+        }
+        None => None,
+    };
     let segments = rk_audit::chain::segments(dir)?;
     // Newest segments first, until enough records are collected.
     let mut shown: VecDeque<String> = VecDeque::new();
@@ -322,7 +345,7 @@ fn run_audit_tail(
         let text = fs::read_to_string(seg).with_context(|| format!("read {}", seg.display()))?;
         let found: Vec<String> = text
             .lines()
-            .filter_map(|l| audit_line(l, json, verdict, session))
+            .filter_map(|l| audit_line(l, json, verdict, session, since_ms))
             .collect();
         for line in found.into_iter().rev() {
             shown.push_front(line);
@@ -351,7 +374,7 @@ fn run_audit_tail(
         let newest = rk_audit::chain::segments(dir)?.last().cloned();
         let emit = |path: &Path, offset: &mut u64, partial: &mut String| -> Result<()> {
             for l in read_new_lines(path, offset, partial)? {
-                if let Some(out) = audit_line(&l, json, verdict, session) {
+                if let Some(out) = audit_line(&l, json, verdict, session, since_ms) {
                     println!("{out}");
                 }
             }
@@ -661,5 +684,39 @@ fn yes_no(v: bool) -> &'static str {
         "yes"
     } else {
         "no"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn filters_by_since() {
+        let line_old = serde_json::json!({
+            "time": 1_000_000,
+            "policy": {"name": "agent"},
+            "unmapped": {"rk": {"verdict": "deny"}}
+        })
+        .to_string();
+
+        let line_new = serde_json::json!({
+            "time": 2_000_000,
+            "policy": {"name": "agent"},
+            "unmapped": {"rk": {"verdict": "deny"}}
+        })
+        .to_string();
+
+        // No cutoff: both match
+        assert!(audit_line(&line_old, false, None, None, None).is_some());
+        assert!(audit_line(&line_new, false, None, None, None).is_some());
+
+        // Cutoff at 1_500_000: old is filtered out, new matches
+        assert!(audit_line(&line_old, false, None, None, Some(1_500_000)).is_none());
+        assert!(audit_line(&line_new, false, None, None, Some(1_500_000)).is_some());
+
+        // Cutoff at 2_500_000: both filtered out
+        assert!(audit_line(&line_old, false, None, None, Some(2_500_000)).is_none());
+        assert!(audit_line(&line_new, false, None, None, Some(2_500_000)).is_none());
     }
 }
