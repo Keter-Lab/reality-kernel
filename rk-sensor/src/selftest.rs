@@ -396,7 +396,7 @@ mod linux {
                 .ok_or_else(|| "monitored_cgroups map missing".to_string())?;
             let mut governed = BpfHashMap::<_, u64, u64>::try_from(map).map_err(err)?;
             governed
-                .insert(cgroup_id, TEST_POLICY_GEN, 0)
+                .insert(&cgroup_id, &TEST_POLICY_GEN, 0)
                 .map_err(err)?;
         }
         {

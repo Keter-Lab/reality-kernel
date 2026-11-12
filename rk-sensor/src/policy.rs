@@ -1094,7 +1094,7 @@ impl PolicyEngine {
         // Commit point.
         let map = ebpf.map_mut(MAP_ACTIVE).context("rk_active_slot missing")?;
         let mut active = Array::<_, u32>::try_from(map)?;
-        active.set(0, slot, 0).context("flip rk_active_slot")?;
+        active.set(0, &slot, 0).context("flip rk_active_slot")?;
         self.active_slot = slot;
         self.last_flip = Some(Instant::now());
         self.generation = generation;
@@ -1421,7 +1421,7 @@ impl PolicyEngine {
         let map = ebpf.map_mut(MAP_PROFILES).context("rk_profiles missing")?;
         let mut profiles = Array::<_, Profile>::try_from(map)?;
         for id in &contents.profiles {
-            profiles.set(profile_index(slot, *id), Profile(rk_profile::zeroed()), 0)?;
+            profiles.set(profile_index(slot, *id), &Profile(rk_profile::zeroed()), 0)?;
         }
         Ok(())
     }
@@ -1451,7 +1451,7 @@ impl PolicyEngine {
                     flags: u32::from(r.subtree),
                     ..rk_file_rule::zeroed()
                 });
-                map.insert(key, rule, 0)
+                map.insert(&key, &rule, 0)
                     .with_context(|| format!("write file entry for profile {}", r.profile))?;
             }
         }
@@ -1470,7 +1470,7 @@ impl PolicyEngine {
                     rule_id: r.rule_id,
                     ..rk_exec_rule::zeroed()
                 });
-                map.insert(key, rule, 0)
+                map.insert(&key, &rule, 0)
                     .with_context(|| format!("write exec entry for profile {}", r.profile))?;
             }
         }
@@ -1490,7 +1490,7 @@ impl PolicyEngine {
                 };
                 self.written[slot as usize].profiles.push(p.id);
                 profiles
-                    .set(profile_index(slot, p.id), Profile(value), 0)
+                    .set(profile_index(slot, p.id), &Profile(value), 0)
                     .with_context(|| format!("write profile {}", p.id))?;
             }
         }
@@ -1510,7 +1510,7 @@ impl PolicyEngine {
                 } else {
                     written.allow.push((prefix_len, data));
                 }
-                trie.insert(&Key::new(prefix_len, data), NetRule(trie_value(entry)), 0)
+                trie.insert(&Key::new(prefix_len, data), &NetRule(trie_value(entry)), 0)
                     .with_context(|| {
                         format!("write {map_name} entry for profile {}", entry.profile)
                     })?;
@@ -1558,7 +1558,7 @@ impl PolicyEngine {
                 profile: entry.1,
                 ..rk_binding::zeroed()
             };
-            match bindings.insert(id, Binding(value), 0) {
+            match bindings.insert(&id, &Binding(value), 0) {
                 Ok(()) => {
                     applied.insert(id, entry);
                 }
@@ -1641,7 +1641,7 @@ impl PolicyEngine {
             profile,
             ..rk_binding::zeroed()
         };
-        bindings.insert(id, Binding(value), 0)?;
+        bindings.insert(&id, &Binding(value), 0)?;
         if let Some(entry) = self.bindings.get_mut(&id) {
             entry.1 = profile;
         }
