@@ -38,4 +38,3 @@ mod tests {
         assert!(parse_since("10").is_err());
     }
 }
-

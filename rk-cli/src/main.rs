@@ -292,7 +292,10 @@ fn audit_line(
         return None;
     }
     if let Some(cutoff) = since_ms {
-        let time = v.get("time").and_then(serde_json::Value::as_i64).unwrap_or(0);
+        let time = v
+            .get("time")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
         if time < cutoff {
             return None;
         }
