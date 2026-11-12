@@ -27,6 +27,7 @@ the sensor keeps enforcing, logs the error, and reports it in `rk status`
 $ rk audit tail -n 5
 2026-10-22T12:00:01.204Z DENY   Open 10.99.0.1:80/udp  rule 3 (agent) gen 7  pid 4312 /usr/bin/python3  session s-81
 $ rk audit tail -f --verdict deny --session s-81
+$ rk audit tail --since 15m
 $ rk audit tail --json | jq .
 $ rk audit verify --pubkey /var/lib/rk/audit.key.pub
 audit log /var/log/rk/audit: 2 segments, 412 batches, 9120 records (0 recovered batches)
@@ -35,6 +36,14 @@ head: 412:4c1d9a0be2f7a3115e0b7d2c94a1f6e83b2d0c9f7a6e5d4c3b2a1908f7e6d5c4
 VERIFIED
 $ rk audit verify --pubkey /var/lib/rk/audit.key.pub --head 412:4c1d9a0be2f7a311...
 ```
+
+`rk audit tail` options:
+- `-f`, `--follow`: keep printing records as they are written
+- `-n`, `--lines <N>`: records to print before following (default 20, 0 prints all)
+- `--since <DURATION>`: show only records from the last `30s`, `15m`, `2h`, `1d`
+- `--verdict <VERDICT>`: filter by verdict (`deny`, `audit`, `allow`)
+- `--session <ID>`: filter by agent session id
+- `--json`: emit raw OCSF JSON lines instead of summary lines
 
 `rk audit verify` exits 0 when everything verifies, 2 when it finds
 evidence of tampering (each problem names the segment, line and batch), and

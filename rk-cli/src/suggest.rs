@@ -619,25 +619,7 @@ pub fn splice(original: &str, name: &str, profile_text: &str) -> Option<String> 
     placed.then_some(out)
 }
 
-/// `30s`, `15m`, `2h`, `1d` in milliseconds.
-pub fn parse_since(text: &str) -> Result<i64> {
-    let text = text.trim();
-    if !text.is_ascii() || text.len() < 2 {
-        bail!("--since {text}: expected a number and s, m, h or d");
-    }
-    let (num, unit) = text.split_at(text.len() - 1);
-    let n: i64 = num
-        .parse()
-        .with_context(|| format!("--since {text}: expected a number and s, m, h or d"))?;
-    let secs = match unit {
-        "s" => n,
-        "m" => n * 60,
-        "h" => n * 3600,
-        "d" => n * 86_400,
-        _ => bail!("--since {text}: expected a number and s, m, h or d"),
-    };
-    Ok(secs * 1000)
-}
+pub use crate::time::parse_since;
 
 pub struct Options {
     pub profile: String,
