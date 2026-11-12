@@ -333,7 +333,7 @@ pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
         meta.epoch = epoch;
         let map = ebpf.map_mut("rk_meta").context("rk_meta missing")?;
         let mut array: Array<&mut MapData, Meta> = Array::try_from(map)?;
-        array.set(0, Meta(meta), 0).context("write rk_meta")?;
+        array.set(0, &Meta(meta), 0).context("write rk_meta")?;
     }
 
     Ok(Pinned {

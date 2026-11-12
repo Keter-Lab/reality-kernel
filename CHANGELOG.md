@@ -8,6 +8,11 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Minimum Supported Rust Version raised to **1.98** (from 1.89), required by the
+  aya 0.16 eBPF runtime upgrade (aya 0.14 → 0.16, aya-obj 0.3 → 0.6).
+
 ### Security
 
 - rk-nri container binds now detect a delegated cgroup subtree (one writable

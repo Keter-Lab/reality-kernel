@@ -86,11 +86,11 @@ impl Heartbeat {
             .map(|c| c.0)
             .unwrap_or_else(|_| rk_config::zeroed());
         cfg.heartbeat_timeout_ns = u64::try_from(timeout.as_nanos()).unwrap_or(u64::MAX);
-        config.set(0, Config(cfg), 0).context("write rk_config")?;
+        config.set(0, &Config(cfg), 0).context("write rk_config")?;
 
         let mut beat: Array<MapData, u64> = owned_array(ebpf, MAP_HEARTBEAT)?;
         let first = boottime_ns();
-        beat.set(0, first, 0).context("write rk_heartbeat")?;
+        beat.set(0, &first, 0).context("write rk_heartbeat")?;
 
         let stop = Arc::new(AtomicBool::new(false));
         let last = Arc::new(AtomicU64::new(first));
@@ -104,7 +104,7 @@ impl Heartbeat {
                 while !thread_stop.load(Ordering::Relaxed) {
                     thread::sleep(interval);
                     let now = boottime_ns();
-                    match beat.set(0, now, 0) {
+                    match beat.set(0, &now, 0) {
                         Ok(()) => {
                             thread_last.store(now, Ordering::Relaxed);
                             failing = false;
@@ -148,7 +148,7 @@ pub fn set_governed_levels(ebpf: &Ebpf, levels: u64) -> Result<()> {
         .unwrap_or_else(|_| rk_config::zeroed());
     cfg.governed_levels = levels;
     config
-        .set(0, Config(cfg), 0)
+        .set(0, &Config(cfg), 0)
         .context("write rk_config governed_levels")?;
     Ok(())
 }
@@ -177,7 +177,7 @@ pub fn protect_self(ebpf: &mut Ebpf) -> Result<()> {
     target.start_ticks = start_ticks(&stat).context("parse /proc/self/stat")?;
     let mut guard: Array<MapData, GuardTarget> = owned_array(ebpf, MAP_GUARD)?;
     guard
-        .set(0, GuardTarget(target), 0)
+        .set(0, &GuardTarget(target), 0)
         .context("write rk_guard")?;
     Ok(())
 }
