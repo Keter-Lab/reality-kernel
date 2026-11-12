@@ -308,7 +308,7 @@ fn corrupt_meta_pin() -> Result<()> {
         Array::try_from(Map::Array(data)).context("Array::try_from rk_meta")?;
     let mut meta = array.get(&0, 0).context("read rk_meta")?;
     meta.0.object_sha256[0] ^= 0xff;
-    array.set(0, meta, 0).context("write corrupted rk_meta")?;
+    array.set(0, &meta, 0).context("write corrupted rk_meta")?;
     Ok(())
 }
 
