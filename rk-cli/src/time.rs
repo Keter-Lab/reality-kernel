@@ -50,7 +50,9 @@ mod tests {
 
     #[test]
     fn rejects_signed_zero_and_malformed_numbers() {
-        for text in ["-5m", "+5m", "0s", "00d", "5.5m", "5 m", "1e3s", "-0s", "--5m"] {
+        for text in [
+            "-5m", "+5m", "0s", "00d", "5.5m", "5 m", "1e3s", "-0s", "--5m",
+        ] {
             assert!(parse_since(text).is_err(), "{text:?} was accepted");
         }
     }
@@ -59,7 +61,10 @@ mod tests {
     fn rejects_windows_too_long_to_represent() {
         // The largest day count that fits in i64 milliseconds is accepted.
         let max_days = i64::MAX / 86_400_000;
-        assert_eq!(parse_since(&format!("{max_days}d")).unwrap(), max_days * 86_400_000);
+        assert_eq!(
+            parse_since(&format!("{max_days}d")).unwrap(),
+            max_days * 86_400_000
+        );
         for text in [
             format!("{}d", max_days + 1),
             "99999999999999d".to_string(),
