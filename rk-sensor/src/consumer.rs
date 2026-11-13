@@ -293,6 +293,25 @@ impl Consumer {
         self.stats.clone()
     }
 
+    /// Why the pipeline stopped on its own, or `None` while it runs (or after
+    /// [`Consumer::stop`] was asked for). The drain thread ends on a fatal
+    /// `epoll_wait` error, and the worker on a panic in a handler or once the
+    /// drain has gone; either way no record reaches the audit log any more,
+    /// so the daemon must not keep running as if it did.
+    pub fn failure(&self) -> Option<&'static str> {
+        if self.stop.load(Ordering::Relaxed) {
+            return None;
+        }
+        let finished = |h: &Option<JoinHandle<()>>| h.as_ref().is_none_or(|h| h.is_finished());
+        if finished(&self.drain) {
+            Some("the ring-buffer drain thread stopped")
+        } else if finished(&self.worker) {
+            Some("the audit worker thread stopped")
+        } else {
+            None
+        }
+    }
+
     /// Stops the drain thread (after a final drain) and the worker (after it
     /// has written everything already queued).
     pub fn stop(mut self) {
@@ -335,6 +354,74 @@ impl Drop for Consumer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn consumer_with(drain: JoinHandle<()>, worker: JoinHandle<()>) -> Consumer {
+        // SAFETY: plain eventfd(2); `owned` checks the result.
+        let wake = owned(unsafe { libc::eventfd(0, libc::EFD_CLOEXEC) }, "eventfd").unwrap();
+        Consumer {
+            stop: Arc::new(AtomicBool::new(false)),
+            wake,
+            drain: Some(drain),
+            worker: Some(worker),
+            stats: Arc::new(PipelineStats::default()),
+        }
+    }
+
+    fn wait_finished(h: &Option<JoinHandle<()>>) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !h.as_ref().unwrap().is_finished() {
+            assert!(Instant::now() < deadline, "thread did not finish");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn a_running_pipeline_reports_no_failure() {
+        let release = Arc::new(AtomicBool::new(false));
+        let spin = |r: Arc<AtomicBool>| {
+            thread::spawn(move || {
+                while !r.load(Ordering::Relaxed) {
+                    thread::sleep(Duration::from_millis(5));
+                }
+            })
+        };
+        let c = consumer_with(spin(release.clone()), spin(release.clone()));
+        assert_eq!(c.failure(), None);
+        release.store(true, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn a_dead_drain_or_worker_is_a_failure_unless_stopping() {
+        let release = Arc::new(AtomicBool::new(false));
+        let r = release.clone();
+        let alive = thread::spawn(move || {
+            while !r.load(Ordering::Relaxed) {
+                thread::sleep(Duration::from_millis(5));
+            }
+        });
+        // The drain thread ended (as after a fatal epoll_wait error).
+        let c = consumer_with(thread::spawn(|| {}), alive);
+        wait_finished(&c.drain);
+        assert_eq!(c.failure(), Some("the ring-buffer drain thread stopped"));
+        // A requested stop is not a failure.
+        c.stop.store(true, Ordering::Relaxed);
+        assert_eq!(c.failure(), None);
+        release.store(true, Ordering::Relaxed);
+        drop(c);
+
+        // The worker died (as after a panic in a handler) while the drain runs.
+        let release = Arc::new(AtomicBool::new(false));
+        let r = release.clone();
+        let alive = thread::spawn(move || {
+            while !r.load(Ordering::Relaxed) {
+                thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let c = consumer_with(alive, thread::spawn(|| {}));
+        wait_finished(&c.worker);
+        assert_eq!(c.failure(), Some("the audit worker thread stopped"));
+        release.store(true, Ordering::Relaxed);
+    }
 
     #[test]
     fn ring_size_scales_with_cpus_and_is_clamped() {
