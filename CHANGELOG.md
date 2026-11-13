@@ -15,6 +15,17 @@ and container image. The format follows
 
 ### Security
 
+- A governed workload can no longer use the agentd control socket. Before,
+  an agent could connect to `/run/rk/agentd.sock` (mode 0666; the kernel
+  hooks do not classify `AF_UNIX`) and `rk run` itself under any looser
+  profile its uid may launch, or, when its user is in group `rk`, apply or
+  roll back the policy that governs it (group membership is resolved from the
+  uid, so dropping supplementary groups at launch did not help). rk-agentd now
+  refuses every request from a caller in `rk.slice` or in a cgroup that is, or
+  descends from, a bound cgroup, and refuses callers it cannot verify. The
+  caller is held through `SO_PEERPIDFD` (Linux 6.5) or `pidfd_open` while its
+  cgroup is read. Agents started by root (which run as the service user) were
+  not affected.
 - rk-nri container binds now detect a delegated cgroup subtree (one writable
   outside host root, so the workload can create and enter child cgroups) and
   log a warning: its descendants stay governed by the ancestor-aware walk, but

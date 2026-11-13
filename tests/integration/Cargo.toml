@@ -20,6 +20,7 @@ aya.workspace = true
 bytemuck = { version = "1", features = ["derive"] }
 io-uring = "0.7"
 libc = "0.2"
+rk-agentd = { path = "../../rk-agentd" }
 rk-ebpf-common = { path = "../../rk-ebpf-common" }
 rk-audit = { path = "../../rk-audit" }
 rk-policy = { path = "../../rk-policy" }

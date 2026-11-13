@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,7 +17,8 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::auth::{
-    check_launchable_by, check_policy_admin, get_peer_cred, launch_refusal, PeerCred,
+    check_launchable_by, check_policy_admin, get_peer_cred, get_peer_pidfd, launch_refusal,
+    PeerCred,
 };
 use crate::cgroup::{create_agent_cgroup, drain_and_remove_cgroup, kill_cgroup, open_cgroup_dir};
 use crate::launcher::{pidfd_open, signal_process, spawn_in_cgroup};
@@ -28,9 +29,15 @@ use crate::protocol::{
 use crate::registry::{ActiveAgent, AgentRegistry};
 
 /// What the blocking receive stage hands back: the connection (moved through the
-/// blocking task and returned), the peer credentials, and the decoded request
-/// with any passed descriptors (`None` if the peer sent nothing).
-type ReceivedConnection = (OwnedFd, PeerCred, Option<(Request, Vec<OwnedFd>)>);
+/// blocking task and returned), the peer credentials, the peer's pidfd when the
+/// kernel provides one (`SO_PEERPIDFD`), and the decoded request with any
+/// passed descriptors (`None` if the peer sent nothing).
+type ReceivedConnection = (
+    OwnedFd,
+    PeerCred,
+    Option<OwnedFd>,
+    Option<(Request, Vec<OwnedFd>)>,
+);
 
 /// Maximum time the daemon waits for a client to send its request before the
 /// connection is dropped. Legitimate clients send immediately after connecting;
@@ -86,6 +93,9 @@ pub trait PolicyHandler: Send + Sync {
     ) -> Result<Option<String>>;
     /// Binds a Kubernetes container cgroup (relative to the cgroupfs root).
     fn bind_container(&mut self, cgroup: &str, profile: &str) -> Result<u64>;
+    /// Whether the cgroup with this id is bound to a profile in the kernel
+    /// (statically, as an agent, as a container, adopted or quarantined).
+    fn is_bound(&self, cgroup_id: u64) -> bool;
     /// Event pipeline counters for `rk status` (Phase 7 §5).
     fn counters(&self) -> BTreeMap<String, u64> {
         BTreeMap::new()
@@ -171,6 +181,96 @@ pub fn placement_problem(proc_cgroup: Option<&str>, expected: &str) -> Option<St
         Some(actual) => Some(format!("it is in cgroup {actual}, not {expected}")),
         None => Some("its /proc/<pid>/cgroup has no cgroup v2 entry".into()),
     }
+}
+
+/// Why a caller must be refused because it is, or cannot be shown not to be, a
+/// governed workload; `None` when it is not governed. `proc_cgroup` is the text
+/// of the caller's `/proc/<pid>/cgroup`, `cgroup_id` returns the id (inode) of
+/// a cgroup given its path relative to the cgroupfs root, and `is_bound` says
+/// whether an id is bound to a profile.
+///
+/// A governed workload must not reach the control plane: through it an agent
+/// could launch itself under a looser profile, or, if its user is a policy
+/// admin, apply or roll back the policy that contains it. The kernel hooks do
+/// not classify `AF_UNIX`, so this check is what keeps the socket out of reach.
+/// Like the kernel, it treats a task as governed when its own cgroup or any
+/// ancestor is bound, and it refuses everything under `rk.slice`, where only
+/// agents live. Anything it cannot check is refused.
+pub fn governed_caller(
+    proc_cgroup: &str,
+    cgroup_id: impl Fn(&str) -> std::io::Result<u64>,
+    is_bound: impl Fn(u64) -> bool,
+) -> Option<String> {
+    let Some(path) = proc_cgroup.lines().find_map(|l| l.strip_prefix("0::")) else {
+        return Some("its /proc/<pid>/cgroup has no cgroup v2 entry".into());
+    };
+    let rel = path.trim_start_matches('/');
+    if rel.split('/').any(|s| s == "." || s == "..") || rel.contains(' ') {
+        return Some(format!(
+            "its cgroup `{path}` is outside this daemon's cgroup namespace or removed"
+        ));
+    }
+    let root = rk_policy::net::CGROUP_ROOT;
+    if rel == root || rel.starts_with(&format!("{root}/")) {
+        return Some(format!("it runs in the agent cgroup `{path}`"));
+    }
+    let mut prefix = String::new();
+    for segment in rel.split('/').filter(|s| !s.is_empty()) {
+        if !prefix.is_empty() {
+            prefix.push('/');
+        }
+        prefix.push_str(segment);
+        match cgroup_id(&prefix) {
+            Ok(id) if is_bound(id) => {
+                return Some(format!(
+                    "its cgroup `{path}` is governed (bound at `/{prefix}`)"
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => return Some(format!("its cgroup `/{prefix}` cannot be checked: {e}")),
+        }
+    }
+    None
+}
+
+/// Why the process behind a connection must be refused as a governed workload
+/// (see [`governed_caller`]), or `None`. The process is held by a pidfd while
+/// its cgroup is read, and must still be alive afterwards, so a pid that was
+/// recycled by another process is never checked in its place.
+async fn governed_caller_refusal(
+    cred: &PeerCred,
+    peer_pidfd: Option<OwnedFd>,
+    handler: &Arc<Mutex<dyn PolicyHandler>>,
+    config: &ServerConfig,
+) -> Option<String> {
+    let pid = cred.pid;
+    if pid <= 0 {
+        return Some(
+            "the calling process is not visible to the daemon (another pid namespace?)".into(),
+        );
+    }
+    let pidfd = match peer_pidfd {
+        Some(fd) => fd,
+        None => match pidfd_open(pid) {
+            Ok(fd) => fd,
+            Err(e) => return Some(format!("the calling process {pid} cannot be held: {e}")),
+        },
+    };
+    let text = match fs::read_to_string(format!("/proc/{pid}/cgroup")) {
+        Ok(text) => text,
+        Err(e) => return Some(format!("cannot read /proc/{pid}/cgroup: {e}")),
+    };
+    if signal_process(pid as u32, Some(&pidfd), 0).is_err() {
+        return Some(format!(
+            "the calling process {pid} exited before its cgroup could be confirmed"
+        ));
+    }
+    let h = handler.lock().await;
+    governed_caller(
+        &text,
+        |rel| fs::metadata(config.cgroup_fs.join(rel)).map(|m| m.ino()),
+        |id| h.is_bound(id),
+    )
 }
 
 async fn bind_container(
@@ -391,12 +491,13 @@ async fn handle_connection(
     // Read the peer credentials and the request on the blocking pool (bounded by
     // SO_RCVTIMEO), so a slow or idle client blocks a short-lived blocking-pool
     // thread rather than an async runtime worker.
-    let (client, cred, received) =
+    let (client, cred, peer_pidfd, received) =
         tokio::task::spawn_blocking(move || -> Result<ReceivedConnection> {
             let cred = get_peer_cred(client.as_raw_fd())?;
+            let peer_pidfd = get_peer_pidfd(client.as_raw_fd());
             let mut buf = vec![0u8; MAX_MESSAGE_SIZE];
             let received = recv_request(client.as_raw_fd(), &mut buf)?;
-            Ok((client, cred, received))
+            Ok((client, cred, peer_pidfd, received))
         })
         .await
         .context("agentd receive task panicked")??;
@@ -407,6 +508,22 @@ async fn handle_connection(
         Some(pair) => pair,
         None => return Ok(()),
     };
+
+    // A governed workload never reaches the control plane, whatever its uid
+    // or groups: see `governed_caller`.
+    if let Some(reason) = governed_caller_refusal(&cred, peer_pidfd, &handler, &config).await {
+        warn!(
+            pid = cred.pid,
+            uid = cred.uid,
+            reason = %reason,
+            "refused an agentd request from a governed or unverifiable caller"
+        );
+        let resp = Response::Error {
+            message: format!("rk-agentd refuses requests from governed workloads: {reason}"),
+        };
+        send_response(client.as_raw_fd(), &resp)?;
+        return Ok(());
+    }
 
     match req {
         Request::Run {
@@ -984,6 +1101,80 @@ mod tests {
             None,
         ] {
             assert!(placement_problem(bad, expected).is_some(), "{bad:?}");
+        }
+    }
+
+    /// A fake cgroupfs: path (relative to the root) -> id.
+    fn fake_ids(rel: &str) -> std::io::Result<u64> {
+        match rel {
+            "user.slice" => Ok(10),
+            "user.slice/user-1000.slice" => Ok(11),
+            "kubepods" => Ok(20),
+            "kubepods/pod-a" => Ok(21),
+            "kubepods/pod-a/cri-containerd-abc.scope" => Ok(22),
+            "kubepods/pod-a/cri-containerd-abc.scope/child" => Ok(23),
+            "system.slice" => Ok(30),
+            "system.slice/rk-sensor.service" => Ok(31),
+            _ => Err(std::io::Error::from_raw_os_error(libc::ENOENT)),
+        }
+    }
+
+    #[test]
+    fn ungoverned_callers_are_accepted() {
+        let bound = |id: u64| id == 22;
+        for text in [
+            "0::/user.slice/user-1000.slice\n",
+            "12:cpu:/rk.slice/agent-1\n0::/system.slice/rk-sensor.service\n",
+            "0::/\n",
+            // An unannotated pod next to a governed one.
+            "0::/kubepods\n",
+        ] {
+            assert_eq!(governed_caller(text, fake_ids, bound), None, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn governed_callers_are_refused() {
+        // Every agent cgroup, bound or already unbound, and rk.slice itself.
+        for text in [
+            "0::/rk.slice/agent-1\n",
+            "0::/rk.slice/agent-1/nested\n",
+            "0::/rk.slice\n",
+            "0::/rk.slice/static-binding\n",
+        ] {
+            let why = governed_caller(text, fake_ids, |_| false);
+            assert!(why.unwrap().contains("agent cgroup"), "{text:?}");
+        }
+        // A bound container, and a descendant of one (ancestor-aware, like
+        // the kernel lookup).
+        let bound = |id: u64| id == 22;
+        for text in [
+            "0::/kubepods/pod-a/cri-containerd-abc.scope\n",
+            "0::/kubepods/pod-a/cri-containerd-abc.scope/child\n",
+        ] {
+            let why = governed_caller(text, fake_ids, bound).expect(text);
+            assert!(
+                why.contains("bound at `/kubepods/pod-a/cri-containerd-abc.scope`"),
+                "{why}"
+            );
+        }
+    }
+
+    #[test]
+    fn unverifiable_callers_are_refused() {
+        for text in [
+            "",
+            "12:cpu:/user.slice\n",
+            "0::/../../user.slice\n",
+            "0::/user.slice/./x\n",
+            "0::/user.slice/gone (deleted)\n",
+            // A cgroup the daemon cannot stat.
+            "0::/user.slice/missing\n",
+        ] {
+            assert!(
+                governed_caller(text, fake_ids, |_| false).is_some(),
+                "{text:?} was accepted"
+            );
         }
     }
 }

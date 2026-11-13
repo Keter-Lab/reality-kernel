@@ -1051,6 +1051,12 @@ impl PolicyEngine {
         ctx
     }
 
+    /// Whether `cgroup_id` is bound in the kernel map: statically, as an
+    /// agent or container, adopted, or quarantined.
+    pub fn is_bound(&self, cgroup_id: u64) -> bool {
+        self.bindings.contains_key(&cgroup_id)
+    }
+
     /// cgroup id of a bound cgroup path, if bound.
     pub fn cgroup_id(&self, path: &str) -> Option<u64> {
         self.bindings

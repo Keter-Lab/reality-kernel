@@ -235,10 +235,11 @@ Agents run unprivileged and can't leave their cgroup
 
 ### agent-authorisation
 
-Only authorised callers change policy or launch a profile
+Only authorised callers change policy or launch a profile, and a governed workload never reaches the control socket
 
 - `socket_rejects_unauthorised_apply` (VM suite, every kernel)
 - `run_rejects_non_launchable_profile` (VM suite, every kernel)
+- `governed_agent_refused_by_control_socket` (VM suite, every kernel)
 
 ### agent-lifecycle-session
 

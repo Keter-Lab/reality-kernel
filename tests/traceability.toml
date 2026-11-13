@@ -190,8 +190,8 @@ tests = ["vm:agent_runs_unprivileged", "vm:agent_cannot_leave_cgroup", "unit:clo
 [[criterion]]
 phase = "5"
 id = "agent-authorisation"
-text = "Only authorised callers change policy or launch a profile"
-tests = ["vm:socket_rejects_unauthorised_apply", "vm:run_rejects_non_launchable_profile"]
+text = "Only authorised callers change policy or launch a profile, and a governed workload never reaches the control socket"
+tests = ["vm:socket_rejects_unauthorised_apply", "vm:run_rejects_non_launchable_profile", "vm:governed_agent_refused_by_control_socket"]
 
 [[criterion]]
 phase = "5"

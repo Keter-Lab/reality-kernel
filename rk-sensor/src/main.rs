@@ -324,6 +324,10 @@ impl PolicyHandler for SensorPolicyHandler {
         Ok(())
     }
 
+    fn is_bound(&self, cgroup_id: u64) -> bool {
+        self.engine.is_bound(cgroup_id)
+    }
+
     fn get_profile(&self, name: &str) -> Result<rk_policy::net::Profile> {
         self.engine
             .policy()
