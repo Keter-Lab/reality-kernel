@@ -37,7 +37,13 @@ run_test() { # name function
     fi
 }
 
-fail() { echo "$*"; return 1; }
+# Ends the test. Every test runs in the command substitution in run_test, so
+# `exit` leaves only that subshell and run_test records the failure. (It used
+# to `return 1`, which the script never checked outside a test's last
+# statement: `[ ... ] || fail ...` followed by more commands passed anyway.)
+# A test that changes shared state restores it in an EXIT trap, which runs
+# however the test ends.
+fail() { echo "$*"; exit 1; }
 
 rk() { kubectl -n "$NS" exec ds/rk -c rk-sensor -- /usr/local/bin/rk "$@"; }
 status_json() { rk status --json; }
@@ -193,6 +199,7 @@ t_init_and_sidecar() {
 t_removal_unbinds() {
     local base during after i
     base="$(containers)"
+    trap 'kubectl delete pod hold2 --ignore-not-found --wait=false >/dev/null 2>&1' EXIT
     pod hold2 default '{"realitykernel.dev/profile":"k8s-net"}' hold 600000
     wait_running hold2 default || fail "hold2 not running"
     during="$(containers)"
@@ -213,6 +220,9 @@ t_lsm_rules_refused() {
     fi
     local before i
     before="$(generation)"
+    # Put the CI values back however this test ends, so later tests run
+    # against the policy they expect.
+    trap 'helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" >/dev/null 2>&1' EXIT
     helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" -f "$HERE/values-ci-lsm.yaml" >/dev/null \
         || fail "helm upgrade failed"
     for i in $(seq 1 90); do
@@ -220,7 +230,9 @@ t_lsm_rules_refused() {
             | jq -Re 'fromjson? | select((.fields.message? // "") | startswith("changed policy rejected")) | .fields.error
                      | contains("BPF LSM is not active")' >/dev/null 2>&1; then
             [ "$(generation)" = "$before" ] || fail "generation moved although the policy was refused"
-            helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" >/dev/null
+            trap - EXIT
+            helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" >/dev/null \
+                || fail "restoring the CI values failed"
             wait_generation_above "$before" >/dev/null || fail "restoring the CI policy did not apply"
             echo "policy with an exec rule refused without BPF LSM; generation stayed $before"
             return 0
@@ -237,6 +249,7 @@ t_configmap_update() {
     before="$(generation)"
     kubectl exec hold1 -- "$PROBE" --agent-probe connect 10.99.0.2:80 notdenied >/dev/null \
         || fail "10.99.0.2 denied before the update"
+    trap 'helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" >/dev/null 2>&1' EXIT
     helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci-b.yaml" >/dev/null || fail "helm upgrade failed"
     after="$(wait_generation_above "$before")" || fail "generation stayed $before after the ConfigMap update"
     kubectl exec hold1 -- "$PROBE" --agent-probe connect 10.99.0.2:80 eperm >/dev/null \
@@ -245,7 +258,9 @@ t_configmap_update() {
         || fail "the DaemonSet pod was replaced"
     [ "$(kubectl -n "$NS" get pod "$pod_before" -o jsonpath='{.status.containerStatuses[?(@.name=="rk-sensor")].restartCount}')" = "$restarts_before" ] \
         || fail "rk-sensor restarted"
-    helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" >/dev/null
+    trap - EXIT
+    helm upgrade rk "$CHART" -n "$NS" -f "$HERE/values-ci.yaml" >/dev/null \
+        || fail "restoring the CI values failed"
     wait_generation_above "$after" >/dev/null || fail "restoring the CI policy did not apply"
     echo "generation $before -> $after without a restart; the running pod's verdict for 10.99.0.2 flipped"
 }
@@ -291,6 +306,9 @@ t_daemon_down_fails_closed() {
     local pid out rc=0
     pid="$(sensor_pid)"
     [ -n "$pid" ] || fail "rk-sensor process not found on $NODE"
+    # Never leave the sensor stopped, however this test ends.
+    # $pid is expanded now: it is local, and gone once the function returns.
+    trap "docker exec \"\$NODE\" kill -CONT $pid 2>/dev/null" EXIT
     docker exec "$NODE" kill -STOP "$pid"
     pod down1 default '{"realitykernel.dev/profile":"k8s-net"}' noop
     # Not exempt: the plugin cannot know whether `default` has rules now.
