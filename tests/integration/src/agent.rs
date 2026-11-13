@@ -397,7 +397,11 @@ fn probe_control(profile: &str) -> Result<()> {
         }
     };
     let client = || rk_agentd::Client::connect(Some(socket)).context("connect to agentd");
-    let cmd = [PROBE.to_string(), PROBE_FLAG.to_string(), "noop".to_string()];
+    let cmd = [
+        PROBE.to_string(),
+        PROBE_FLAG.to_string(),
+        "noop".to_string(),
+    ];
     refused_as_governed(
         &format!("run --profile {profile}"),
         client()?

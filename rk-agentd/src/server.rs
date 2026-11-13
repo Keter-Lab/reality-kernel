@@ -222,7 +222,9 @@ pub fn governed_caller(
         prefix.push_str(segment);
         match cgroup_id(&prefix) {
             Ok(id) if is_bound(id) => {
-                return Some(format!("its cgroup `{path}` is governed (bound at `/{prefix}`)"));
+                return Some(format!(
+                    "its cgroup `{path}` is governed (bound at `/{prefix}`)"
+                ));
             }
             Ok(_) => {}
             Err(e) => return Some(format!("its cgroup `/{prefix}` cannot be checked: {e}")),
@@ -1151,7 +1153,10 @@ mod tests {
             "0::/kubepods/pod-a/cri-containerd-abc.scope/child\n",
         ] {
             let why = governed_caller(text, fake_ids, bound).expect(text);
-            assert!(why.contains("bound at `/kubepods/pod-a/cri-containerd-abc.scope`"), "{why}");
+            assert!(
+                why.contains("bound at `/kubepods/pod-a/cri-containerd-abc.scope`"),
+                "{why}"
+            );
         }
     }
 
