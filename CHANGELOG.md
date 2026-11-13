@@ -8,10 +8,34 @@ and container image. The format follows
 
 ## [Unreleased]
 
-### Changed
+## [0.3.1] - 2026-11-13
 
-- Minimum Supported Rust Version raised to **1.98** (from 1.89), required by the
-  aya 0.16 eBPF runtime upgrade (aya 0.14 → 0.16, aya-obj 0.3 → 0.6).
+A security release. It stops a governed agent from using the agentd control
+socket to relaunch itself under a looser profile or change the policy that
+governs it, and keeps a workload that moves into a child cgroup governed.
+Upgrade from 0.3.0.
+
+### Upgrading from 0.3.0
+
+- The kernel/userspace ABI changes (version 2), so the first 0.3.1 sensor
+  replaces the pinned programs and maps once, make-before-break, with no
+  protection gap. Nothing to do by hand.
+- A process inside a governed cgroup (an `rk run` agent, a bound container or
+  anything below them) now gets an error from every agentd request, including
+  `rk status`. Run `rk` from outside the agent.
+
+### Added
+
+- `rk audit tail --since <DURATION>` shows only records from the last `30s`,
+  `15m`, `2h` or `1d`, with or without `-f`.
+
+### Fixed
+
+- `--since` (`rk audit tail`, `rk policy suggest`) rejects a signed or zero
+  duration (`-5m` used to put the cutoff in the future and silently match
+  nothing) and reports a duration too long to represent instead of
+  overflowing (`99999999999999d` panicked in debug builds and wrapped in
+  release builds).
 
 ### Security
 
@@ -46,6 +70,8 @@ and container image. The format follows
 
 - The kernel/userspace ABI is version 2 (`rk_config` gained a field). The pin
   set is replaced once on upgrade, as on any ABI change.
+- Minimum Supported Rust Version raised to **1.98** (from 1.89), required by the
+  aya 0.16 eBPF runtime upgrade (aya 0.14 → 0.16, aya-obj 0.3 → 0.6).
 
 ## [0.3.0] - 2026-10-28
 
@@ -319,7 +345,8 @@ listed in [docs/evidence.md](docs/evidence.md).
 - The NRI plugin uses `google.golang.org/grpc` v1.84.0, which fixes the five
   advisories reported by Dependabot on 2026-10-22.
 
-[Unreleased]: https://github.com/Keter-Lab/reality-kernel/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Keter-Lab/reality-kernel/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Keter-Lab/reality-kernel/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Keter-Lab/reality-kernel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Keter-Lab/reality-kernel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Keter-Lab/reality-kernel/releases/tag/v0.1.0

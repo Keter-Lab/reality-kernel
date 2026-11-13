@@ -33,9 +33,10 @@ up as a residual risk ([CHANGELOG.md](CHANGELOG.md),
 transports no hook could see, names planted in protected directories,
 control-plane denial of service, an audit verifier that trusted the log it
 checked, launch and restart paths that could leave workloads ungoverned, and
-fail-closed Kubernetes binding. Still open, and next in line: governance
-that follows a workload into a child cgroup (privileged and delegated
-workloads), and exec allowlists on btrfs.
+fail-closed Kubernetes binding. v0.3.1 adds governance that follows a
+workload into a child cgroup (privileged and delegated workloads) and keeps
+governed agents off the agentd control socket. Still open, and next in
+line: exec allowlists on btrfs.
 
 ## v0.4.0 — Egress by name
 
