@@ -34,6 +34,13 @@
     "failurePolicy": {"enum": ["Fail", "Ignore"]},
     "heartbeatTimeoutSeconds": {"type": "integer", "minimum": 1},
     "k8sCgroupRoot": {"type": "string", "minLength": 1},
+    "bpffs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mount": {"type": "boolean"}
+      }
+    },
     "nri": {
       "type": "object",
       "required": ["socket", "pluginIndex"],

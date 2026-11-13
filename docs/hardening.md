@@ -59,7 +59,12 @@ cover (docs/design/phase-6.md).
   everything.
 - **Kubernetes:** the chart mounts the host bpffs and keeps engine state in
   `/var/run/reality-kernel` on the node, so replacing the DaemonSet pod
-  leaves no gap. Before `helm uninstall`, run
+  leaves no gap. On a node with no bpffs at `/sys/fs/bpf`, the chart's
+  `mount-bpffs` init container mounts one on the node (privileged,
+  Bidirectional mount propagation; `bpffs.mount`, on by default). Without
+  it, `rk-sensor` would mount a bpffs inside its own pod, the pins would die
+  with the pod, and protection would pause on every restart; the sensor logs
+  a warning when that happens. Before `helm uninstall`, run
   `kubectl -n <ns> exec <pod> -c rk-sensor -- rk-sensor --uninstall` on each
   node. Otherwise the pins stay and governed pods are denied once the
   heartbeat goes stale.
