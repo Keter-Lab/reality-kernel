@@ -53,6 +53,13 @@ jobs:
       - name: Refresh Cargo.lock for workspace changes
         run: cargo update --workspace
 
+      # The fuzz workspace is standalone (nightly + sanitizers) and has its own
+      # lockfile, so the fuzz job builds the same dependencies every run
+      # instead of whatever crates.io has that day (issue #80). This keeps it
+      # in step with workspace changes without bumping pinned versions.
+      - name: Refresh fuzz/Cargo.lock for workspace changes
+        run: cargo update --manifest-path fuzz/Cargo.toml --workspace
+
       - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
         with:
           tool: cargo-audit
