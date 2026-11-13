@@ -78,6 +78,13 @@ allow = ["{PROBE}"]
 mode = "enforce"
 launchable_by = ["uid:4242"]
 network.default = "deny"
+
+# Launchable by the uid governed probes run as: a governed agent asking the
+# daemon to relaunch it under this looser profile must still be refused.
+[profiles.loose]
+mode = "audit"
+launchable_by = ["uid:{NOBODY}"]
+network.default = "allow"
 "#
     );
     for cidr in denied {
@@ -126,6 +133,7 @@ pub fn run_probe(args: &[String]) -> i32 {
         ("connect", [addr, expect]) => probe_connect(addr, expect),
         ("paced", [addr, count, pace_us]) => probe_paced(addr, count, pace_us),
         ("hold", [ms]) => probe_hold(ms),
+        ("control", [profile]) => probe_control(profile),
         ("learn", [addr, bin, secret]) => probe_learn(addr, bin, secret),
         ("enforced", [addr, bin, secret, unread, denied_addr, denied_bin]) => {
             probe_enforced(addr, bin, secret, unread, denied_addr, denied_bin)
@@ -372,6 +380,33 @@ fn probe_paced(addr: &str, count: &str, pace_us: &str) -> Result<()> {
 fn probe_hold(ms: &str) -> Result<()> {
     print_ident()?;
     thread::sleep(Duration::from_millis(ms.parse().context("ms")?));
+    Ok(())
+}
+
+/// A governed agent talks to the agentd socket directly (the kernel hooks do
+/// not classify `AF_UNIX`). Every request must be refused because the caller
+/// is governed, not merely because its uid lacks a right: `profile` is
+/// launchable by this uid, so without the check the relaunch would succeed.
+fn probe_control(profile: &str) -> Result<()> {
+    let socket = Path::new(SOCKET);
+    let refused_as_governed = |what: &str, res: Result<String>| -> Result<()> {
+        match res {
+            Ok(ok) => bail!("{what} from a governed agent was accepted: {ok}"),
+            Err(e) if format!("{e:#}").contains("governed") => Ok(()),
+            Err(e) => bail!("{what} was refused, but not as governed: {e:#}"),
+        }
+    };
+    let client = || rk_agentd::Client::connect(Some(socket)).context("connect to agentd");
+    let cmd = [PROBE.to_string(), PROBE_FLAG.to_string(), "noop".to_string()];
+    refused_as_governed(
+        &format!("run --profile {profile}"),
+        client()?
+            .run(profile, None, None, &cmd, &[])
+            .map(|code| format!("relaunched, exit {code}")),
+    )?;
+    refused_as_governed("status", client()?.status().map(|s| format!("{s:?}")))?;
+    refused_as_governed("rollback", client()?.rollback().map(|r| format!("{r:?}")))?;
+    println!("control: run, status and rollback refused as governed");
     Ok(())
 }
 
@@ -905,6 +940,16 @@ pub fn run_suite(args: &[String], checks: &mut Vec<TestCheck>) {
             );
         }
         Ok("refused before any cgroup or binding was created".into())
+    });
+
+    run_test(checks, "governed_agent_refused_by_control_socket", || {
+        let before = generation()?;
+        let out = run_probe_ok(None, &["control", "loose"])?;
+        let after = generation()?;
+        if after != before {
+            bail!("generation moved from {before} to {after}");
+        }
+        Ok(format!("{}; generation stayed {before}", out.trim()))
     });
 
     run_test(checks, "agent_exit_removes_binding_and_cgroup", || {

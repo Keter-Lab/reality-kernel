@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::ffi::CStr;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
 
 use anyhow::{bail, Context, Result};
 use rk_policy::net::{Principal, Profile};
@@ -36,6 +36,35 @@ pub fn get_peer_cred(sock: RawFd) -> Result<PeerCred> {
             gid: ucred.gid,
         })
     }
+}
+
+/// `SO_PEERPIDFD` (Linux 6.5, asm-generic value on x86_64 and arm64). Not yet
+/// in every `libc` release this workspace builds with.
+const SO_PEERPIDFD: libc::c_int = 77;
+
+/// A pidfd for the process that connected `sock`, captured by the kernel at
+/// `connect(2)` (`SO_PEERPIDFD`, Linux 6.5). Unlike the pid in `SO_PEERCRED`
+/// it can never name a process that later reused that pid. `None` on older
+/// kernels; callers fall back to `pidfd_open` on the pid.
+pub fn get_peer_pidfd(sock: RawFd) -> Option<OwnedFd> {
+    let mut fd: libc::c_int = -1;
+    let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+    // SAFETY: `fd` and `len` are valid for the duration of the call, and `len`
+    // is the size of `fd`.
+    let res = unsafe {
+        libc::getsockopt(
+            sock,
+            libc::SOL_SOCKET,
+            SO_PEERPIDFD,
+            &mut fd as *mut _ as *mut libc::c_void,
+            &mut len,
+        )
+    };
+    if res != 0 || fd < 0 {
+        return None;
+    }
+    // SAFETY: getsockopt(SO_PEERPIDFD) returned a new descriptor nothing else owns.
+    Some(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
 /// Resolves user and group membership for a given `uid` and `gid`.

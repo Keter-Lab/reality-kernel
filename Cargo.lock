@@ -1259,6 +1259,7 @@ dependencies = [
  "bytemuck",
  "io-uring",
  "libc",
+ "rk-agentd",
  "rk-audit",
  "rk-ebpf-common",
  "rk-policy",
