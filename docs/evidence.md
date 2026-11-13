@@ -479,6 +479,7 @@ Upgrade keeps enforcement continuous: a different object replaces the running on
 
 - `upgrade_replaces_object_without_gap` (VM suite, every kernel)
 - `upgrade_gap_detector_works` (VM suite, every kernel)
+- `heartbeat_beats_replaced_pin_set` (VM suite, every kernel)
 - `pkg_upgrade_keeps_enforcement` (package test, every distribution)
 - `reconcile_drops_an_unfinished_replacement` (Rust test)
 - `reconcile_completes_an_interrupted_switch` (Rust test)

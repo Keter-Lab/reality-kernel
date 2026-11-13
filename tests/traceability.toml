@@ -370,7 +370,7 @@ tests = ["unit:exec_records_fill_the_table_and_procfs_adds_the_parent", "unit:mi
 phase = "10"
 id = "upgrade_continuous"
 text = "Upgrade keeps enforcement continuous: a different object replaces the running one with zero denied actions getting through"
-tests = ["vm:upgrade_replaces_object_without_gap", "vm:upgrade_gap_detector_works", "pkg:pkg_upgrade_keeps_enforcement", "unit:reconcile_drops_an_unfinished_replacement", "unit:reconcile_completes_an_interrupted_switch", "unit:finish_replacement_swaps_and_abort_keeps_the_old_set"]
+tests = ["vm:upgrade_replaces_object_without_gap", "vm:upgrade_gap_detector_works", "vm:heartbeat_beats_replaced_pin_set", "pkg:pkg_upgrade_keeps_enforcement", "unit:reconcile_drops_an_unfinished_replacement", "unit:reconcile_completes_an_interrupted_switch", "unit:finish_replacement_swaps_and_abort_keeps_the_old_set"]
 
 [[criterion]]
 phase = "10"
