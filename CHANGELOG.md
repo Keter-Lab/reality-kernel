@@ -8,6 +8,15 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- rk-sensor exits with an error, so systemd or Kubernetes restarts it, when
+  its event pipeline stops on its own (a fatal error reading the ring buffer,
+  or a panic while writing the audit log). Before, it kept running with no
+  consumer: enforcement continued, but decisions stopped reaching the audit
+  log, metrics and traces with only one log line to show for it. The pinned
+  programs keep enforcing across the restart, and the new sensor adopts them.
+
 ## [0.3.1] - 2026-11-13
 
 A security release. It stops a governed agent from using the agentd control
