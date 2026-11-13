@@ -904,6 +904,10 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         let mut stats_tick = tokio::time::interval(STATS_INTERVAL);
         // Kernel losses feed the audit log's loss records (Phase 9 §3.4).
         let mut loss_tick = tokio::time::interval(Duration::from_secs(1));
+        // Set when the event pipeline dies on its own: the daemon then exits
+        // with an error so its supervisor restarts it. The pins keep
+        // enforcing meanwhile, and the new sensor adopts them.
+        let mut pipeline_failure: Option<&'static str> = None;
         loop {
             tokio::select! {
                 _ = hangup.recv() => {
@@ -954,6 +958,15 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
                         .map(|k| counters.get(*k).copied().unwrap_or(0))
                         .sum::<u64>();
                     kernel_losses.0.store(lost, Ordering::Relaxed);
+                    if let Some(why) = consumer.failure() {
+                        error!(
+                            reason = why,
+                            "event pipeline stopped: no decision reaches the audit log any more; \
+                             exiting so the supervisor restarts rk-sensor"
+                        );
+                        pipeline_failure = Some(why);
+                        break;
+                    }
                 }
                 _ = terminate.recv() => break,
                 _ = tokio::signal::ctrl_c() => break,
@@ -961,6 +974,9 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         }
 
         consumer.stop();
+        if let Some(why) = pipeline_failure {
+            bail!("event pipeline stopped ({why}); rk-sensor exits for a restart");
+        }
         info!("rk-sensor stopped");
         Ok(())
     });
