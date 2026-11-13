@@ -39,7 +39,7 @@ const USAGE: &str = "usage: rk-sensor [--policy FILE] [--watch-policy] \
                      [--audit-dir DIR|off] [--audit-key FILE] [--audit-allow] \
                      [--metrics-addr ADDR|off] [--otlp-endpoint http://HOST:PORT] \
                      [--allow-delegated-cgroups] \
-                     | --uninstall | --selftest | --version | --help";
+                     | --uninstall | --mount-bpffs | --selftest | --version | --help";
 
 /// Longest time a replacement spends draining the old ring buffer
 /// (docs/design/phase-10.md §3).
@@ -106,6 +106,10 @@ enum Mode {
     /// Remove the pin set: the only way to end protection without waiting
     /// for the heartbeat to fail closed (Phase 6 §3.5).
     Uninstall,
+    /// Mount bpffs at /sys/fs/bpf if nothing is mounted there, then exit:
+    /// the Helm chart's init container, whose Bidirectional mount propagates
+    /// to the host so pins outlive the DaemonSet pod.
+    MountBpffs,
     Selftest,
     SelftestChild(Vec<String>),
     Version,
@@ -116,6 +120,7 @@ fn parse_args(args: &[String]) -> Result<Mode, String> {
     match args {
         [flag] if flag == "--selftest" => return Ok(Mode::Selftest),
         [flag] if flag == "--uninstall" => return Ok(Mode::Uninstall),
+        [flag] if flag == "--mount-bpffs" => return Ok(Mode::MountBpffs),
         [flag] if flag == "--version" || flag == "-V" => return Ok(Mode::Version),
         [flag] if flag == "--help" || flag == "-h" => return Ok(Mode::Help),
         [flag, rest @ ..] if flag == selftest::CHILD_FLAG => {
@@ -199,6 +204,25 @@ fn main() -> ExitCode {
                 }
                 Ok(false) => {
                     println!("nothing pinned at {}", root.display());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("rk-sensor: {e:#}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Mode::MountBpffs => {
+            let mount_point = Path::new(pins::PIN_ROOT)
+                .parent()
+                .unwrap_or(Path::new("/sys/fs/bpf"));
+            match pins::ensure_bpffs(mount_point) {
+                Ok(true) => {
+                    println!("mounted bpffs at {}", mount_point.display());
+                    ExitCode::SUCCESS
+                }
+                Ok(false) => {
+                    println!("bpffs already mounted at {}", mount_point.display());
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
@@ -1000,6 +1024,7 @@ mod tests {
             assert!(parse_args(&args(&bad)).is_err(), "{bad:?}");
         }
         assert_eq!(parse_args(&args(&["--uninstall"])), Ok(Mode::Uninstall));
+        assert_eq!(parse_args(&args(&["--mount-bpffs"])), Ok(Mode::MountBpffs));
         assert_eq!(
             parse_args(&args(&["--ring-size-mb", "8"])),
             Ok(Mode::Run(RunOpts {

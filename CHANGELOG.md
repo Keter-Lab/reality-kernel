@@ -8,6 +8,22 @@ and container image. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Kubernetes: enforcement no longer pauses while the DaemonSet pod restarts
+  on nodes that do not mount bpffs at `/sys/fs/bpf` (kind, and any node
+  without a boot-time bpffs mount). There, `rk-sensor` mounted a bpffs inside
+  its own pod (the chart's bpffs volume only propagates host to container),
+  so the pins died with the pod: every restart started a fresh pin set, and
+  governed pods were unprotected until the new sensor attached and rk-nri
+  rebound them. The chart now runs a `mount-bpffs` init container
+  (`rk-sensor --mount-bpffs`, privileged, Bidirectional propagation) that
+  mounts bpffs on the node when it is missing, as Cilium does; set
+  `bpffs.mount: false` if every node mounts it. The sensor warns when it has
+  to mount bpffs outside the host mount namespace. Found by the k8s test
+  `k8s_daemon_restart_resyncs`, whose assertion could not fail before
+  (`fail` returned instead of exiting), so CI had reported it as passing.
+
 ## [0.3.1] - 2026-11-13
 
 A security release. It stops a governed agent from using the agentd control

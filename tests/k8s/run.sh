@@ -286,6 +286,13 @@ t_restart_resyncs() {
     [ "$allowed" -eq 0 ] || fail "$allowed probes reached $DENY during the restart (protection paused)"
     [ "$denied" -ge 1 ] || fail "no probe completed during the restart"
     kubectl -n "$NS" rollout status ds/rk --timeout=180s >/dev/null || fail "DaemonSet did not come back"
+    # The pins must have outlived the pod: a fresh pin set means they lived
+    # on a bpffs private to the old pod (bpffs not on the node).
+    local adoption
+    adoption="$(kubectl -n "$NS" logs ds/rk -c rk-sensor --tail=-1 \
+        | grep -o '"adoption":"[A-Za-z]*"' | head -n 1)"
+    [ "$adoption" = '"adoption":"Adopted"' ] \
+        || fail "the restarted sensor did not adopt the pins (${adoption:-no adoption line}): they did not outlive the pod"
     for i in $(seq 1 30); do
         if [ "$(containers 2>/dev/null || echo 0)" -ge 1 ] \
             && kubectl exec hold1 -- "$PROBE" --agent-probe connect "$DENY" eperm >/dev/null 2>&1; then

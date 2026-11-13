@@ -40,6 +40,24 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.bpffs.mount }}
+      # Pins keep enforcement running across sensor restarts only on the
+      # host's bpffs (docs/hardening.md). Where the node has none at
+      # /sys/fs/bpf, mount one there and let it propagate to the host
+      # (Bidirectional, privileged only; it does nothing if bpffs is already
+      # mounted). The sensor itself keeps HostToContainer.
+      initContainers:
+        - name: mount-bpffs
+          image: {{ include "rk.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/rk-sensor", "--mount-bpffs"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
+      {{- end }}
       containers:
         - name: rk-sensor
           image: {{ include "rk.image" . }}

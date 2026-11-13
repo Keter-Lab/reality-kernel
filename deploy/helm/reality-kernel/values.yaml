@@ -60,6 +60,16 @@ heartbeatTimeoutSeconds: 10
 # Kubernetes cgroup root relative to /sys/fs/cgroup, or `auto`.
 k8sCgroupRoot: auto
 
+# Pins (what keeps enforcement running while the DaemonSet pod restarts) live
+# on the node's bpffs at /sys/fs/bpf. With `mount: true` a privileged init
+# container mounts it on the node if it is missing (Bidirectional mount
+# propagation); it changes nothing where the node already mounts bpffs, as
+# systemd does by default. Turn it off only if every node mounts bpffs itself:
+# otherwise rk-sensor mounts a private one that dies with the pod, and logs a
+# warning that protection pauses on every restart.
+bpffs:
+  mount: true
+
 nri:
   socket: /var/run/nri/nri.sock
   # Order among NRI plugins: two digits, lower runs first.

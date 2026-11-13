@@ -202,15 +202,22 @@ fn links_dir(root: &Path) -> PathBuf {
     root.join("links")
 }
 
-/// Mounts bpffs at the parent of `root` when nothing is mounted there.
-fn ensure_bpffs(mount_point: &Path) -> Result<()> {
+/// Mounts bpffs at `mount_point` when nothing is mounted there. Returns
+/// whether it mounted one (`false`: bpffs was already there).
+///
+/// A mount made here lives in the caller's mount namespace. Pins survive a
+/// restart of the sensor only if that is the host's (or the mount propagates
+/// to it): see [`in_host_mount_namespace`] and the Helm chart's `bpffs.mount`
+/// init container, which runs `rk-sensor --mount-bpffs` with Bidirectional
+/// propagation.
+pub fn ensure_bpffs(mount_point: &Path) -> Result<bool> {
     let c_path = CString::new(mount_point.as_os_str().as_bytes())?;
     // SAFETY: valid NUL-terminated path and an out-pointer to a statfs struct.
     let mut st: libc::statfs = unsafe { std::mem::zeroed() };
     if unsafe { libc::statfs(c_path.as_ptr(), &mut st) } == 0
         && (st.f_type as u64 & 0xffff_ffff) == BPF_FS_MAGIC
     {
-        return Ok(());
+        return Ok(false);
     }
     fs::create_dir_all(mount_point).with_context(|| format!("create {}", mount_point.display()))?;
     let fstype = CString::new("bpf")?;
@@ -228,7 +235,16 @@ fn ensure_bpffs(mount_point: &Path) -> Result<()> {
         return Err(std::io::Error::last_os_error())
             .with_context(|| format!("mount bpffs at {}", mount_point.display()));
     }
-    Ok(())
+    Ok(true)
+}
+
+/// Whether this process shares the mount namespace of PID 1, which is the
+/// host's init on a host install and in a `hostPID` pod. `None` when PID 1's
+/// namespace cannot be read.
+pub fn in_host_mount_namespace() -> Option<bool> {
+    let ours = fs::read_link("/proc/self/ns/mnt").ok()?;
+    let init = fs::read_link("/proc/1/ns/mnt").ok()?;
+    Some(ours == init)
 }
 
 fn create_layout(root: &Path) -> Result<()> {
@@ -253,7 +269,24 @@ fn read_meta(root: &Path) -> Result<rk_meta> {
 /// ring keeps the size it was created with.
 pub fn open(bytes: &[u8], root: &Path, ring_bytes: u32) -> Result<Pinned> {
     let mount_point = root.parent().context("pin root has no parent")?;
-    ensure_bpffs(mount_point)?;
+    if ensure_bpffs(mount_point)? {
+        // Nothing was mounted there, so the pins go on a bpffs this sensor
+        // just made. Outside the host's mount namespace (a container whose
+        // bpffs volume does not propagate to the host) that mount, and every
+        // pin on it, dies with the container: protection would pause on each
+        // restart, and the restart would start a fresh pin set.
+        if in_host_mount_namespace() == Some(true) {
+            tracing::info!(path = %mount_point.display(), "mounted bpffs");
+        } else {
+            tracing::warn!(
+                path = %mount_point.display(),
+                "bpffs was not mounted on the host, so this sensor mounted one in its own \
+                 mount namespace: pins will NOT survive a restart and protection pauses \
+                 each time. Mount bpffs on the host (systemd does by default), or enable \
+                 the Helm chart's bpffs.mount"
+            );
+        }
+    }
 
     if let Some(what) = reconcile(root)? {
         tracing::warn!(root = %root.display(), "{what}");
