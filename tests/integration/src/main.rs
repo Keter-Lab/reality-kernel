@@ -632,6 +632,52 @@ fn run_suite(checks: &mut Vec<TestCheck>) {
         }
     };
 
+    // An upgrade beats the replaced pin set's heartbeat until it is gone
+    // (docs/design/phase-10.md §3). A second copy of the object stands in for
+    // the old set: its rk_heartbeat must advance while handed to also_beat and
+    // stop advancing after stop_extra.
+    run_test(checks, "heartbeat_beats_replaced_pin_set", || {
+        use aya::maps::{Array, Map};
+        let bytes = bpf::rk_bpf_bytes().context("rk.bpf.o not embedded")?;
+        let mut old = rk_sensor::loader::open_bytes(bytes, "rk.bpf.o (old set)")?;
+        let Some(Map::Array(old_map)) = old.take_map(rk_sensor::resilience::MAP_HEARTBEAT) else {
+            anyhow::bail!("old object has no rk_heartbeat array");
+        };
+        // Our own reader, on a duplicate of the same map.
+        let dup = {
+            use std::os::fd::AsFd as _;
+            old_map.fd().as_fd().try_clone_to_owned()?
+        };
+        let reader: Array<MapData, u64> = Array::try_from(Map::Array(MapData::from_fd(dup)?))?;
+        let read = || -> Result<u64> { Ok(reader.get(&0, 0)?) };
+
+        let mut ours = rk_sensor::loader::open_bytes(bytes, "rk.bpf.o (new set)")?;
+        // 1 s timeout: a beat every 250 ms.
+        let hb = rk_sensor::resilience::Heartbeat::start(&mut ours, Duration::from_secs(1))?;
+        hb.also_beat(old_map)?;
+        let first = read()?;
+        if first == 0 {
+            anyhow::bail!("also_beat did not write the old heartbeat at once");
+        }
+        thread::sleep(Duration::from_millis(700));
+        let beaten = read()?;
+        if beaten <= first {
+            anyhow::bail!("old heartbeat not beaten: {first} -> {beaten}");
+        }
+        hb.stop_extra();
+        thread::sleep(Duration::from_millis(300));
+        let stopped = read()?;
+        thread::sleep(Duration::from_millis(700));
+        let still = read()?;
+        if still != stopped {
+            anyhow::bail!("old heartbeat still beaten after stop_extra: {stopped} -> {still}");
+        }
+        Ok(format!(
+            "old set's heartbeat advanced {}ms while beaten, unchanged after stop_extra",
+            (beaten - first) / 1_000_000
+        ))
+    });
+
     // Run each named test in §7
     run_test(checks, "net_enforce_tcp_v4", || {
         spawn_child(

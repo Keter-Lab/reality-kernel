@@ -6,7 +6,7 @@
 
 use std::os::fd::AsFd as _;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -67,6 +67,9 @@ pub struct Heartbeat {
     thread: Option<JoinHandle<()>>,
     /// CLOCK_BOOTTIME of the last successful beat, in ns.
     last: Arc<AtomicU64>,
+    /// Heartbeat maps of a pin set being replaced, beaten alongside our own
+    /// (see [`Heartbeat::also_beat`]).
+    extra: Arc<Mutex<Vec<Array<MapData, u64>>>>,
 }
 
 impl Heartbeat {
@@ -94,13 +97,16 @@ impl Heartbeat {
 
         let stop = Arc::new(AtomicBool::new(false));
         let last = Arc::new(AtomicU64::new(first));
+        let extra: Arc<Mutex<Vec<Array<MapData, u64>>>> = Arc::new(Mutex::new(Vec::new()));
         let thread_last = last.clone();
         let thread_stop = stop.clone();
+        let thread_extra = extra.clone();
         let interval = timeout / 4;
         let thread = thread::Builder::new()
             .name("rk-heartbeat".into())
             .spawn(move || {
                 let mut failing = false;
+                let mut extra_failing = false;
                 while !thread_stop.load(Ordering::Relaxed) {
                     thread::sleep(interval);
                     let now = boottime_ns();
@@ -115,6 +121,22 @@ impl Heartbeat {
                         }
                         Err(_) => {}
                     }
+                    // A poisoned lock only means a panic elsewhere while
+                    // holding it; the maps inside are still fine to write.
+                    let mut maps = thread_extra.lock().unwrap_or_else(|e| e.into_inner());
+                    for map in maps.iter_mut() {
+                        match map.set(0, &now, 0) {
+                            Ok(()) => extra_failing = false,
+                            Err(e) if !extra_failing => {
+                                extra_failing = true;
+                                tracing::error!(
+                                    error = %e,
+                                    "heartbeat write to the replaced pin set failed"
+                                );
+                            }
+                            Err(_) => {}
+                        }
+                    }
                 }
             })
             .context("spawn heartbeat thread")?;
@@ -122,7 +144,34 @@ impl Heartbeat {
             stop,
             thread: Some(thread),
             last,
+            extra,
         })
+    }
+
+    /// Also beats `map`, the `rk_heartbeat` of a pin set this sensor is
+    /// replacing, from now until [`Heartbeat::stop_extra`] (docs/design/
+    /// phase-10.md §3). While both generations are attached, a governed
+    /// action is denied if either one's heartbeat is stale; the old programs
+    /// read the old map, which nobody else beats once the previous sensor has
+    /// stopped. Without this, an upgrade slower than the heartbeat timeout
+    /// denied every governed ENFORCE action until the old set was removed.
+    /// The map is written once immediately.
+    pub fn also_beat(&self, map: MapData) -> Result<()> {
+        let mut map: Array<MapData, u64> =
+            Array::try_from(Map::Array(map)).context("replaced rk_heartbeat is not an array")?;
+        map.set(0, &boottime_ns(), 0)
+            .context("write the replaced pin set's rk_heartbeat")?;
+        self.extra
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(map);
+        Ok(())
+    }
+
+    /// Stops beating the maps given to [`Heartbeat::also_beat`], once their
+    /// pin set is gone.
+    pub fn stop_extra(&self) {
+        self.extra.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Shared time of the last successful beat, for [`heartbeat_age`].

@@ -16,6 +16,14 @@ and container image. The format follows
   consumer: enforcement continued, but decisions stopped reaching the audit
   log, metrics and traces with only one log line to show for it. The pinned
   programs keep enforcing across the restart, and the new sensor adopts them.
+- An upgrade that replaces the kernel programs no longer risks failing every
+  governed ENFORCE action closed. Both program generations are attached until
+  the new one holds the policy, and the old programs read the old heartbeat,
+  which nobody beat once the previous sensor stopped: an upgrade slower than
+  the heartbeat timeout denied every governed action until it finished. The
+  new sensor now beats the old set's heartbeat until the old set is removed.
+  (An aborted upgrade still fails closed until a sensor runs again, as
+  designed.)
 
 ## [0.3.1] - 2026-11-13
 

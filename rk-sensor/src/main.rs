@@ -594,6 +594,26 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
         )?;
         let timeout = Duration::from_secs(opts.heartbeat_secs.unwrap_or(DEFAULT_HEARTBEAT_SECS));
         let heartbeat = Heartbeat::start(&mut ebpf, timeout)?;
+        // Replacing a different object: the old programs stay attached until
+        // the new set holds the policy, and they read the old heartbeat,
+        // which no one beats now that the previous sensor has stopped. Beat
+        // it too until the old set is gone, so a slow upgrade does not fail
+        // every governed action closed (docs/design/phase-10.md §3).
+        if let Some(prev) = &previous {
+            let old = prev.root.join("maps").join(resilience::MAP_HEARTBEAT);
+            match aya::maps::MapData::from_pin(&old)
+                .map_err(anyhow::Error::from)
+                .and_then(|map| heartbeat.also_beat(map))
+            {
+                Ok(()) => info!(path = %old.display(), "beating the replaced pin set's heartbeat"),
+                Err(e) => warn!(
+                    path = %old.display(),
+                    error = %format!("{e:#}"),
+                    "cannot beat the replaced pin set's heartbeat; its programs fail closed \
+                     after the timeout until the replacement finishes"
+                ),
+            }
+        }
         resilience::protect_self(&mut ebpf)?;
         info!(
             ?adoption,
@@ -771,12 +791,14 @@ fn run_daemon(opts: &RunOpts) -> Result<()> {
             }
             drop(old);
             pins::finish_replacement(pin_root)?;
+            heartbeat.stop_extra();
             info!(
                 drained,
                 "replaced the running object without a gap: old programs detached after the new ones took over"
             );
         } else if previous.is_some() {
             pins::finish_replacement(pin_root)?;
+            heartbeat.stop_extra();
             info!("replaced the running object without a gap (old ring buffer not readable)");
         }
         let consumer = consumer::Consumer::start_with(
