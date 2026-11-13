@@ -29,6 +29,14 @@ Upgrade from 0.3.0.
 - `rk audit tail --since <DURATION>` shows only records from the last `30s`,
   `15m`, `2h` or `1d`, with or without `-f`.
 
+### Fixed
+
+- `--since` (`rk audit tail`, `rk policy suggest`) rejects a signed or zero
+  duration (`-5m` used to put the cutoff in the future and silently match
+  nothing) and reports a duration too long to represent instead of
+  overflowing (`99999999999999d` panicked in debug builds and wrapped in
+  release builds).
+
 ### Security
 
 - A governed workload can no longer use the agentd control socket. Before,

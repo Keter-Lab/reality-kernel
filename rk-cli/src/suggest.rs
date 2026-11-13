@@ -693,7 +693,7 @@ pub fn suggest(opts: &Options) -> Result<(String, String)> {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
-            Some(now - parse_since(text)?)
+            Some(now.saturating_sub(parse_since(text)?))
         }
         None => None,
     };
