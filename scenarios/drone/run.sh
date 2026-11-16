@@ -74,39 +74,72 @@ chmod +x /tmp/arducopter_tampered
 # the thing whose exec is being tested.
 WRAP=()
 
-attack_exfil() { timeout 4 "${WRAP[@]}" curl -s -m 3 http://127.0.0.1:9999/ -d "telemetry=secret"; }
-
-attack_tamper() {
+# Runs a command (optionally `rk run`-wrapped via $WRAP) and echoes exactly
+# one of: succeeded | blocked | daemon-down.
+#
+# Under enforcement, "blocked" means rk-cli itself reported the exec was
+# refused (rk-cli/src/main.rs run_agent's `client.run(...)` error path,
+# "rk run error: ..."). That is a different message, and a different cause,
+# from rk-cli failing to even reach the daemon ("rk run: failed to connect to
+# rk-sensor daemon: ...", from the earlier `Client::connect` error path): a
+# daemon that is not up tests nothing, and must never be reported as a
+# passing "blocked" result just because the exit code was non-zero.
+run_and_classify() {
   local out rc
-  out=$(timeout 4 "${WRAP[@]}" /tmp/arducopter_tampered --help 2>&1 >/dev/null)
+  out=$(timeout 4 "${WRAP[@]}" "$@" 2>&1 >/dev/null)
   rc=$?
   if [ "${#WRAP[@]}" -eq 0 ]; then
-    # Baseline: bash itself does the exec. 126 means bash could not exec the
-    # file at all (not an RK question yet); anything else means it ran.
-    [ "$rc" -ne 126 ]
+    [ "$rc" -eq 0 ] && echo succeeded || echo blocked
+    return
+  fi
+  if grep -q '^rk run error:' <<<"$out"; then
+    echo blocked
+  elif grep -q '^rk run: failed to connect' <<<"$out"; then
+    echo daemon-down
+  elif [ "$rc" -eq 0 ]; then
+    echo succeeded
   else
-    # Enforced: `rk run`'s own first exec is the tampered binary, so a policy
-    # denial is reported by rk itself (rk-cli/src/main.rs run_agent), not by
-    # bash's exec-failure convention.
-    ! grep -q '^rk run error:' <<<"$out"
+    echo blocked
   fi
 }
 
-attack_shell() { timeout 4 "${WRAP[@]}" nc -z 127.0.0.1 9999; }
+attack_exfil() { run_and_classify curl -s -m 3 http://127.0.0.1:9999/ -d "telemetry=secret"; }
+
+attack_shell() { run_and_classify nc -z 127.0.0.1 9999; }
+
+attack_tamper() {
+  if [ "${#WRAP[@]}" -eq 0 ]; then
+    # Baseline: bash itself does the exec. 126 means bash could not exec the
+    # file at all (not an RK question yet, e.g. a genuinely corrupted
+    # binary); anything else means it ran, which is what "succeeded" means
+    # here regardless of --help's own exit code.
+    local rc
+    timeout 4 /tmp/arducopter_tampered --help >/dev/null 2>&1
+    rc=$?
+    [ "$rc" -ne 126 ] && echo succeeded || echo blocked
+  else
+    # Enforced: `rk run`'s own first exec is the tampered binary itself, so
+    # the same classification as the other two attacks applies directly.
+    run_and_classify /tmp/arducopter_tampered --help
+  fi
+}
 
 run_attacks() {   # $1 = "expect-success" | "expect-blocked"
   for a in attack_exfil attack_tamper attack_shell; do
-    if $a; then r=succeeded; else r=blocked; fi
-    if [ "$1" = expect-success ] && [ "$r" = succeeded ]; then pass "$a reachable without enforcement"
-    elif [ "$1" = expect-blocked ] && [ "$r" = blocked ]; then pass "$a blocked by Reality Kernel"
-    else fail "$a $r (expected ${1#expect-})"; fi
+    r=$($a)
+    case "$r:$1" in
+      succeeded:expect-success) pass "$a reachable without enforcement" ;;
+      blocked:expect-blocked) pass "$a blocked by Reality Kernel" ;;
+      daemon-down:*) fail "$a proves nothing: rk-sensor was not reachable" ;;
+      *) fail "$a $r (expected ${1#expect-})" ;;
+    esac
   done
 }
 
 echo "== Baseline: no enforcement"
 run_attacks expect-success
 python3 scenarios/drone/bench.py baseline-no-rk results/bench-results.jsonl
-timeout 60 python3 scenarios/drone/companion.py | tee -a results/companion-baseline.txt
+if timeout 60 python3 scenarios/drone/companion.py | tee -a results/companion-baseline.txt; then pass "companion mission (baseline)"; else fail "companion mission (baseline)"; fi
 
 # ---- Enable Reality Kernel ----
 AUDIT_DIR=/var/log/rk/audit
@@ -118,13 +151,18 @@ sed "s#__ARDUCOPTER_PATH__#$SITL_ABS#" "$ROOT/scenarios/drone/policy.toml" > "$P
 # root: map root caller to configured service user"): a caller running as
 # root (us, here) is mapped to the fixed, non-configurable "nobody" user
 # (65534). The checkout tree is not necessarily traversable by that user, so
-# every ancestor directory of $ROOT, and the tree itself, need to be
-# world-readable/traversable, and results/ needs to be world-writable so the
-# enforced benchmark run (which writes from inside the governed process) can
-# append to it.
+# every ancestor directory of $ROOT needs to be world-readable/traversable,
+# and results/ needs to be world-writable so the enforced benchmark run
+# (which writes from inside the governed process) can append to it. Scoped
+# to exactly what the agent actually opens or chdirs into -- not a recursive
+# chmod of the whole checkout, which would needlessly walk the entire
+# ArduPilot source tree and the Rust release build's hundreds of thousands
+# of intermediate build-script artifacts under target/.
 p="$ROOT"
 while [ "$p" != "/" ]; do chmod o+rx "$p" 2>/dev/null || true; p="$(dirname "$p")"; done
-chmod -R o+rX "$ROOT"
+chmod -R o+rX "$ROOT/scenarios"
+chmod o+rx "$ROOT/ardupilot" "$ROOT/ardupilot/build" "$ROOT/ardupilot/build/sitl" "$ROOT/ardupilot/build/sitl/bin"
+chmod o+r "$SITL_ABS"
 chmod o+w results
 
 mkdir -p /sys/fs/cgroup/rk.slice 2>/dev/null || true

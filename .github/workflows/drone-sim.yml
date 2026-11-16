@@ -19,6 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # ArduPilot SITL plus a full Rust release build of the workspace plus
+      # VM/QEMU scratch space ran this runner out of disk entirely on the
+      # first real attempt (a recursive chmod mid-scenario failed with
+      # "No space left on device", which took rk-sensor down with it before
+      # it could even start). Standard GitHub-hosted runners ship several
+      # preinstalled toolchains this job never uses; removing them is the
+      # well-known way to claw back real headroom (commonly 20-30GB) without
+      # adding a third-party cleanup action.
+      - name: Free disk space (unused preinstalled toolchains)
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          docker image prune -af || true
+          df -h /
+
       # Standard GitHub-hosted Linux runners expose /dev/kvm; this makes it usable.
       - name: Enable KVM
         run: |
