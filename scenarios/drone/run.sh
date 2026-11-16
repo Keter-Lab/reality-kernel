@@ -130,14 +130,27 @@ attack_tamper() {
 # kernel cgroup bound to rk.slice (the real enforcement boundary) instead of
 # assuming `rk run` placed it there.
 observe_cgroup() {
-  local pattern="$1" out="$2" pid
+  local pattern="$1" out="$2" pid cand
   : > "$out"
   for _ in $(seq 1 300); do
-    pid=$(pgrep -f "$pattern" 2>/dev/null | head -1)
-    if [ -n "$pid" ] && [ -r "/proc/$pid/cgroup" ]; then
+    # `pgrep -f "$pattern"` also matches `rk run`'s own client process --
+    # its argv literally contains, e.g., "scenarios/drone/companion.py" as
+    # one of rk run's own arguments, and that client process stays in the
+    # caller's (ungoverned) cgroup the whole time; only the process the
+    # daemon actually spawns is in rk.slice. Disambiguate on comm: the
+    # spawned agent's comm is the interpreter itself ("python3"), the
+    # client's is "rk".
+    for cand in $(pgrep -f "$pattern" 2>/dev/null); do
+      if [ "$(cat "/proc/$cand/comm" 2>/dev/null)" = "python3" ]; then
+        pid="$cand"
+        break
+      fi
+    done
+    if [ -n "${pid:-}" ] && [ -r "/proc/$pid/cgroup" ]; then
       { echo "pid=$pid"; cat "/proc/$pid/cgroup"; } > "$out" 2>/dev/null
       return 0
     fi
+    pid=""
     sleep 0.03
   done
 }
@@ -169,7 +182,16 @@ python3 scenarios/drone/bench.py baseline-no-rk results/bench-results.jsonl
 if timeout 60 python3 scenarios/drone/companion.py | tee -a results/companion-baseline.txt; then pass "companion mission (baseline)"; else fail "companion mission (baseline)"; fi
 
 # ---- Enable Reality Kernel ----
-AUDIT_DIR=/var/log/rk/audit
+# Not the default /var/log/rk/audit and /var/lib/rk/audit.key: with --rw (see
+# the workflow), those are now real paths on the actual runner host rather
+# than an ephemeral VM-local overlay, and writing to them failed outright
+# ("audit log disabled: cannot open it ... Permission denied (os error 13)",
+# confirmed in rk-sensor's own log on the run that first used --rw). rk-sensor
+# takes --audit-dir/--audit-key as first-class flags for exactly this; point
+# them at $ROOT, which every other part of this scenario has already proven
+# writable, rather than depending on this specific host's /var permissions.
+AUDIT_DIR="$ROOT/audit"
+AUDIT_KEY="$ROOT/audit.key"
 STATE_FILE=/tmp/rk-engine-state.json
 POLICY_FILE="$ROOT/scenarios/drone/policy.toml.rendered"
 sed "s#__ARDUCOPTER_PATH__#$SITL_ABS#" "$ROOT/scenarios/drone/policy.toml" > "$POLICY_FILE"
@@ -197,7 +219,8 @@ chmod o+r "$SITL_ABS"
 chmod o+w results results/bench-results.jsonl 2>/dev/null || true
 
 mkdir -p /sys/fs/cgroup/rk.slice 2>/dev/null || true
-rk-sensor --policy "$POLICY_FILE" --state-file "$STATE_FILE" > /tmp/rk-sensor.log 2>&1 &
+rk-sensor --policy "$POLICY_FILE" --state-file "$STATE_FILE" \
+  --audit-dir "$AUDIT_DIR" --audit-key "$AUDIT_KEY" > /tmp/rk-sensor.log 2>&1 &
 RK_SENSOR_PID=$!
 
 ready=0
@@ -276,7 +299,7 @@ echo "== Verifying Reality Kernel's signed, hash-chained audit log against its p
 # deployment actually generated. Pin the real public key the daemon wrote on
 # its first start (rk-audit/src/key.rs: AuditKey::load_or_create publishes
 # the public half at `<key>.pub`) instead.
-AUDIT_PUBKEY=/var/lib/rk/audit.key.pub
+AUDIT_PUBKEY="$AUDIT_KEY.pub"
 for _ in $(seq 1 20); do [ -s "$AUDIT_PUBKEY" ] && break; sleep 0.2; done
 if [ -s "$AUDIT_PUBKEY" ]; then
   echo "pinning audit signing key: $(cat "$AUDIT_PUBKEY")"
