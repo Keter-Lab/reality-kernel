@@ -1,0 +1,106 @@
+name: drone-sim
+
+# First drone companion-computer scenario and overhead benchmarks for Reality
+# Kernel (scenarios/drone/TASK.md). Boots the GitHub-hosted runner's own
+# kernel with BPF-LSM turned on via virtme-ng, and runs the legitimate
+# mission plus three attacks with and without enforcement.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scenarios/drone/**"
+      - ".github/workflows/drone-sim.yml"
+
+jobs:
+  drone-sim:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Standard GitHub-hosted Linux runners expose /dev/kvm; this makes it usable.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Install VM tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 netcat-openbsd curl clang llvm libbpf-dev libclang-dev make
+          pipx install virtme-ng
+          # Installed system-wide so the scenario (run as root inside the VM) can import it.
+          sudo pip install --break-system-packages pymavlink
+          # virtme-ng boots the host kernel by default and needs to read it.
+          sudo chmod 644 /boot/vmlinuz-*
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      # Current stable ArduPilot Copter release as of this workflow's writing;
+      # bump when a newer Copter-X.Y.Z stable tag ships.
+      - name: Cache ArduPilot build
+        id: ardupilot-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ardupilot
+          key: ardupilot-Copter-4.7.2-sitl-${{ runner.os }}-v1
+
+      - name: Build ArduPilot SITL (takes a while on first run)
+        if: steps.ardupilot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch Copter-4.7.2 --recurse-submodules --shallow-submodules \
+            https://github.com/ArduPilot/ardupilot.git ardupilot
+          cd ardupilot
+          Tools/environment_install/install-prereqs-ubuntu.sh -y
+          . ~/.profile
+          ./waf configure --board sitl
+          ./waf copter
+
+      - name: Check the cached/built SITL binary runs
+        run: |
+          set -euo pipefail
+          . ~/.profile 2>/dev/null || true
+          ardupilot/build/sitl/bin/arducopter --help >/dev/null
+          ls -l ardupilot/build/sitl/bin/arducopter
+
+      - name: Build Reality Kernel (same steps as .github/workflows/kernel.yml)
+        run: |
+          set -euo pipefail
+          .github/scripts/run-logged.sh "bpf build" make -C rk-bpf all-arches
+          .github/scripts/run-logged.sh "rk-sensor release build" cargo build --release -p rk-sensor --features embedded-bpf
+          .github/scripts/run-logged.sh "rk release build" cargo build --release -p rk-cli
+          sudo install -m 0755 target/release/rk-sensor target/release/rk /usr/local/bin/
+          rk-sensor --version
+          rk --version
+
+      - name: Run drone scenario inside a VM with BPF-LSM enabled
+        run: |
+          # Flags vary slightly between virtme-ng versions; check `vng --help` if this errors.
+          # TODO(follow-up): if this fails with "BPF-LSM not active", the
+          # GitHub-hosted runner's kernel was not built with CONFIG_BPF_LSM;
+          # fall back to one of the pinned kernel images .github/workflows/kernel.yml
+          # already boots via vmtest (docs/kernel-matrix.md) instead of the host kernel.
+          vng --run \
+            --append "lsm=lockdown,capability,landlock,yama,apparmor,bpf" \
+            --memory 4G --cpus 2 --user root \
+            --exec "bash ./scenarios/drone/run.sh"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: drone-sim-results
+          path: |
+            results/
+            /tmp/sitl.log
+            /tmp/rk-sensor.log
+            /tmp/exfil_listener.log
