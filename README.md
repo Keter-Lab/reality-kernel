@@ -135,6 +135,20 @@ VERIFIED
 The full policy language is in the [policy reference](docs/policy.md), and the
 record format in [docs/audit.md](docs/audit.md).
 
+## Scenarios
+
+Beyond the kernel-matrix suite, policy enforcement is also exercised against
+external threat models end to end. The first one: a drone's Linux companion
+computer, governed the same way an AI agent is. The mission still works with
+enforcement on, and three attacks a drone security framework is concerned
+about are blocked — telemetry exfiltration to an unapproved server, a
+tampered flight binary, and an unapproved tool used as a remote-shell
+stand-in — each proven down to the kernel's own decision counters and a
+signed, hash-chained audit log verified against its pinned key, not just a
+pass/fail script. First exec and connect overhead numbers come from this
+scenario too (a noisy CI VM, not real drone hardware):
+[scenarios/drone](scenarios/drone), [workflow](.github/workflows/drone-sim.yml).
+
 ## Quick start
 
 On a host with kernel 5.15 or newer:
