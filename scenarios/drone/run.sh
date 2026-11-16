@@ -231,23 +231,36 @@ chmod o+r "$SITL_ABS"
 # itself, not just "can create new entries in this directory".
 chmod o+w results results/bench-results.jsonl 2>/dev/null || true
 
-# Verify the fix actually worked instead of hoping it did: runs 1 and (after
-# an unrelated detour through --rw and back) 5-6 all hit the exact same
-# "chdir failed" from the service user, with no code change to this loop in
-# between that would explain it reappearing -- something about this
-# specific host/run's directory permissions is not fully understood yet. Test
-# the real access path (chdir as uid 65534, the actual service user) directly
-# here, before ever starting rk-sensor, so a failure is caught with a precise
-# diagnostic instead of being inferred later from an opaque launcher error.
-if command -v setpriv >/dev/null 2>&1 && setpriv --reuid=65534 --regid=65534 --clear-groups -- sh -c "cd '$ROOT'" 2>/dev/null; then
-  pass "verified: uid 65534 (nobody) can chdir into \$ROOT after the permission fix"
+# Verify the fix actually worked instead of hoping it did -- and verify it
+# faithfully: the previous version of this check (uid/gid drop only) passed
+# even on a run where the real agent's chdir still failed, so it was not
+# actually reproducing the real launch sequence. rk-agentd/src/launcher.rs's
+# child_pre_exec does, strictly in this order, before its own chdir: drop to
+# the target uid/gid with no supplementary groups, set PR_SET_NO_NEW_PRIVS,
+# then drop every capability (inheritable, permitted, effective, bounding
+# set) entirely. Reproduce every one of those, not just the uid/gid change,
+# so this test can actually tell the difference between a permissions
+# problem and something that depends on the no-new-privs/zero-capability
+# state specifically.
+if command -v setpriv >/dev/null 2>&1 && setpriv --reuid=65534 --regid=65534 --clear-groups \
+     --no-new-privs --inh-caps=-all --bounding-set=-all -- sh -c "cd '$ROOT'" 2>/dev/null; then
+  pass "verified: uid 65534 (nobody), no-new-privs, zero capabilities can chdir into \$ROOT"
 else
-  fail "uid 65534 (nobody) still cannot chdir into \$ROOT after the permission fix -- diagnostic follows"
+  fail "cannot chdir into \$ROOT as uid 65534 with no-new-privs/zero capabilities -- diagnostic follows"
+  echo "-- same chdir, uid/gid only, capabilities kept (isolates whether capabilities/no-new-privs are the actual cause) --"
+  if command -v setpriv >/dev/null 2>&1 && setpriv --reuid=65534 --regid=65534 --clear-groups -- sh -c "cd '$ROOT'" 2>/dev/null; then
+    echo "  -> succeeds WITHOUT the no-new-privs/zero-capability state: that state is implicated"
+  else
+    echo "  -> ALSO fails: not about no-new-privs/capabilities, something else about uid 65534 itself"
+  fi
   command -v namei >/dev/null 2>&1 && namei -l "$ROOT" 2>&1 || {
     p="$ROOT"
     while [ "$p" != "/" ]; do stat -c '%A %U:%G %n' "$p" 2>&1; p="$(dirname "$p")"; done
     stat -c '%A %U:%G %n' / 2>&1
   }
+  echo "-- active LSMs and apparmor status, in case a MAC policy is involved --"
+  cat /sys/kernel/security/lsm 2>&1
+  command -v aa-status >/dev/null 2>&1 && aa-status 2>&1 | head -20
 fi
 
 mkdir -p /sys/fs/cgroup/rk.slice 2>/dev/null || true
