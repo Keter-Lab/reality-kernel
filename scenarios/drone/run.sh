@@ -75,15 +75,25 @@ chmod +x /tmp/arducopter_tampered
 WRAP=()
 
 # Runs a command (optionally `rk run`-wrapped via $WRAP) and echoes exactly
-# one of: succeeded | blocked | daemon-down.
+# one of: succeeded | blocked | daemon-down | launch-failed.
 #
-# Under enforcement, "blocked" means rk-cli itself reported the exec was
-# refused (rk-cli/src/main.rs run_agent's `client.run(...)` error path,
-# "rk run error: ..."). That is a different message, and a different cause,
-# from rk-cli failing to even reach the daemon ("rk run: failed to connect to
-# rk-sensor daemon: ...", from the earlier `Client::connect` error path): a
-# daemon that is not up tests nothing, and must never be reported as a
-# passing "blocked" result just because the exit code was non-zero.
+# Under enforcement, "blocked" means the kernel itself refused the exec:
+# rk-cli's error wraps the launcher's own message, and the launcher reports
+# a genuine policy denial as "execve failed: errno <N>" specifically
+# (rk-agentd/src/launcher.rs, "EPERM here means policy denied the agent's
+# first exec") -- NOT every "rk run error: ..." message. The launcher can
+# also fail before ever reaching execve (e.g. "chdir failed", a setup
+# problem unrelated to the policy decision this scenario is testing), and
+# that produces the exact same "rk run error: failed to spawn agent: child
+# setup or exec failed: ..." prefix. Conflating the two is a real bug, not a
+# hypothetical: it is exactly what made every attack read as a false
+# "blocked by Reality Kernel" pass during a run where rk-sensor itself was
+# never actually reached for a policy decision. "daemon-down" is likewise
+# kept separate (rk-cli failing to even reach the daemon, "rk run: failed to
+# connect to rk-sensor daemon: ...", from the earlier `Client::connect`
+# error path) -- neither case tests anything about the policy and must never
+# be reported as a passing "blocked" result just because the exit code was
+# non-zero.
 run_and_classify() {
   local out rc
   out=$(timeout 4 "${WRAP[@]}" "$@" 2>&1 >/dev/null)
@@ -92,10 +102,12 @@ run_and_classify() {
     [ "$rc" -eq 0 ] && echo succeeded || echo blocked
     return
   fi
-  if grep -q '^rk run error:' <<<"$out"; then
+  if grep -q 'execve failed: errno' <<<"$out"; then
     echo blocked
   elif grep -q '^rk run: failed to connect' <<<"$out"; then
     echo daemon-down
+  elif grep -q '^rk run error:' <<<"$out"; then
+    echo launch-failed
   elif [ "$rc" -eq 0 ]; then
     echo succeeded
   else
@@ -171,6 +183,7 @@ run_attacks() {   # $1 = "expect-success" | "expect-blocked"
       succeeded:expect-success) pass "$a reachable without enforcement" ;;
       blocked:expect-blocked) pass "$a blocked by Reality Kernel" ;;
       daemon-down:*) fail "$a proves nothing: rk-sensor was not reachable" ;;
+      launch-failed:*) fail "$a proves nothing: rk run failed before reaching a policy decision (not an \"execve failed\" denial)" ;;
       *) fail "$a $r (expected ${1#expect-})" ;;
     esac
   done
@@ -217,6 +230,25 @@ chmod o+r "$SITL_ABS"
 # opening an EXISTING file for append needs write permission on the file
 # itself, not just "can create new entries in this directory".
 chmod o+w results results/bench-results.jsonl 2>/dev/null || true
+
+# Verify the fix actually worked instead of hoping it did: runs 1 and (after
+# an unrelated detour through --rw and back) 5-6 all hit the exact same
+# "chdir failed" from the service user, with no code change to this loop in
+# between that would explain it reappearing -- something about this
+# specific host/run's directory permissions is not fully understood yet. Test
+# the real access path (chdir as uid 65534, the actual service user) directly
+# here, before ever starting rk-sensor, so a failure is caught with a precise
+# diagnostic instead of being inferred later from an opaque launcher error.
+if command -v setpriv >/dev/null 2>&1 && setpriv --reuid=65534 --regid=65534 --clear-groups -- sh -c "cd '$ROOT'" 2>/dev/null; then
+  pass "verified: uid 65534 (nobody) can chdir into \$ROOT after the permission fix"
+else
+  fail "uid 65534 (nobody) still cannot chdir into \$ROOT after the permission fix -- diagnostic follows"
+  command -v namei >/dev/null 2>&1 && namei -l "$ROOT" 2>&1 || {
+    p="$ROOT"
+    while [ "$p" != "/" ]; do stat -c '%A %U:%G %n' "$p" 2>&1; p="$(dirname "$p")"; done
+    stat -c '%A %U:%G %n' / 2>&1
+  }
+fi
 
 mkdir -p /sys/fs/cgroup/rk.slice 2>/dev/null || true
 rk-sensor --policy "$POLICY_FILE" --state-file "$STATE_FILE" \
