@@ -195,16 +195,19 @@ python3 scenarios/drone/bench.py baseline-no-rk results/bench-results.jsonl
 if timeout 60 python3 scenarios/drone/companion.py | tee -a results/companion-baseline.txt; then pass "companion mission (baseline)"; else fail "companion mission (baseline)"; fi
 
 # ---- Enable Reality Kernel ----
-# Not the default /var/log/rk/audit and /var/lib/rk/audit.key: with --rw (see
-# the workflow), those are now real paths on the actual runner host rather
-# than an ephemeral VM-local overlay, and writing to them failed outright
-# ("audit log disabled: cannot open it ... Permission denied (os error 13)",
-# confirmed in rk-sensor's own log on the run that first used --rw). rk-sensor
-# takes --audit-dir/--audit-key as first-class flags for exactly this; point
-# them at $ROOT, which every other part of this scenario has already proven
-# writable, rather than depending on this specific host's /var permissions.
-AUDIT_DIR="$ROOT/audit"
-AUDIT_KEY="$ROOT/audit.key"
+# Not the default /var/log/rk/audit and /var/lib/rk/audit.key: that failed
+# under --rw (now reverted, see the workflow). Not under $ROOT either,
+# despite $ROOT otherwise being proven writable throughout this script:
+# pointing the audit dir/key there is the one variable that distinguishes
+# the one run with a clean companion-mission chdir after this section was
+# added (run 4, old /var/log paths, still passed) from every run since
+# (chdir failing for the service user), with --rw held constant across that
+# specific comparison -- exactly correlated, mechanism not fully understood.
+# /tmp has a clean track record for every other file this scenario writes
+# (STATE_FILE below, the tampered binary, the listener log); use it here too
+# rather than creating new files inside $ROOT itself.
+AUDIT_DIR=/tmp/rk-audit
+AUDIT_KEY=/tmp/rk-audit.key
 STATE_FILE=/tmp/rk-engine-state.json
 POLICY_FILE="$ROOT/scenarios/drone/policy.toml.rendered"
 sed "s#__ARDUCOPTER_PATH__#$SITL_ABS#" "$ROOT/scenarios/drone/policy.toml" > "$POLICY_FILE"
