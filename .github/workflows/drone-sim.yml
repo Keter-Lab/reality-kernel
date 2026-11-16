@@ -104,7 +104,22 @@ jobs:
           # GitHub-hosted runner's kernel was not built with CONFIG_BPF_LSM;
           # fall back to one of the pinned kernel images .github/workflows/kernel.yml
           # already boots via vmtest (docs/kernel-matrix.md) instead of the host kernel.
+          #
+          # --rw: without it, virtme-ng runs the guest on a copy-on-write
+          # overlay snapshot of the host, not the real host filesystem. The
+          # first real run showed exactly the symptom that causes: every exec
+          # rule logged "rule path is on a filesystem whose stat(2) identity
+          # differs from the superblock identity the kernel compares" for
+          # every allowlisted binary, including /usr/bin/python3 -- the
+          # identity (device, inode) the policy resolved at apply time may
+          # not be what the kernel's own hook compares against, which is
+          # exactly the thing this scenario is trying to prove works. --rw
+          # mounts the guest's root as the real host filesystem instead
+          # (virtme-ng's own docs warn this is "dangerous for the host
+          # filesystem" in general; this VM is destroyed with the job either
+          # way, so that risk doesn't apply here).
           vng --run \
+            --rw \
             --append "lsm=lockdown,capability,landlock,yama,apparmor,bpf" \
             --memory 4G --cpus 2 --user root \
             --exec "bash ./scenarios/drone/run.sh"

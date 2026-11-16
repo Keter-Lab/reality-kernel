@@ -124,6 +124,33 @@ attack_tamper() {
   fi
 }
 
+# Polls for a process matching the pgrep pattern $1 and, once found, writes
+# its /proc/<pid>/cgroup to $2. Meant to be run in the background alongside
+# the command being observed; proves the process actually ran inside a
+# kernel cgroup bound to rk.slice (the real enforcement boundary) instead of
+# assuming `rk run` placed it there.
+observe_cgroup() {
+  local pattern="$1" out="$2" pid
+  : > "$out"
+  for _ in $(seq 1 300); do
+    pid=$(pgrep -f "$pattern" 2>/dev/null | head -1)
+    if [ -n "$pid" ] && [ -r "/proc/$pid/cgroup" ]; then
+      { echo "pid=$pid"; cat "/proc/$pid/cgroup"; } > "$out" 2>/dev/null
+      return 0
+    fi
+    sleep 0.03
+  done
+}
+
+assert_governed() {   # $1 = cgroup-capture file, $2 = label
+  echo "cgroup proof ($2): $(tr '\n' ' ' <"$1" 2>/dev/null || echo '(file missing)')"
+  if grep -q 'rk\.slice/' "$1" 2>/dev/null; then
+    pass "$2 ran inside rk.slice (governed cgroup, not the host's)"
+  else
+    fail "$2 was not observed inside rk.slice"
+  fi
+}
+
 run_attacks() {   # $1 = "expect-success" | "expect-blocked"
   for a in attack_exfil attack_tamper attack_shell; do
     r=$($a)
@@ -189,21 +216,81 @@ rk status || true
 WRAP=(rk run --profile drone --)
 
 echo "== Legitimate mission must still work"
+observe_cgroup "scenarios/drone/companion.py" /tmp/cgroup-companion.txt &
+OBS_PID=$!
 if timeout 60 "${WRAP[@]}" python3 scenarios/drone/companion.py | tee -a results/companion-enforced.txt; then pass "companion mission"; else fail "companion mission"; fi
+wait "$OBS_PID" 2>/dev/null
+assert_governed /tmp/cgroup-companion.txt "companion.py"
+
+observe_cgroup "scenarios/drone/bench.py" /tmp/cgroup-bench.txt &
+OBS_PID=$!
 "${WRAP[@]}" python3 scenarios/drone/bench.py enforced-rk results/bench-results.jsonl
+wait "$OBS_PID" 2>/dev/null
+assert_governed /tmp/cgroup-bench.txt "bench.py"
 
 echo "== Attacks with enforcement"
 run_attacks expect-blocked
 
-echo "== Verifying Reality Kernel's signed, hash-chained audit log"
+# All three attacks above are denied at the exec layer (curl/nc/the tampered
+# binary are not in the allowlist at all), so none of them ever reach the
+# connect hook -- the network policy's own deny path is never independently
+# exercised by them. Prove it separately: python3 IS allowed to exec, so this
+# tests whether the connect hook on its own still denies the unapproved
+# destination, rather than that showing up as a connect4.deny count of zero
+# and assuming (wrongly) that enforcement is broken.
+echo "== Independent network-layer check (python3 itself is allowed; this destination is not)"
+NET_CHECK=$(timeout 4 "${WRAP[@]}" python3 -c '
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(2)
+try:
+    s.connect(("127.0.0.1", 9999))
+    print("CONNECTED")
+except OSError as e:
+    print(f"DENIED: {e}")
+' 2>&1)
+echo "$NET_CHECK"
+if grep -q 'DENIED' <<<"$NET_CHECK"; then
+  pass "network layer independently denies an allowed binary connecting to the unapproved port"
+else
+  fail "network layer did not deny an allowed binary's connection to the unapproved port: $NET_CHECK"
+fi
+
+echo "== Pipeline decision counters after the attacks (not just pass/fail)"
+curl -s http://127.0.0.1:9464/metrics > /tmp/metrics.txt || true
+grep '^rk_decisions_total' /tmp/metrics.txt || echo "(no rk_decisions_total lines found)"
+metric() {   # $1 = hook, $2 = verdict
+  grep -F "rk_decisions_total{hook=\"$1\",verdict=\"$2\"}" /tmp/metrics.txt | awk '{print $NF}'
+}
+exec_deny=$(metric exec deny); exec_deny=${exec_deny:-0}
+connect4_deny=$(metric connect4 deny); connect4_deny=${connect4_deny:-0}
+connect4_allow=$(metric connect4 allow); connect4_allow=${connect4_allow:-0}
+echo "exec.deny=$exec_deny connect4.deny=$connect4_deny connect4.allow=$connect4_allow"
+[ "$exec_deny" -ge 2 ] 2>/dev/null && pass "exec.deny >= 2 ($exec_deny: tampered binary, curl, nc each denied exec)" || fail "exec.deny < 2 ($exec_deny)"
+[ "$connect4_deny" -ge 1 ] 2>/dev/null && pass "connect4.deny >= 1 ($connect4_deny)" || fail "connect4.deny < 1 ($connect4_deny)"
+[ "$connect4_allow" -gt 0 ] 2>/dev/null && pass "connect4.allow > 0 ($connect4_allow): the companion's 127.0.0.1:5760 connection (and bench.py's :7000) were allowed, not just denials happened" || fail "connect4.allow == 0 ($connect4_allow)"
+
+echo "== Verifying Reality Kernel's signed, hash-chained audit log against its pinned signing key"
+# Self-referential verification ("whatever key signed it") only proves the
+# chain is internally consistent, not that it was signed by the key this
+# deployment actually generated. Pin the real public key the daemon wrote on
+# its first start (rk-audit/src/key.rs: AuditKey::load_or_create publishes
+# the public half at `<key>.pub`) instead.
+AUDIT_PUBKEY=/var/lib/rk/audit.key.pub
+for _ in $(seq 1 20); do [ -s "$AUDIT_PUBKEY" ] && break; sleep 0.2; done
+if [ -s "$AUDIT_PUBKEY" ]; then
+  echo "pinning audit signing key: $(cat "$AUDIT_PUBKEY")"
+else
+  fail "audit public key never appeared at $AUDIT_PUBKEY"
+fi
 # The writer seals a batch once it is older than its batch_interval (default
 # 1s, checked opportunistically as events are consumed); give it a moment so
 # the most recent decisions are actually sealed before verifying.
 sleep 3
-if rk audit verify --dir "$AUDIT_DIR"; then
-  pass "audit chain verifies"
+if rk audit verify --dir "$AUDIT_DIR" --pubkey "$AUDIT_PUBKEY"; then
+  pass "audit chain verifies against the pinned signing key"
 else
-  fail "audit chain did not verify"
+  fail "audit chain did not verify against the pinned signing key"
   rk audit tail --dir "$AUDIT_DIR" -n 0 || true
 fi
 
