@@ -52,6 +52,11 @@ with Server(("127.0.0.1", 9999), Handler) as httpd:
 PY
 LISTENER_PID=$!
 
+for _ in $(seq 1 20); do
+  (exec 3<>/dev/tcp/127.0.0.1/9999) 2>/dev/null && { exec 3>&-; break; }
+  sleep 0.2
+done
+
 # Prepare a tampered copy of the flight binary (simulates a swapped update).
 # Appending a byte after the end of the ELF sections does not stop the kernel
 # from loading it (the loader only reads the ELF header and program headers),
@@ -109,6 +114,19 @@ STATE_FILE=/tmp/rk-engine-state.json
 POLICY_FILE="$ROOT/scenarios/drone/policy.toml.rendered"
 sed "s#__ARDUCOPTER_PATH__#$SITL_ABS#" "$ROOT/scenarios/drone/policy.toml" > "$POLICY_FILE"
 
+# RK never runs agents as root (rk-agentd/src/server.rs: "Never run agents as
+# root: map root caller to configured service user"): a caller running as
+# root (us, here) is mapped to the fixed, non-configurable "nobody" user
+# (65534). The checkout tree is not necessarily traversable by that user, so
+# every ancestor directory of $ROOT, and the tree itself, need to be
+# world-readable/traversable, and results/ needs to be world-writable so the
+# enforced benchmark run (which writes from inside the governed process) can
+# append to it.
+p="$ROOT"
+while [ "$p" != "/" ]; do chmod o+rx "$p" 2>/dev/null || true; p="$(dirname "$p")"; done
+chmod -R o+rX "$ROOT"
+chmod o+w results
+
 mkdir -p /sys/fs/cgroup/rk.slice 2>/dev/null || true
 rk-sensor --policy "$POLICY_FILE" --state-file "$STATE_FILE" > /tmp/rk-sensor.log 2>&1 &
 RK_SENSOR_PID=$!
@@ -136,11 +154,24 @@ echo "== Attacks with enforcement"
 run_attacks expect-blocked
 
 echo "== Verifying Reality Kernel's signed, hash-chained audit log"
+# The writer seals a batch once it is older than its batch_interval (default
+# 1s, checked opportunistically as events are consumed); give it a moment so
+# the most recent decisions are actually sealed before verifying.
+sleep 3
 if rk audit verify --dir "$AUDIT_DIR"; then
   pass "audit chain verifies"
 else
   fail "audit chain did not verify"
+  rk audit tail --dir "$AUDIT_DIR" -n 0 || true
 fi
+
+echo "== Diagnostics (printed directly; artifact upload of these paths is unconfirmed under virtme-ng)"
+ls -la "$ROOT/results" 2>&1 || true
+for f in results/bench-results.jsonl results/companion-baseline.txt results/companion-enforced.txt \
+         /tmp/sitl.log /tmp/exfil_listener.log /tmp/rk-sensor.log; do
+  echo "--- $f ---"
+  cat "$f" 2>&1 || true
+done
 
 kill "$SITL_PID" "$LISTENER_PID" "$RK_SENSOR_PID" 2>/dev/null
 [ "$FAIL" -eq 0 ] && echo "ALL CHECKS PASSED" || { echo "SOME CHECKS FAILED"; exit 1; }
