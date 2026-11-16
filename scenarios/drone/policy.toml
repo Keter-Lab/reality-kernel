@@ -1,0 +1,34 @@
+# Drone companion-computer policy (scenarios/drone/TASK.md).
+#
+# Governs the companion-computer software stack: the mission script, the
+# flight-control binary it spawns/communicates with, and the benchmark
+# harness. The simulated flight controller (ArduPilot SITL) and the
+# unapproved-server stand-in run outside this profile: they represent other
+# parties on the network, not the computer being protected.
+[profiles.drone]
+mode = "enforce"
+launchable_by = ["root"]
+
+[profiles.drone.exec]
+default = "deny"
+# By identity (device, inode), resolved at apply time: a tampered copy of
+# the arducopter binary at a different path, or the same path after being
+# swapped, has a different identity and is denied.
+allow = [
+  "__ARDUCOPTER_PATH__",
+  "/usr/bin/python3",
+  "/bin/true",
+]
+
+[profiles.drone.network]
+default = "deny"
+
+[[profiles.drone.network.allow]]
+cidr = "127.0.0.1/32"
+ports = ["5760"]
+proto = ["tcp"]
+
+[[profiles.drone.network.allow]]
+cidr = "127.0.0.1/32"
+ports = ["7000"]
+proto = ["tcp"]
