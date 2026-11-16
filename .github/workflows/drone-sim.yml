@@ -12,6 +12,9 @@ on:
       - "scenarios/drone/**"
       - ".github/workflows/drone-sim.yml"
 
+permissions:
+  contents: read
+
 jobs:
   drone-sim:
     runs-on: ubuntu-24.04
