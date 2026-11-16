@@ -163,7 +163,11 @@ while [ "$p" != "/" ]; do chmod o+rx "$p" 2>/dev/null || true; p="$(dirname "$p"
 chmod -R o+rX "$ROOT/scenarios"
 chmod o+rx "$ROOT/ardupilot" "$ROOT/ardupilot/build" "$ROOT/ardupilot/build/sitl" "$ROOT/ardupilot/build/sitl/bin"
 chmod o+r "$SITL_ABS"
-chmod o+w results
+# Directory write alone is not enough: results/bench-results.jsonl already
+# exists (the baseline bench.py run above, as root, just created it), and
+# opening an EXISTING file for append needs write permission on the file
+# itself, not just "can create new entries in this directory".
+chmod o+w results results/bench-results.jsonl 2>/dev/null || true
 
 mkdir -p /sys/fs/cgroup/rk.slice 2>/dev/null || true
 rk-sensor --policy "$POLICY_FILE" --state-file "$STATE_FILE" > /tmp/rk-sensor.log 2>&1 &
