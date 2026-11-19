@@ -25,6 +25,13 @@ updates:
     groups:
       pip:
         patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /scenarios/drone
+    schedule:
+      interval: weekly
+    groups:
+      pip:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

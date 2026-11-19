@@ -52,7 +52,7 @@ jobs:
           sudo apt-get install -y qemu-system-x86 netcat-openbsd curl clang llvm libbpf-dev libclang-dev make
           pipx install virtme-ng
           # Installed system-wide so the scenario (run as root inside the VM) can import it.
-          sudo pip install --break-system-packages pymavlink
+          sudo python3 -m pip install --break-system-packages --require-hashes -r scenarios/drone/requirements.txt
           # virtme-ng boots the host kernel by default and needs to read it.
           sudo chmod 644 /boot/vmlinuz-*
 

@@ -1,0 +1,14 @@
+# Python dependency for the drone scenario (MAVLink client), pinned with
+# hashes (pip install --require-hashes), same convention as requirements-ci.txt.
+# pymavlink and its declared dependencies, resolved for CPython 3.12 on
+# Linux x86_64 (ubuntu-24.04 runner) plus the sdist as a fallback.
+
+pymavlink==2.4.50 \
+    --hash=sha256:866143c7a74d8a03e3aff4111aff6b913f8a08f843f5ad08f22b9a58dfbcc21f \
+    --hash=sha256:8d65a8b05b2971babeef4b6ca74a247a72276f62f7559466c64e96ece7f10062
+lxml==6.1.3 \
+    --hash=sha256:909f4e927bb051f7740d6367285fc60cdcfdaf0258c2dba4ff5ba7eadadc250c \
+    --hash=sha256:45222d94ddd511536f3b2f7d9deae3b2339b4ce0f075f1ca25703b07cad9dd21
+fastcrc==0.5.0 \
+    --hash=sha256:5b408763b66c86ad493ccad836348ee18adc53d5f0072ce158e783b9bbd48eba \
+    --hash=sha256:e02cdf379d7371f0bd9d7cac957c67f0696e62292d73eebe02ff6393eef05b50
