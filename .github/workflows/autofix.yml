@@ -60,7 +60,7 @@ jobs:
       - name: Refresh fuzz/Cargo.lock for workspace changes
         run: cargo update --manifest-path fuzz/Cargo.toml --workspace
 
-      - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2
         with:
           tool: cargo-audit
 
