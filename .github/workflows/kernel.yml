@@ -407,7 +407,7 @@ jobs:
           name: rk-sensor-x86_64
           path: bin/
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: rk-nri/go.mod
           cache-dependency-path: rk-nri/go.mod
@@ -634,7 +634,7 @@ jobs:
         with:
           toolchain: nightly
 
-      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2
         with:
           tool: cargo-fuzz
 
